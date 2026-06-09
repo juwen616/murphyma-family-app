@@ -15,11 +15,17 @@ export function getLocalToday(): string {
 }
 
 export enum UserRole {
-  ADMIN = "admin",
-  PARENT = "parent",
-  KID = "kid",
-  MEMBER = "member",
-  PET = "pet",
+  SUPER_ADMIN = "SuperAdmin",
+  OWNER = "Owner",
+  PARENT = "Parent",
+  CHILD = "Child",
+  VIEWER = "Viewer",
+  
+  // Backward compatibility alias mappings
+  ADMIN = "Owner",
+  KID = "Child",
+  MEMBER = "Viewer",
+  PET = "Viewer",
 }
 
 export interface UserProfile {

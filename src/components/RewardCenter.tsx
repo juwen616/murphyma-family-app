@@ -243,30 +243,30 @@ export default function RewardCenter({
   };
 
   return (
-    <div id="reward-center-module" className="bg-[#FFFDF8] rounded-[24px] border border-[#EFEAE2] p-6 lg:p-8 soft-journal-shadow space-y-8">
+    <div id="reward-center-module" className="bg-[#FFFDF8] rounded-2xl md:rounded-[24px] border-0 md:border border-[#EFEAE2] p-3.5 md:p-6 lg:p-8 md:soft-journal-shadow space-y-4 md:space-y-6">
       {/* Page Header */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-[#F7F3EB] pb-5">
-        <div className="flex items-center gap-3">
-          <div className="p-3 bg-pink-50 text-[#EAA59E] rounded-2xl border border-pink-100/50">
-            <Gift className="h-6 w-6 animate-bounce" />
+      <div className="flex justify-between items-center border-b border-[#F7F3EB] pb-3">
+        <div className="flex items-center gap-2">
+          <div className="h-8 w-8 md:h-11 md:w-11 bg-pink-50 text-[#EAA59E] rounded-xl border border-pink-100 flex items-center justify-center shrink-0">
+            <Gift className="h-4.5 w-4.5" />
           </div>
           <div>
-            <h2 className="text-2xl font-extrabold text-[#3C332D]">願望清單 & 禮物中心</h2>
-            <p className="text-base text-gray-400 mt-1 font-medium">激勵小朋友累計星星、兌換暖心小禮物與特別行程！</p>
+            <h2 className="text-sm md:text-xl font-extrabold text-[#3C332D]">願望與禮物中心</h2>
+            <p className="hidden md:block text-xs text-gray-400 mt-0.5 font-medium">激勵小朋友累計星星、兌換暖心小禮物！</p>
           </div>
         </div>
 
         <button
           onClick={() => setShowAddForm(true)}
-          className="flex items-center gap-2 text-md font-black text-white bg-[#EAA59E] hover:bg-[#df938c] px-5 py-3 rounded-full transition cursor-pointer soft-journal-shadow transform hover:scale-102 active:scale-98"
+          className="flex items-center gap-1 text-xs font-black text-white bg-[#EAA59E] hover:bg-[#df938c] px-3 py-2 rounded-full transition cursor-pointer shadow-xs max-h-[38px]"
         >
-          <Plus className="h-5 w-5" />
-          {isParent ? "新增商品獎勵" : "向爸媽提出許願"}
+          <Plus className="h-3.5 w-3.5" />
+          <span>{isParent ? "新增" : "許願"}</span>
         </button>
       </div>
 
       {/* Upgraded Star Balance Card */}
-      <div id="stars-balance-card" className="flex flex-col font-sans bg-[#FAF8F5]/80 border border-amber-200/40 rounded-3xl p-6 lg:p-8 gap-5 select-none shadow-md">
+      <div id="stars-balance-card" className="flex flex-col font-sans bg-[#FAF8F5]/80 border border-amber-200/40 rounded-2xl md:rounded-3xl p-4 md:p-6 lg:p-8 gap-4 select-none shadow-xs">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-amber-100 pb-4">
           <div className="flex items-center gap-2">
             <span className="text-xl">⭐</span>
@@ -545,7 +545,7 @@ export default function RewardCenter({
               )}
             </div>
           ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+            <div className="grid grid-cols-2 gap-3 md:gap-6">
               {filteredStoreItems.map((item) => {
                 const kidStars = currentUser.stars || 0;
                 const pct = Math.min(100, Math.round((kidStars / item.starsCost) * 100));
@@ -558,11 +558,11 @@ export default function RewardCenter({
                     key={item.id}
                     style={{
                       border: "1px solid #E9E2DB",
-                      borderRadius: "24px",
+                      borderRadius: "16px",
                       background: item.status === RewardStatus.PAUSED ? "#FCFBF3" : item.status === RewardStatus.ARCHIVED ? "#F2F2F2" : "#FFFFFF",
                       boxShadow: "0 2px 10px rgba(0,0,0,0.04)"
                     }}
-                    className={`p-6 hover:translate-y-[-2px] transition sm:p-5 relative flex flex-col justify-between min-h-[220px] ${item.status === RewardStatus.ARCHIVED ? "opacity-75" : ""}`}
+                    className={`p-3 md:p-5 relative flex flex-col justify-between min-h-[160px] md:min-h-[220px] hover:translate-y-[-2px] transition ${item.status === RewardStatus.ARCHIVED ? "opacity-75" : ""}`}
                   >
                     {/* Parent quick controls */}
                     {isParent && (

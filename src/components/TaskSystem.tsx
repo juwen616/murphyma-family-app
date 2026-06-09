@@ -343,16 +343,16 @@ export default function TaskSystem({
   };
 
   return (
-    <div id="task-system-module" className="bg-[#FAFDFB] rounded-[24px] border border-[#DEEFE5] p-6 lg:p-8 soft-journal-shadow space-y-6">
+    <div id="task-system-module" className="bg-[#FAFDFB] rounded-2xl md:rounded-[24px] border-0 md:border border-[#DEEFE5] p-3.5 md:p-6 lg:p-8 md:soft-journal-shadow space-y-4 md:space-y-6">
       {/* Module Title Section */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-[#E8F5EE] pb-5">
-        <div className="flex items-center gap-3">
-          <div className="p-3 bg-[#EEF9F3] text-[#3F8C62] rounded-2xl border border-[#D0EDE0]">
-            <ClipboardList className="h-6 w-6" />
+      <div className="flex justify-between items-center border-b border-[#E8F5EE] pb-3">
+        <div className="flex items-center gap-2">
+          <div className="h-8 w-8 md:h-11 md:w-11 bg-[#EEF9F3] text-[#3F8C62] rounded-xl border border-[#D0EDE0] flex items-center justify-center shrink-0">
+            <ClipboardList className="h-4.5 w-4.5 md:h-5 md:w-5" />
           </div>
           <div>
-            <h2 className="text-2xl font-extrabold text-[#32453A] font-sans">日常學習與事項任務</h2>
-            <p className="text-sm text-gray-500 mt-1 font-medium">指派日常任務、累積過關星星、與孩子完成約定吧</p>
+            <h2 className="text-sm md:text-xl font-extrabold text-[#32453A] font-sans">日常與學習任務</h2>
+            <p className="hidden md:block text-xs text-gray-500 mt-0.5 font-medium">指派日常任務、累積過關星星、與孩子完成約定吧</p>
           </div>
         </div>
 
@@ -360,44 +360,44 @@ export default function TaskSystem({
           <button
             id="add-task-btn"
             onClick={handleOpenAddForm}
-            className="flex items-center gap-2 text-md font-black text-white bg-[#47A875] hover:bg-[#3D9265] px-5 py-3 rounded-full transition cursor-pointer soft-journal-shadow transform hover:scale-[1.02] active:scale-[0.98]"
+            className="flex items-center gap-1 text-xs font-black text-white bg-[#47A875] hover:bg-[#3D9265] px-3 py-2 rounded-full transition cursor-pointer shadow-xs max-h-[38px]"
           >
-            <Plus className="h-5 w-5" /> <span>新增任務事項</span>
+            <Plus className="h-3.5 w-3.5" /> <span>新增</span>
           </button>
         )}
       </div>
 
       {/* Navigation tabs */}
-      <div className="flex border-b border-[#E8F5EE] gap-1 select-none font-sans">
+      <div className="flex border-b border-[#E8F5EE] gap-1 select-none font-sans text-xs md:text-sm">
         <button
           onClick={() => setActiveTab("available")}
-          className={`px-5 py-3 text-sm font-extrabold border-b-2 transition ${
+          className={`flex-1 md:flex-none text-center px-2 md:px-5 py-2.5 font-extrabold border-b-2 transition ${
             activeTab === "available"
               ? "border-[#47A875] text-[#3D9265]"
               : "border-transparent text-gray-400 hover:text-gray-700"
           } cursor-pointer`}
         >
-          任務作戰區 ({combatZoneTasks.length})
+          任務作戰 ({combatZoneTasks.length})
         </button>
         <button
           onClick={() => setActiveTab("submitted")}
-          className={`px-5 py-3 text-sm font-extrabold border-b-2 transition ${
+          className={`flex-1 md:flex-none text-center px-2 md:px-5 py-2.5 font-extrabold border-b-2 transition ${
             activeTab === "submitted"
               ? "border-[#47A875] text-[#3D9265]"
               : "border-transparent text-gray-400 hover:text-gray-700"
           } cursor-pointer`}
         >
-          孩子待確認任務 ({submittedTasks.length})
+          待審核 ({submittedTasks.length})
         </button>
         <button
           onClick={() => setActiveTab("history")}
-          className={`px-5 py-3 text-sm font-extrabold border-b-2 transition ${
+          className={`flex-1 md:flex-none text-center px-2 md:px-5 py-2.5 font-extrabold border-b-2 transition ${
             activeTab === "history"
               ? "border-[#47A875] text-[#3D9265]"
               : "border-transparent text-gray-400 hover:text-gray-700"
           } cursor-pointer`}
         >
-          我的成長紀錄 ({completedTasks.length})
+          成長紀錄 ({completedTasks.length})
         </button>
       </div>
 
@@ -405,15 +405,15 @@ export default function TaskSystem({
       {activeTab === "available" && (
         <div id="available-tasks-list" className="space-y-4">
           {combatZoneTasks.length === 0 ? (
-            <div className="text-center py-16 border border-dashed border-[#DEEFE5] rounded-[24px] bg-white">
-              <Compass className="h-12 w-12 text-[#47A875]/35 mx-auto mb-3 animate-pulse" />
-              <p className="text-base text-gray-500 font-sans font-bold">目前沒有指派中的任務項目喔</p>
-              <p className="text-xs text-gray-400 mt-2 max-w-sm mx-auto leading-relaxed">
-                管理員或家長可以在右上角點擊「新增任務事項」來分配打掃、畫畫、自學英文或任何好寶寶習慣任務！
+            <div className="text-center py-16 border border-dashed border-[#DEEFE5] rounded-2xl bg-white">
+              <Compass className="h-10 w-10 text-[#47A875]/35 mx-auto mb-3 animate-pulse" />
+              <p className="text-sm text-gray-500 font-sans font-bold">目前沒有指派中的任務項目喔</p>
+              <p className="text-xs text-gray-400 mt-2 max-w-sm mx-auto leading-relaxed px-4">
+                可以在右上角點擊「新增」來分配打掃、自學或任何好習慣任務！
               </p>
             </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
               {combatZoneTasks.map((task) => {
                 const isRejected = task.status === TaskStatus.REJECTED;
                 const statusInfo = getTaskStatusInfo(task);
@@ -421,25 +421,19 @@ export default function TaskSystem({
                 return (
                   <div
                     key={task.id}
-                    style={{
-                      border: "1px solid #E9E2DB",
-                      borderRadius: "24px",
-                      background: "#FFFFFF",
-                      boxShadow: "0 2px 10px rgba(0,0,0,0.04)"
-                    }}
-                    className={`p-6 relative flex flex-col justify-between min-h-[220px] transition duration-200 hover:-translate-y-0.5 ${
+                    className={`p-3.5 md:p-5 relative flex flex-col justify-between min-h-[160px] md:min-h-[220px] transition duration-200 hover:-translate-y-0.5 bg-white border border-[#E9E2DB] rounded-2xl shadow-xs ${
                       isRejected ? "border-rose-100 bg-rose-50/5 animate-fade-in" : ""
                     }`}
                   >
                     <div>
                       {/* Status and Type Badges Row */}
-                      <div className="flex flex-wrap items-center justify-between gap-2 mb-3.5 pr-20">
+                      <div className="flex flex-wrap items-center justify-between gap-2 mb-2 md:mb-3.5 pr-20">
                         <div className="flex items-center gap-1.5 flex-wrap">
-                          <span className={`inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-extrabold rounded-full border ${statusInfo.colorBg}`}>
+                          <span className={`inline-flex items-center gap-1 px-2 py-0.5 text-[9.5px] font-extrabold rounded-full border ${statusInfo.colorBg}`}>
                             <span>{statusInfo.dot}</span>
                             <span>{statusInfo.label}</span>
                           </span>
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-bold text-gray-500 bg-gray-50 rounded-md border border-gray-200/50 font-sans">
+                          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[8.5px] font-bold text-gray-500 bg-gray-50 rounded border border-gray-200/50 font-sans">
                             {getTaskTypeLabel(task.taskType)}
                           </span>
                         </div>
@@ -447,24 +441,22 @@ export default function TaskSystem({
 
                       {/* Upper right action buttons - always visible on all task cards for parent */}
                       {isParent && (
-                        <div className="absolute top-4 right-4 flex items-center gap-1.5 select-none z-10 text-[10px] font-sans">
+                        <div className="absolute top-3 right-3 flex items-center gap-1 select-none z-10 text-[10px] font-sans">
                           <button
                             onClick={() => handleOpenEditForm(task)}
-                            className="p-1.5 text-xs font-black text-[#5B7283] hover:text-[#3D9265] bg-[#FAFDFB] border border-gray-250/50 hover:bg-emerald-55/40 hover:border-emerald-200 rounded-xl transition cursor-pointer flex items-center gap-0.5 shadow-sm"
+                            className="p-1 px-1.5 text-[10px] font-bold text-[#5B7283]"
                             title="編輯任務"
                           >
                             <Edit2 className="h-3 w-3" />
-                            <span>編輯</span>
                           </button>
                           <button
                             onClick={() => {
                               setDeletingTaskId(task.id);
                             }}
-                            className="p-1.5 text-xs font-black text-gray-400 hover:text-red-500 hover:bg-rose-50 border border-gray-150 rounded-xl transition cursor-pointer flex items-center gap-0.5 shadow-sm"
+                            className="p-1 px-1.5 text-[10px] font-bold text-rose-500"
                             title="刪除任務"
                           >
                             <Trash2 className="h-3 w-3" />
-                            <span>刪除</span>
                           </button>
                         </div>
                       )}

@@ -22,61 +22,82 @@ service cloud.firestore {
         get(/databases/$(database)/documents/users/$(uid)).data.get('role', 'none') : 'none';
     }
 
+    function getUserSystemRole(uid) {
+      return exists(/databases/$(database)/documents/users/$(uid)) ? 
+        get(/databases/$(database)/documents/users/$(uid)).data.get('systemRole', 'none') : 'none';
+    }
+
+    function isSuperAdmin(uid) {
+      return isSignedIn() && (
+        request.auth.token.email == "juwen616@gmail.com" || 
+        getUserRole(uid) == "SuperAdmin" || 
+        getUserRole(uid) == "ADMIN" || 
+        getUserRole(uid) == "admin" ||
+        getUserSystemRole(uid) == "SUPER_ADMIN"
+      );
+    }
+
     function isMemberOfFamily(familyId) {
-      return isSignedIn() && getUserFamilyId(request.auth.uid) == familyId;
+      return isSignedIn() && (getUserFamilyId(request.auth.uid) == familyId || isSuperAdmin(request.auth.uid));
     }
 
     function isUserParentOrAdmin(uid) {
-      return getUserRole(uid) == "admin" || getUserRole(uid) == "parent";
+      return isSuperAdmin(uid) || getUserRole(uid) == "Owner" || getUserRole(uid) == "Parent" || getUserRole(uid) == "admin" || getUserRole(uid) == "parent";
     }
 
     function isUserAdmin(uid) {
-      return getUserRole(uid) == "admin";
+      return isSuperAdmin(uid) || getUserRole(uid) == "Owner" || getUserRole(uid) == "admin";
     }
 
     // 1. Users Collection
     match /users/{userId} {
       allow get: if isSignedIn() && (
         request.auth.uid == userId || 
-        getUserFamilyId(request.auth.uid) == resource.data.get('familyId', null)
+        getUserFamilyId(request.auth.uid) == resource.data.get('familyId', null) ||
+        isSuperAdmin(request.auth.uid)
       );
       allow list: if isSignedIn() && (
-        getUserFamilyId(request.auth.uid) == resource.data.get('familyId', null)
+        getUserFamilyId(request.auth.uid) == resource.data.get('familyId', null) ||
+        isSuperAdmin(request.auth.uid)
       );
       allow create: if isSignedIn() && (
         request.auth.uid == userId ||
-        (getUserFamilyId(request.auth.uid) == request.resource.data.get('familyId', null) && isUserParentOrAdmin(request.auth.uid))
+        (getUserFamilyId(request.auth.uid) == request.resource.data.get('familyId', null) && isUserParentOrAdmin(request.auth.uid)) ||
+        isSuperAdmin(request.auth.uid)
       );
       allow update: if isSignedIn() && (
         request.auth.uid == userId || 
-        (getUserFamilyId(request.auth.uid) == resource.data.get('familyId', null) && isUserParentOrAdmin(request.auth.uid))
+        (getUserFamilyId(request.auth.uid) == resource.data.get('familyId', null) && isUserParentOrAdmin(request.auth.uid)) ||
+        isSuperAdmin(request.auth.uid)
       );
       allow delete: if isSignedIn() && (
-        getUserFamilyId(request.auth.uid) == resource.data.get('familyId', null) && isUserParentOrAdmin(request.auth.uid)
+        (getUserFamilyId(request.auth.uid) == resource.data.get('familyId', null) && isUserParentOrAdmin(request.auth.uid)) ||
+        isSuperAdmin(request.auth.uid)
       );
     }
 
     // 2. Families Collection
     match /families/{familyId} {
       allow get: if isSignedIn();
-      allow list: if isSignedIn() && isMemberOfFamily(familyId);
-      allow create: if isSignedIn() && request.resource.data.get('adminUid', null) == request.auth.uid;
-      allow update: if isSignedIn() && getUserFamilyId(request.auth.uid) == familyId && isUserAdmin(request.auth.uid);
-      allow delete: if false;
+      allow list: if isSignedIn() && (isMemberOfFamily(familyId) || isSuperAdmin(request.auth.uid));
+      allow create: if isSignedIn();
+      allow update: if isSignedIn() && (getUserFamilyId(request.auth.uid) == familyId && isUserAdmin(request.auth.uid)) || isSuperAdmin(request.auth.uid);
+      allow delete: if isSignedIn() && isSuperAdmin(request.auth.uid);
     }
 
     // 3. Family Members Collection
     match /family_members/{memberId} {
-      allow read: if isSignedIn() && isMemberOfFamily(resource.data.get('familyId', null));
+      allow read: if isSignedIn() && (isMemberOfFamily(resource.data.get('familyId', null)) || isSuperAdmin(request.auth.uid));
       allow create: if isSignedIn() && (
         isMemberOfFamily(request.resource.data.get('familyId', null)) ||
-        get(/databases/$(database)/documents/families/$(request.resource.data.get('familyId', null))).data.get('adminUid', null) == request.auth.uid
+        get(/databases/$(database)/documents/families/$(request.resource.data.get('familyId', null))).data.get('adminUid', null) == request.auth.uid ||
+        isSuperAdmin(request.auth.uid)
       );
-      allow update: if isSignedIn() && isMemberOfFamily(resource.data.get('familyId', null)) && (
+      allow update: if isSignedIn() && (isMemberOfFamily(resource.data.get('familyId', null)) || isSuperAdmin(request.auth.uid)) && (
         request.auth.uid == resource.data.get('userId', null) || 
         isUserParentOrAdmin(request.auth.uid)
       );
-      allow delete: if isSignedIn() && isMemberOfFamily(resource.data.get('familyId', null)) && isUserParentOrAdmin(request.auth.uid);
+      allow delete: if isSignedIn() && (isMemberOfFamily(resource.data.get('familyId', null)) || isSuperAdmin(request.auth.uid)) && isUserParentOrAdmin(request.auth.uid);
     }
 
     // 4. Calendar Events Collection
@@ -163,9 +184,66 @@ service cloud.firestore {
 
     // 11. Star Transactions Collection
     match /star_transactions/{transactionId} {
-      allow read: if isSignedIn() && isMemberOfFamily(resource.data.get('familyId', null));
+      allow read: if isSignedIn() && (isMemberOfFamily(resource.data.get('familyId', null)) || isSuperAdmin(request.auth.uid));
       allow create: if isSignedIn() && isMemberOfFamily(request.resource.data.get('familyId', null)) && isUserParentOrAdmin(request.auth.uid);
       allow update, delete: if false;
+    }
+
+    // 12. Allowed Family Creators Collection (Whitelist)
+    match /allowed_family_creators/{creatorId} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn() && isSuperAdmin(request.auth.uid);
+    }
+
+    // 13. Audit Logs Collection
+    match /audit_logs/{logId} {
+      allow get, list: if isSignedIn() && (isSuperAdmin(request.auth.uid) || isUserParentOrAdmin(request.auth.uid));
+      allow create: if isSignedIn();
+      allow update, delete: if isSignedIn() && isSuperAdmin(request.auth.uid);
+    }
+
+    // 14. Login Logs Collection
+    match /login_logs/{logId} {
+      allow get, list: if isSignedIn() && isSuperAdmin(request.auth.uid);
+      allow create: if isSignedIn();
+      allow update, delete: if isSignedIn() && isSuperAdmin(request.auth.uid);
+    }
+
+    // 15. Join Requests Collection
+    match /join_requests/{requestId} {
+      allow get, list: if isSignedIn() && (
+        isSuperAdmin(request.auth.uid) || 
+        resource.data.userId == request.auth.uid || 
+        isUserParentOrAdmin(request.auth.uid)
+      );
+      allow create: if isSignedIn();
+      allow update: if isSignedIn() && (
+        isSuperAdmin(request.auth.uid) || 
+        isUserParentOrAdmin(request.auth.uid) || 
+        resource.data.userId == request.auth.uid
+      );
+      allow delete: if isSignedIn() && (
+        isSuperAdmin(request.auth.uid) || 
+        isUserParentOrAdmin(request.auth.uid) || 
+        resource.data.userId == request.auth.uid
+      );
+    }
+
+    // 16. Invites Collection
+    match /invites/{inviteId} {
+      allow get, list: if isSignedIn() && (
+        isSuperAdmin(request.auth.uid) || 
+        isUserParentOrAdmin(request.auth.uid) ||
+        resource.data.email == request.auth.token.email
+      );
+      allow create: if isSignedIn() && (
+        isSuperAdmin(request.auth.uid) ||
+        isUserParentOrAdmin(request.auth.uid)
+      );
+      allow update, delete: if isSignedIn() && (
+        isSuperAdmin(request.auth.uid) ||
+        isUserParentOrAdmin(request.auth.uid)
+      );
     }
   }
 }

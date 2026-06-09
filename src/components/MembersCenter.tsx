@@ -1,5 +1,8 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import { UserProfile, UserRole, SystemMode, Task, Redemption, ConfiguredMode, getLocalToday } from "../types";
+import { db } from "../firebase";
+import { collection, onSnapshot, query, where, setDoc, doc, deleteDoc } from "firebase/firestore";
+import toast from "react-hot-toast";
 import { 
   Users, BadgeInfo, Settings2, Trash2, Edit3, Plus, X, Calendar, Sparkles, 
   Copy, Check, ClipboardList, Plane, BookOpen, Sun, HelpCircle, ChevronDown, 
@@ -38,6 +41,9 @@ interface MembersCenterProps {
   onDeleteConfiguredMode?: (modeId: string, deleteRelatedEvents?: boolean) => Promise<void>;
   simulatedTodayDate?: string;
   onSetSimulatedTodayDate?: (date: string) => void;
+  pendingRequests?: any[];
+  onApproveJoinRequest?: (req: any) => Promise<void>;
+  onRejectJoinRequest?: (req: any) => Promise<void>;
 }
 
 const MORANDI_COLORS = [
@@ -83,10 +89,98 @@ export default function MembersCenter({
   onDeleteConfiguredMode,
   simulatedTodayDate = getLocalToday(),
   onSetSimulatedTodayDate,
+  pendingRequests = [],
+  onApproveJoinRequest,
+  onRejectJoinRequest,
 }: MembersCenterProps) {
   const [activeMode, setActiveMode] = useState<SystemMode>(systemMode);
   const [isUpdating, setIsUpdating] = useState(false);
   const [copied, setCopied] = useState(false);
+
+  // Sub-tabs for Owner views
+  const [memberSubTab, setMemberSubTab] = useState<"list" | "invites">("list");
+  const [invites, setInvites] = useState<any[]>([]);
+  const [loadingInvites, setLoadingInvites] = useState(false);
+  const [targetInviteRole, setTargetInviteRole] = useState<"Owner" | "Parent" | "Child" | "Viewer">("Parent");
+  const [inviteEmailConstraint, setInviteEmailConstraint] = useState("");
+  const [submittingInvite, setSubmittingInvite] = useState(false);
+
+  // Listen to family invitation codes from firestore
+  useEffect(() => {
+    if (!familyId) return;
+    setLoadingInvites(true);
+    const q = query(collection(db, "invites"), where("familyId", "==", familyId));
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const list = snapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
+      setInvites(list);
+      setLoadingInvites(false);
+    }, (error) => {
+      console.error("Error loading invites:", error);
+      setLoadingInvites(false);
+    });
+    return () => unsubscribe();
+  }, [familyId]);
+
+  const generateInviteCode = () => {
+    const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+    let code = "";
+    for (let i = 0; i < 6; i++) {
+      code += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    return code;
+  };
+
+  const handleCreateInviteCode = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!familyId) return;
+    setSubmittingInvite(true);
+    try {
+      const inviteCode = generateInviteCode();
+      const inviteId = `invite_${Math.random().toString(36).substr(2, 9)}`;
+      await setDoc(doc(db, "invites", inviteId), {
+        id: inviteId,
+        familyId,
+        familyName,
+        inviterUid: currentUser.uid,
+        status: "pending",
+        targetRole: targetInviteRole,
+        inviteCode,
+        email: inviteEmailConstraint.trim().toLowerCase(),
+        createdAt: new Date().toISOString(),
+        createdBy: currentUser.displayName || currentUser.email || "Owner"
+      });
+      
+      // Auto-log audit record
+      const auditId = `aud_${Date.now()}_invite`;
+      await setDoc(doc(db, "audit_logs", auditId), {
+        id: auditId,
+        userId: currentUser.uid,
+        userName: currentUser.displayName || currentUser.email || "Owner",
+        familyId,
+        action: `生成 ${targetInviteRole} 的專屬邀請碼`,
+        targetId: inviteId,
+        targetName: `邀請碼 ${inviteCode}`,
+        createdAt: new Date().toISOString()
+      });
+
+      toast.success(`🎉 成功生成 ${targetInviteRole} 專屬邀請碼：${inviteCode}`);
+      setInviteEmailConstraint("");
+    } catch (err: any) {
+      toast.error("❌ 生成邀請失敗：" + err.message);
+    } finally {
+      setSubmittingInvite(false);
+    }
+  };
+
+  const handleDeleteInvite = async (inviteId: string, code: string) => {
+    if (!confirm(`確認要刪除/使此邀請碼「${code}」失效嗎？刪除後新進者將無法再憑此代碼加入！`)) return;
+    try {
+      await deleteDoc(doc(db, "invites", inviteId));
+      toast.success("✓ 已撤銷該邀請碼");
+    } catch (err: any) {
+      toast.error("❌ 撤銷失敗：" + err.message);
+    }
+  };
 
   // Expanded Mode detail viewing
   const [expandedModeId, setExpandedModeId] = useState<string | null>(null);
@@ -544,31 +638,62 @@ export default function MembersCenter({
   return (
     <div id="members-settings-module" className="max-w-4xl mx-auto font-sans">
       {/* List of Family Members - Full-width single Column */}
-      <div className="bg-white rounded-2xl border border-[#E5E1DA] p-6 shadow-sm space-y-6 font-sans">
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-[#E5E1DA] pb-4">
-          <div className="flex items-center gap-2.5">
-            <div className="p-2.5 bg-[#F9F8F6] text-[#4A6076] border border-[#E5E1DA] rounded-xl animate-none">
-              <Users className="h-5 w-5" />
+      <div className="bg-white rounded-2xl border-0 md:border border-[#E5E1DA] p-3.5 md:p-6 shadow-xs space-y-4 md:space-y-6 font-sans">
+        <div className="flex justify-between items-center border-b border-[#E5E1DA] pb-3">
+          <div className="flex items-center gap-2">
+            <div className="h-8 w-8 md:h-10 md:w-10 bg-[#F9F8F6] text-[#4A6076] border border-[#E5E1DA] rounded-xl flex items-center justify-center shrink-0">
+              <Users className="h-4.5 w-4.5" />
             </div>
             <div>
-              <h2 className="text-lg font-black text-[#2D2926] font-sans">家庭成員中心</h2>
-              <p className="text-xs text-gray-500 mt-0.5 font-medium">檢視與自訂所有的家庭成員名冊</p>
+              <h2 className="text-sm md:text-lg font-black text-[#2D2926] font-sans">家庭成員中心</h2>
+              <p className="hidden md:block text-xs text-gray-500 mt-0.5 font-medium">檢視與自訂所有的家庭成員名冊</p>
             </div>
           </div>
 
           {isParent && (
             <button
               onClick={handleOpenAdd}
-              className="flex items-center gap-1.5 text-xs font-black text-white bg-[#4A6076] hover:bg-[#3b4c5e] px-4 py-2.5 rounded-xl transition cursor-pointer shadow-[2px_2px_0px_#2D2926]"
+              className="flex items-center gap-1 text-xs font-black text-white bg-[#4A6076] hover:bg-[#3b4c5e] px-3 py-2 rounded-xl transition cursor-pointer shadow-xs max-h-[38px]"
             >
-              <Plus className="h-4 w-4" />
-              <span>新增家庭成員</span>
+              <Plus className="h-3.5 w-3.5" />
+              <span>新增</span>
             </button>
           )}
         </div>
 
-        <div className="space-y-4">
-          <div className="bg-[#FAF8F4]/80 border border-[#E5E1DA] p-4 rounded-2xl flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 text-xs leading-relaxed text-gray-700 font-sans">
+        {isParent && (
+          <div className="flex border-b border-[#FAF9F6] gap-2 mb-2">
+            <button
+              onClick={() => setMemberSubTab("list")}
+              className={`pb-2.5 text-xs font-black border-b-2 transition whitespace-nowrap cursor-pointer px-4 ${
+                memberSubTab === "list"
+                  ? "border-[#4A6076] text-[#4A6076] font-extrabold"
+                  : "border-transparent text-gray-400 hover:text-gray-700"
+              }`}
+            >
+              👥 家族成員名冊
+            </button>
+            <button
+              onClick={() => setMemberSubTab("invites")}
+              className={`pb-2.5 text-xs font-black border-b-2 transition whitespace-nowrap cursor-pointer px-4 relative ${
+                memberSubTab === "invites"
+                  ? "border-[#4A6076] text-[#4A6076] font-extrabold"
+                  : "border-transparent text-gray-400 hover:text-gray-700"
+              }`}
+            >
+              ✉️ 專屬邀請與審核中心
+              {pendingRequests.length > 0 && (
+                <span className="absolute -top-1 -right-2 h-4 w-4 bg-[#E28F83] text-white font-extrabold text-[9px] rounded-full flex items-center justify-center animate-pulse">
+                  {pendingRequests.length}
+                </span>
+              )}
+            </button>
+          </div>
+        )}
+
+        {memberSubTab === "list" ? (
+          <div className="space-y-4">
+            <div className="bg-[#FAF8F4]/80 border border-[#E5E1DA] p-4 rounded-2xl flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 text-xs leading-relaxed text-gray-700 font-sans">
             <div>
               <p className="font-bold text-gray-400 uppercase tracking-widest text-[9px] mb-0.5">我的家庭單位</p>
               🏠 <b>家庭名稱：</b> <span className="font-extrabold text-[#4A6076] text-sm">{familyName}</span>
@@ -594,6 +719,58 @@ export default function MembersCenter({
               )}
             </button>
           </div>
+
+          {/* Pending Join Requests Roster */}
+          {pendingRequests && pendingRequests.length > 0 && (currentUser.role as string === "Owner" || currentUser.role as string === "Parent") && (
+            <div className="bg-amber-50/50 border-2 border-dashed border-amber-300 rounded-[24px] p-5 mb-6 space-y-4">
+              <div className="flex items-center justify-between border-b border-amber-200 pb-2.5">
+                <div className="flex items-center gap-2">
+                  <span className="text-xl">⏳</span>
+                  <div>
+                    <h3 className="text-sm font-black text-amber-900">待核准成員加入申請 ({pendingRequests.length})</h3>
+                    <p className="text-[10px] text-amber-700 font-medium">新成員輸入了您家的邀請碼，正在等待您核准加入！</p>
+                  </div>
+                </div>
+              </div>
+              <div className="divide-y divide-amber-100/50">
+                {pendingRequests.map((req) => (
+                  <div key={req.id} className="py-3 flex flex-row items-center justify-between gap-4 flex-wrap sm:flex-nowrap">
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="text-xs font-black text-amber-950 bg-amber-100 px-2 py-0.5 rounded border border-amber-200">
+                          {req.userName}
+                        </span>
+                        <span className="text-[10px] text-gray-500 font-bold font-mono">({req.userEmail})</span>
+                      </div>
+                      <p className="text-[10px] text-amber-800">
+                        申請關係角色：<span className="font-extrabold">{req.role === UserRole.PARENT ? "家長" : (req.role === UserRole.CHILD || req.role === UserRole.KID ? "小孩" : "一般成員")}</span>
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={async () => {
+                          if (onApproveJoinRequest) await onApproveJoinRequest(req);
+                        }}
+                        className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs px-3.5 py-1.5 rounded-xl cursor-pointer transition shadow-xs"
+                      >
+                        ✓ 同意加入
+                      </button>
+                      <button
+                        onClick={async () => {
+                          if (confirm("確定要拒絕對方的加入嗎？")) {
+                            if (onRejectJoinRequest) await onRejectJoinRequest(req);
+                          }
+                        }}
+                        className="bg-[#FFFDFB] hover:bg-gray-50 text-gray-500 border border-gray-200 font-semibold text-xs px-3.5 py-1.5 rounded-xl cursor-pointer transition"
+                      >
+                        拒絕
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             {familyMembers.map((member) => {
@@ -698,6 +875,173 @@ export default function MembersCenter({
             })}
           </div>
         </div>
+        ) : (
+          <div className="space-y-6 animate-in fade-in duration-200 font-sans text-gray-800">
+            {/* 1. Generate Invite Code Block */}
+            <div className="bg-[#FCFBF9] border border-[#E5E1DA] rounded-2xl p-5 space-y-4 shadow-sm">
+              <div>
+                <h3 className="text-xs font-black text-gray-800 flex items-center gap-1.5">
+                  <Sparkles className="h-4 w-4 text-amber-500" />
+                  <span>產製專屬進駐邀請碼 (指定角色 & 帳號限制)</span>
+                </h3>
+                <p className="text-[10px] text-gray-400 mt-1">產出專用 6 碼的大寫合規邀請碼，受邀者憑此碼註冊將「自動加入並直接開通您所指派的角色權限」</p>
+              </div>
+
+              <form onSubmit={handleCreateInviteCode} className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end bg-white p-4 rounded-xl border border-[#FAF8F4]">
+                <div className="space-y-2">
+                  <label className="block text-[11px] font-black text-[#4A6076]">預先賦予角色權限</label>
+                  <select
+                    value={targetInviteRole}
+                    onChange={(e) => setTargetInviteRole(e.target.value as any)}
+                    className="w-full text-xs border border-[#E5E1DA] bg-[#F9F8F6] rounded-xl px-3 py-2 cursor-pointer font-bold focus:outline-none"
+                  >
+                    <option value="Owner">管理員 (Owner)</option>
+                    <option value="Parent">家長 (Parent)</option>
+                    <option value="Child">孩子 (Child)</option>
+                    <option value="Viewer">一般唯讀成員 (Viewer)</option>
+                  </select>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="block text-[11px] font-black text-[#4A6076]">限制指定登入 Email (選填)</label>
+                  <input
+                    type="email"
+                    placeholder="不填代表開放任何人凭此代碼加入"
+                    value={inviteEmailConstraint}
+                    onChange={(e) => setInviteEmailConstraint(e.target.value)}
+                    className="w-full text-xs border border-[#E5E1DA] bg-[#F9F8F6] rounded-xl px-3.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-[#405060]"
+                  />
+                </div>
+
+                <div>
+                  <button
+                    type="submit"
+                    disabled={submittingInvite}
+                    className="w-full text-xs font-black text-white bg-[#4A6076] hover:bg-[#344658] px-4 py-2.5 rounded-xl transition cursor-pointer select-none"
+                  >
+                    {submittingInvite ? "產製中..." : "✨ 產製並存檔新進邀請碼"}
+                  </button>
+                </div>
+              </form>
+            </div>
+
+            {/* 2. Invitation List */}
+            <div className="space-y-3">
+              <h4 className="text-xs font-black text-gray-800 flex items-center gap-1.5">
+                🎫 目前已產製的邀請代碼 ({invites.length})
+              </h4>
+              
+              {loadingInvites ? (
+                <div className="text-center py-6 text-xs text-gray-400">正在讀取最新邀請碼...</div>
+              ) : invites.length === 0 ? (
+                <div className="text-center py-8 border border-dashed border-[#E5E1DA] rounded-2xl text-xs text-gray-400 font-medium">
+                  目前尚無任何有效的進駐邀請碼，請在上方欄位新增加密代碼。
+                </div>
+              ) : (
+                <div className="overflow-x-auto border border-[#E5E1DA] rounded-2xl bg-white max-h-[300px] overflow-y-auto">
+                  <table className="w-full text-left text-xs border-collapse">
+                    <thead>
+                      <tr className="bg-[#FCFBF9] border-b border-[#E5E1DA] text-gray-500 font-bold select-none sticky top-0">
+                        <th className="p-3">大寫邀請碼</th>
+                        <th className="p-3">目標開通角色</th>
+                        <th className="p-3">綁定限定 Email</th>
+                        <th className="p-3">產製者</th>
+                        <th className="p-3">代碼狀態</th>
+                        <th className="p-3 text-center">操作</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {invites.map((inv) => (
+                        <tr key={inv.id} className="border-b border-[#FAF9F6] last:border-0 hover:bg-[#FAF8F4]/30">
+                          <td className="p-3 font-mono font-black text-[#4A6076] flex items-center gap-2">
+                            <span>{inv.inviteCode}</span>
+                            <button
+                              onClick={() => {
+                                navigator.clipboard.writeText(inv.inviteCode);
+                                toast.success("✓ 邀請碼已複製至剪貼簿！");
+                              }}
+                              className="text-gray-400 hover:text-gray-600 cursor-pointer"
+                              title="複製"
+                            >
+                              <Copy className="h-3 w-3" />
+                            </button>
+                          </td>
+                          <td className="p-3">
+                            <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                              inv.targetRole === "Owner" ? "bg-red-50 text-red-600 border border-red-150/40" :
+                              inv.targetRole === "Parent" ? "bg-indigo-50 text-indigo-700 border border-indigo-150/40" :
+                              inv.targetRole === "Child" ? "bg-amber-50 text-amber-700 border border-amber-150/40" :
+                              "bg-slate-50 text-slate-600 border border-slate-150/40"
+                            }`}>
+                              {inv.targetRole}
+                            </span>
+                          </td>
+                          <td className="p-3 font-mono text-gray-500">{inv.email || "⚠️ 任何人憑此代碼進駐"}</td>
+                          <td className="p-3 text-gray-400">{inv.createdBy || "Owner"}</td>
+                          <td className="p-3">
+                            <span className={`font-semibold ${inv.status === "pending" ? "text-amber-600" : "text-emerald-600"}`}>
+                              {inv.status === "pending" ? "⏱️ 待進駐使用" : "✅ 已成功被進駐"}
+                            </span>
+                          </td>
+                          <td className="p-3 text-center">
+                            <button
+                              onClick={() => handleDeleteInvite(inv.id, inv.inviteCode)}
+                              className="text-rose-500 hover:text-rose-700 font-bold hover:underline py-1 px-2 text-[10px] cursor-pointer"
+                            >
+                              撤銷失效
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+
+            {/* 3. Pending Register Approvals */}
+            <div className="space-y-3 pt-2">
+              <h4 className="text-xs font-black text-gray-800 flex items-center gap-1.5">
+                ⏱️ 待審批進駐的家庭申請 ({pendingRequests.length})
+              </h4>
+              
+              {pendingRequests.length === 0 ? (
+                <div className="text-center py-8 border border-dashed border-[#E5E1DA] rounded-2xl text-xs text-gray-400 font-medium bg-gray-50/40">
+                  目前沒有任何待核准的家庭進駐申請（若有人使用通用家庭 ID 申請，將會在此處列出）。
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {pendingRequests.map((req) => (
+                    <div key={req.id} className="flex justify-between items-center text-xs border border-[#E5E1DA] bg-[#FCFBF9] p-4 rounded-xl hover:bg-white transition duration-150">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <p className="font-extrabold text-[#4A6076] text-sm">{req.userName}</p>
+                          <span className="bg-slate-100 text-gray-700 font-bold px-2 py-0.5 rounded text-[10px] transform scale-95">預設：{req.role}</span>
+                        </div>
+                        <p className="text-[10px] text-gray-400 font-semibold mt-1 font-mono">Email: {req.userEmail || "未登錄"}</p>
+                        <p className="text-[9px] text-gray-400 mt-0.5">申請時間：{new Date(req.createdAt).toLocaleString()}</p>
+                      </div>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => onRejectJoinRequest?.(req)}
+                          className="px-3 py-1.5 text-[10px] font-black text-rose-600 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-lg transition overflow-hidden cursor-pointer"
+                        >
+                          拒絕
+                        </button>
+                        <button
+                          onClick={() => onApproveJoinRequest?.(req)}
+                          className="px-3 py-1.5 text-[10px] font-black text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg transition overflow-hidden cursor-pointer"
+                        >
+                          同意進駐
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Settings / Mode switcher Box - 1 Column */}

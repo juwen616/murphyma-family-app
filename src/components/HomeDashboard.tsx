@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from "react";
+import toast from "react-hot-toast";
 import {
   CalendarEvent,
   Announcement,
@@ -46,6 +47,7 @@ interface HomeDashboardProps {
   onAddAnnouncement: (title: string, content: string) => Promise<void>;
   onDeleteAnnouncement: (id: string) => Promise<void>;
   onNavigateToEvent?: (eventId: string, date: string) => void;
+  onAddEvent?: (eventData: any) => Promise<any>;
   activeModeConfig?: any;
   configuredModes?: any[];
   simulatedTodayDate?: string;
@@ -209,6 +211,7 @@ export default function HomeDashboard({
   onAddAnnouncement,
   onDeleteAnnouncement,
   onNavigateToEvent,
+  onAddEvent,
   activeModeConfig,
   configuredModes = [],
   simulatedTodayDate,
@@ -221,6 +224,56 @@ export default function HomeDashboard({
   const [newAnnContent, setNewAnnContent] = useState("");
   const [showAddAnnModal, setShowAddAnnModal] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Quick add event states & handler (used by next 7 days mobile layout)
+  const [quickAddDate, setQuickAddDate] = useState<string | null>(null);
+  const [quickAddTitle, setQuickAddTitle] = useState("");
+  const [quickAddTime, setQuickAddTime] = useState("");
+  const [quickAddNote, setQuickAddNote] = useState("");
+  const [quickAddPublic, setQuickAddPublic] = useState(true);
+
+  const handleQuickAddSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!quickAddDate || !quickAddTitle.trim()) {
+      toast.error("⚠️ 請輸入行程名稱！");
+      return;
+    }
+    if (!onAddEvent) {
+      toast.error("❌ 系統未就緒，無法新增行程。");
+      return;
+    }
+    try {
+      setIsSubmitting(true);
+      await onAddEvent({
+        title: quickAddTitle.trim(),
+        date: quickAddDate,
+        time: quickAddTime.trim(),
+        note: quickAddNote.trim(),
+        isPublic: quickAddPublic,
+        isFixed: false,
+        familyId: currentUser.familyId || "",
+      });
+      // Clear states & inputs
+      setQuickAddTitle("");
+      setQuickAddTime("");
+      setQuickAddNote("");
+      setQuickAddPublic(true);
+      setQuickAddDate(null);
+    } catch (err: any) {
+      console.error(err);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  // Collapsible sections
+  const [isTodayPointsExpanded, setIsTodayPointsExpanded] = useState(true);
+  const [isSevenDaysExpanded, setIsSevenDaysExpanded] = useState(true);
+  const [isAnnouncementExpanded, setIsAnnouncementExpanded] = useState(false);
+  const [isStarCenterExpanded, setIsStarCenterExpanded] = useState(false);
+  const [isUpcomingTasksExpanded, setIsUpcomingTasksExpanded] = useState(false);
+  const [isBirthdayHelperExpanded, setIsBirthdayHelperExpanded] = useState(false);
+  const [isRecentlyCompletedExpanded, setIsRecentlyCompletedExpanded] = useState(false);
 
   const isParent = currentUser.role === UserRole.ADMIN || currentUser.role === UserRole.PARENT;
 
@@ -1356,139 +1409,147 @@ export default function HomeDashboard({
             }}
             className="p-5"
           >
-            <div className="flex items-center justify-between pb-3.5 mb-4 border-b border-[#F7F3EB]">
+            <div 
+              onClick={() => setIsTodayPointsExpanded(!isTodayPointsExpanded)}
+              className="flex items-center justify-between pb-3.5 border-b border-[#F7F3EB] cursor-pointer select-none"
+            >
               <div className="flex items-center gap-2">
-                <span className="text-base">🏡</span>
+                <span className="text-base font-sans">🏡</span>
                 <h2 className="text-sm font-black text-[#3C332D]">今日重點</h2>
+                {isTodayPointsExpanded ? <ChevronUp className="h-4 w-4 text-gray-400" /> : <ChevronDown className="h-4 w-4 text-gray-400" />}
               </div>
               <span className="text-[11px] font-bold text-gray-500 font-mono bg-amber-50 border border-amber-200/50 px-2.5 py-0.5 rounded-full">
                 {todayDateStr}
               </span>
             </div>
 
-            {/* Dynamic Holiday / Festival Banner Alert */}
-            {todayHoliday && (
-              <div className={`p-4 rounded-2xl border flex items-center gap-3.5 mb-4 select-none ${
-                todayHoliday.isNational
-                  ? "bg-gradient-to-r from-rose-50 to-rose-100/40 border-rose-200/80 text-[#D32F2F] shadow-sm"
-                  : "bg-gradient-to-r from-purple-50 to-purple-100/40 border-purple-200/80 text-[#7B1FA2] shadow-sm"
-              }`}>
-                <div className="text-3xl shrink-0 animate-bounce">
-                  {todayHoliday.emoji}
-                </div>
-                <div>
-                  <h3 className="text-sm font-black tracking-wide">
-                    今天是 {todayHoliday.name}
-                  </h3>
-                  <p className="text-[11px] font-bold opacity-85 mt-0.5">
-                    {todayHoliday.isNational
-                      ? "🎉 國慶與放假節日，願你有一段美好快樂的時光！"
-                      : "🎈 充滿歡樂的特別日子，和家人一同感受儀式感吧！"}
-                  </p>
-                </div>
-              </div>
-            )}
-
-            {dataLoaded && !dataLoaded.events ? (
-              <ShimmerSkeleton count={2} />
-            ) : todayEvents.length === 0 ? (
-              (() => {
-                const hr = new Date().getHours();
-                const incompleteTasks = tasks && tasks.some((t) => t.status !== TaskStatus.APPROVED);
-                
-                let emoji = "🌞";
-                let title = "新的一天開始囉！";
-                let subtitle = "今天也一起加油吧！";
-
-                if (hr >= 5 && hr < 12) {
-                  emoji = "🌞";
-                  title = "新的一天開始囉！今天也一起加油吧！";
-                  subtitle = "🌈 今天沒有特殊行程，記得保持好心情唷！";
-                } else if (hr >= 12 && hr < 18) {
-                  emoji = "💪";
-                  title = "今天進行得如何呢？";
-                  subtitle = "繼續努力！";
-                } else if (hr >= 18 && hr < 22) {
-                  if (!incompleteTasks) {
-                    emoji = "🎉";
-                    title = "今天的事情都完成囉！";
-                    subtitle = "好好休息一下吧～";
-                  } else {
-                    emoji = "🎯";
-                    title = "今天辛苦了";
-                    subtitle = "看看還有沒有未完成事項吧！";
-                  }
-                } else {
-                  // hr >= 22 || hr < 5
-                  if (!incompleteTasks) {
-                    emoji = "🎉";
-                    title = "今天的事情都完成囉！";
-                    subtitle = "好好休息一下吧～";
-                  } else {
-                    emoji = "🌙";
-                    title = "今天差不多結束囉";
-                    subtitle = "早點休息，明天再加油！";
-                  }
-                }
-
-                return (
-                  <div className="text-center py-8 bg-[#FAF8F5] rounded-xl border border-dashed border-[#EFEAE2] flex flex-col items-center justify-center font-sans">
-                    <span className="text-2xl mb-1.5">{emoji}</span>
-                    <p className="text-sm font-black text-[#6B4B3E]">{title}</p>
-                    <p className="text-xs text-gray-400 font-bold mt-1 max-w-[90%]">{subtitle}</p>
-                  </div>
-                );
-              })()
-            ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {todayEvents.map((evt) => {
-                  const isBday = (evt as any).isBirthday;
-                  const timeStatus = parseEventTime(evt.time);
-                  return (
-                    <div
-                      key={evt.id}
-                      style={{
-                        background: isBday ? "#FFF5F6" : "#FAF8F5",
-                        borderColor: isBday ? "#F2D1D4" : "#EFEAE2",
-                      }}
-                      className="p-4 rounded-2xl border flex items-center gap-3.5 hover:scale-[1.01] transition-transform"
-                    >
-                      <div className={`h-10 w-10 rounded-full flex items-center justify-center text-xl shrink-0 border ${
-                        isBday ? "bg-rose-100 border-rose-300" : "bg-white border-[#E8E2D8]"
-                      }`}>
-                        {isBday ? "🎂" : getEventIcon(evt.title)}
-                      </div>
-                      <div className="min-w-0 flex-grow">
-                        <h4 className={`text-sm truncate font-black ${isBday ? "text-rose-800" : "text-[#3C332D]"}`}>
-                          {isMultiDayEvent(evt)
-                            ? `${getEventEmoji(evt.title)} ${evt.title} Day${getMultiDayLabel(evt.startDate!, evt.endDate!, todayDateStr).dayIndex}`
-                            : evt.title
-                          }
-                        </h4>
-                        <div className="flex flex-wrap items-center gap-1.5 mt-0.5">
-                          <p className={`text-xs font-mono ${isBday ? "text-rose-500" : "text-gray-500"} font-bold`}>
-                            {isBday ? "全天生日慶祝 🎉" : (evt.time || "全天時間")}
-                          </p>
-                          {timeStatus.hasTime && timeStatus.isOngoing && (
-                            <span className="text-emerald-750 bg-emerald-50 border border-emerald-200 rounded px-1.5 py-0.2 text-[9px] font-black tracking-wider flex items-center gap-0.5 animate-pulse">
-                              🟢 進行中
-                            </span>
-                          )}
-                        </div>
-                        {isMultiDayEvent(evt) && evt.dailyNotes?.[todayDateStr] && (
-                          <div className="text-[11px] text-[#004B8F] font-bold bg-[#E1F0FF]/60 px-2 py-0.5 rounded-lg border border-sky-200 mt-1 inline-block truncate max-w-full">
-                            📘 {evt.dailyNotes[todayDateStr]}
-                          </div>
-                        )}
-                        {evt.isFixed && !isBday && (
-                          <span className="inline-block mt-1 text-[9px] font-bold text-rose-500 bg-rose-50 px-1.5 py-0.2 rounded border border-rose-100">
-                            固定日常
-                          </span>
-                        )}
-                      </div>
+            {isTodayPointsExpanded && (
+              <div className="mt-4 space-y-4">
+                {/* Dynamic Holiday / Festival Banner Alert */}
+                {todayHoliday && (
+                  <div className={`p-4 rounded-2xl border flex items-center gap-3.5 select-none ${
+                    todayHoliday.isNational
+                      ? "bg-gradient-to-r from-rose-50 to-rose-100/40 border-rose-200/80 text-[#D32F2F] shadow-sm"
+                      : "bg-gradient-to-r from-purple-50 to-purple-100/40 border-purple-200/80 text-[#7B1FA2] shadow-sm"
+                  }`}>
+                    <div className="text-3xl shrink-0 animate-bounce">
+                      {todayHoliday.emoji}
                     </div>
-                  );
-                })}
+                    <div>
+                      <h3 className="text-sm font-black tracking-wide">
+                        今天是 {todayHoliday.name}
+                      </h3>
+                      <p className="text-[11px] font-bold opacity-85 mt-0.5">
+                        {todayHoliday.isNational
+                          ? "🎉 國慶與放假節日，願你有一段美好快樂的時光！"
+                          : "🎈 充滿歡樂的特別日子，和家人一同感受儀式感吧！"}
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                {dataLoaded && !dataLoaded.events ? (
+                  <ShimmerSkeleton count={2} />
+                ) : todayEvents.length === 0 ? (
+                  (() => {
+                    const hr = new Date().getHours();
+                    const incompleteTasks = tasks && tasks.some((t) => t.status !== TaskStatus.APPROVED);
+                    
+                    let emoji = "🌞";
+                    let title = "新的一天開始囉！";
+                    let subtitle = "今天也一起加油吧！";
+
+                    if (hr >= 5 && hr < 12) {
+                      emoji = "🌞";
+                      title = "新的一天開始囉！今天也一起加油吧！";
+                      subtitle = "🌈 今天沒有特殊行程，記得保持好心情唷！";
+                    } else if (hr >= 12 && hr < 18) {
+                      emoji = "💪";
+                      title = "今天進行得如何呢？";
+                      subtitle = "繼續努力！";
+                    } else if (hr >= 18 && hr < 22) {
+                      if (!incompleteTasks) {
+                        emoji = "🎉";
+                        title = "今天的事情都完成囉！";
+                        subtitle = "好好休息一下吧～";
+                      } else {
+                        emoji = "🎯";
+                        title = "今天辛苦了";
+                        subtitle = "看看還有沒有未完成事項吧！";
+                      }
+                    } else {
+                      // hr >= 22 || hr < 5
+                      if (!incompleteTasks) {
+                        emoji = "🎉";
+                        title = "今天的事情都完成囉！";
+                        subtitle = "好好休息一下吧～";
+                      } else {
+                        emoji = "🌙";
+                        title = "今天差不多結束囉";
+                        subtitle = "早點休息，明天再加油！";
+                      }
+                    }
+
+                    return (
+                      <div className="text-center py-8 bg-[#FAF8F5] rounded-xl border border-dashed border-[#EFEAE2] flex flex-col items-center justify-center font-sans">
+                        <span className="text-2xl mb-1.5">{emoji}</span>
+                        <p className="text-sm font-black text-[#6B4B3E]">{title}</p>
+                        <p className="text-xs text-gray-400 font-bold mt-1 max-w-[90%]">{subtitle}</p>
+                      </div>
+                    );
+                  })()
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {todayEvents.map((evt) => {
+                      const isBday = (evt as any).isBirthday;
+                      const timeStatus = parseEventTime(evt.time);
+                      return (
+                        <div
+                          key={evt.id}
+                          style={{
+                            background: isBday ? "#FFF5F6" : "#FAF8F5",
+                            borderColor: isBday ? "#F2D1D4" : "#EFEAE2",
+                          }}
+                          className="p-4 rounded-2xl border flex items-center gap-3.5 hover:scale-[1.01] transition-transform"
+                        >
+                          <div className={`h-10 w-10 rounded-full flex items-center justify-center text-xl shrink-0 border ${
+                            isBday ? "bg-rose-100 border-rose-300" : "bg-white border-[#E8E2D8]"
+                          }`}>
+                            {isBday ? "🎂" : getEventIcon(evt.title)}
+                          </div>
+                          <div className="min-w-0 flex-grow">
+                            <h4 className={`text-sm truncate font-black ${isBday ? "text-rose-800" : "text-[#3C332D]"}`}>
+                              {isMultiDayEvent(evt)
+                                ? `${getEventEmoji(evt.title)} ${evt.title} Day${getMultiDayLabel(evt.startDate!, evt.endDate!, todayDateStr).dayIndex}`
+                                : evt.title
+                              }
+                            </h4>
+                            <div className="flex flex-wrap items-center gap-1.5 mt-0.5">
+                              <p className={`text-xs font-mono ${isBday ? "text-rose-500" : "text-gray-500"} font-bold`}>
+                                {isBday ? "全天生日慶祝 🎉" : (evt.time || "全天時間")}
+                              </p>
+                              {timeStatus.hasTime && timeStatus.isOngoing && (
+                                <span className="text-emerald-755 bg-emerald-50 border border-emerald-200 rounded px-1.5 py-0.2 text-[9px] font-black tracking-wider flex items-center gap-0.5 animate-pulse">
+                                  🟢 進行中
+                                </span>
+                              )}
+                            </div>
+                            {isMultiDayEvent(evt) && evt.dailyNotes?.[todayDateStr] && (
+                              <div className="text-[11px] text-[#004B8F] font-bold bg-[#E1F0FF]/60 px-2 py-0.5 rounded-lg border border-sky-200 mt-1 inline-block truncate max-w-full">
+                                📘 {evt.dailyNotes[todayDateStr]}
+                              </div>
+                            )}
+                            {evt.isFixed && !isBday && (
+                              <span className="inline-block mt-1 text-[9px] font-bold text-rose-500 bg-rose-50 px-1.5 py-0.2 rounded border border-rose-100">
+                                固定日常
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             )}
           </section>
@@ -1501,178 +1562,366 @@ export default function HomeDashboard({
               borderRadius: "24px",
               boxShadow: "0 4px 12px rgba(0,0,0,0.03)",
             }}
-            className="p-6"
+            className="p-4 md:p-6"
           >
-            <div className="flex items-center justify-between mb-6 pb-4 border-b border-[#F7F3EB]">
+            <div 
+              onClick={() => setIsSevenDaysExpanded(!isSevenDaysExpanded)}
+              className="flex items-center justify-between mb-4 md:mb-6 pb-4 border-b border-[#F7F3EB] cursor-pointer select-none"
+            >
               <div className="flex items-center gap-2">
                 <span className="text-base">📅</span>
                 <h2 className="text-sm font-black text-[#3C332D]">接下來七天</h2>
+                {isSevenDaysExpanded ? <ChevronUp className="h-4 w-4 text-gray-400" /> : <ChevronDown className="h-4 w-4 text-gray-400" />}
               </div>
               <span className="text-[10px] font-bold text-[#5B7283] bg-[#EAF0EB] px-2.5 py-1 rounded-full">
                 行程手帳
               </span>
             </div>
 
-            {dataLoaded && !dataLoaded.events ? (
-              <ShimmerSkeleton count={3} />
-            ) : (
-              <div className="space-y-4">
-                {nextSevenDays.map((day) => (
-                <div
-                  key={day.dateStr}
-                  style={{
-                    background: day.isToday ? "#FFF8F6" : "#FFFFFF",
-                    border: day.isToday ? "2px solid #F0C4B8" : "1px solid #E8E2D8",
-                  }}
-                  className="p-5 rounded-2xl flex flex-col md:flex-row md:items-center justify-between gap-4 transition-all duration-200 hover:-translate-y-0.5 shadow-sm"
-                >
-                  <div className="flex items-center gap-3 shrink-0">
-                    <span className="text-2xl">
-                      {day.isToday ? "🗓️" : "🌱"}
-                    </span>
-                    <div>
-                      <span
-                        className={`text-sm font-black flex items-center gap-1.5 ${
-                          day.isToday ? "text-[#C76A5A]" : "text-[#7C6354]"
-                        }`}
-                      >
-                        {day.displayDate}
-                        {day.isToday && (
-                          <span className="bg-[#EAA59E] text-white text-[9px] px-2 py-0.5 rounded-full font-black animate-pulse">
-                            今天
-                          </span>
-                        )}
-                      </span>
-                    </div>
-                  </div>
+            {isSevenDaysExpanded && (
+              dataLoaded && !dataLoaded.events ? (
+                <ShimmerSkeleton count={3} />
+              ) : (
+                <>
+                  {/* 手機版：超高密度單層扁平行程列表 (無大卡片、無巨大留白、無大圓角容器) */}
+                  <div className="md:hidden block space-y-0 text-[#3C332D]">
+                    {nextSevenDays.map((day, dIdx) => (
+                      <div key={day.dateStr} className="border-b border-[#F5F2EB] last:border-0 pb-3 mb-3">
+                        {/* 日期列：🌱 06/10（三），高度約 40px */}
+                        <div className="flex items-center justify-between h-10 select-none">
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-[14px] font-black text-[#7C6354] tracking-tight">
+                              🌱 {day.displayDate.replace(/^\d+年/, "")}
+                            </span>
+                            {day.isToday && (
+                              <span className="bg-[#EAA59E] text-white text-[9px] px-1.5 py-0.5 rounded-md font-extrabold shrink-0 scale-95">
+                                今天
+                              </span>
+                            )}
+                          </div>
 
-                  <div className="flex-grow min-w-0 md:pl-6 border-l-0 md:border-l border-[#F2ECE4]">
-                    {day.events.length === 0 ? (
-                      <span className="text-xs text-gray-400 font-bold flex items-center gap-1 py-1.5 pl-1">
-                        無安排行程安排 🌷
-                      </span>
-                    ) : (
-                      <div className="space-y-4">
-                        {day.events.map((evt) => {
-                          const isBday = (evt as any).isBirthday;
-                          const involved = getInvolvedMembers(evt);
-                          const hasNote = evt.note && evt.note.trim().length > 0;
-                          
-                          return (
-                            <div
-                              key={evt.id}
-                              onClick={() => {
-                                if (onNavigateToEvent) {
-                                  onNavigateToEvent(evt.id, evt.date || day.dateStr);
-                                }
-                              }}
-                              className={`group p-4 rounded-2xl border transition-all duration-300 cursor-pointer text-left flex flex-col gap-2.5 shadow-sm
-                                hover:shadow-md hover:scale-[1.01] hover:bg-[#FFFDFB] hover:border-amber-200
-                                ${
-                                  isBday
-                                    ? "bg-rose-50/70 border-rose-200/80 hover:bg-rose-50"
-                                    : "bg-[#FCFBF9] border-[#EFEAE2]"
-                                }
-                              `}
-                            >
-                              {/* 📅 Date & 🔒 Privacy info row */}
-                              <div className="flex items-center justify-between flex-wrap gap-1 text-[10px] text-gray-400 font-bold">
-                                <span className="flex items-center gap-1 bg-[#F2EDE4]/60 px-2 py-0.5 rounded text-gray-600">
-                                  <span>📅</span>
-                                  <span>{evt.date || day.dateStr}</span>
-                                </span>
-                                <span className={`flex items-center gap-1 px-1.5 py-0.5 rounded ${
-                                  evt.isPublic !== false
-                                    ? "bg-emerald-50 text-emerald-700"
-                                    : "bg-amber-50 text-amber-700 font-bold"
-                                }`}>
-                                  {evt.isPublic !== false ? (
-                                    <>
-                                      <span>🔓</span>
-                                      <span>家庭公開</span>
-                                    </>
-                                  ) : (
-                                    <>
-                                      <span>🔒</span>
-                                      <span>私人</span>
-                                    </>
-                                  )}
-                                </span>
-                              </div>
+                          {/* 快速新增 "+" 按鈕 */}
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setQuickAddDate(day.dateStr);
+                            }}
+                            className="h-8 w-8 rounded-full bg-[#FAF9F6] border border-[#EFEAE2] flex items-center justify-center text-[#7C6354] hover:bg-[#F5EBE6] active:scale-90 transition-all shrink-0 cursor-pointer"
+                            title="快速新增行程"
+                          >
+                            <Plus className="h-4 w-4 stroke-[2.5]" />
+                          </button>
+                        </div>
 
-                              {/* 🏷 Event title & category icon */}
-                              <div className="flex items-start gap-2">
-                                <span className="text-lg shrink-0">
-                                  {isBday ? "🎂" : getEventIcon(evt.title)}
-                                </span>
-                                <div className="space-y-0.5 min-w-0">
-                                  <h4 className={`text-sm font-black leading-tight truncate ${
-                                    isBday ? "text-rose-900" : "text-[#3C332D]"
-                                  }`}>
-                                    {isMultiDayEvent(evt)
-                                      ? `${getEventEmoji(evt.title)} ${evt.title} Day${getMultiDayLabel(evt.startDate!, evt.endDate!, day.dateStr).dayIndex}`
-                                      : evt.title
-                                    }
-                                  </h4>
-                                  {isMultiDayEvent(evt) && evt.dailyNotes?.[day.dateStr] && (
-                                    <div className="text-[11px] text-[#004B8F] font-bold bg-[#E1F0FF]/60 px-2 py-0.5 rounded-lg border border-sky-200 mt-1 inline-block truncate max-w-full text-left">
-                                      📘 {evt.dailyNotes[day.dateStr]}
-                                    </div>
-                                  )}
-                                  {evt.isFixed && !isBday && (
-                                    <span className="inline-block text-[9px] font-bold text-rose-500 bg-rose-50 px-1.5 py-0.2 rounded border border-rose-100">
-                                      固定日常
-                                    </span>
-                                  )}
-                                </div>
-                              </div>
-
-                              {/* 🕒 Time info */}
-                              <div className="flex items-center gap-1.5 text-xs text-gray-500 font-bold font-sans">
-                                <span className="text-xs shrink-0 font-sans">🕒</span>
-                                <span>{isBday ? "全天生日慶祝！ 🎉" : (evt.time || "無指定時間")}</span>
-                              </div>
-
-                              {/* 📝 Note container (optional, no margin leak if empty) */}
-                              {hasNote && (
-                                <div className={`p-2.5 rounded-xl text-xs space-y-1 ${
-                                  isBday ? "bg-white/80 text-rose-800" : "bg-orange-50/50 text-gray-600 border border-orange-100/40"
-                                }`}>
-                                  <div className="font-extrabold flex items-center gap-1 text-[10px] text-gray-500">
-                                    <span>📝</span>
-                                    <span>備註內容</span>
-                                  </div>
-                                  <p className="font-semibold whitespace-pre-wrap leading-relaxed">
-                                    {evt.note}
-                                  </p>
-                                </div>
-                              )}
-
-                              {/* 👤 Involved members (optional, hidden if empty) */}
-                              {involved.length > 0 && (
-                                <div className="flex flex-wrap items-center gap-1.5 pt-1.5 border-t border-[#F2ECE5]/30">
-                                  <span className="text-xs text-gray-400 shrink-0">👤 指派成員:</span>
-                                  {involved.map((name, idx) => (
-                                    <span
-                                      key={idx}
-                                      className="text-[10px] font-black text-amber-900 bg-amber-50 border border-amber-200/55 px-2 py-0.5 rounded-full"
-                                    >
-                                      {name}
-                                    </span>
-                                  ))}
-                                </div>
-                              )}
+                        {/* 行程列：扁平無外框、無大圓角卡片 */}
+                        <div className="mt-0.5 pl-1 space-y-1">
+                          {day.events.length === 0 ? (
+                            <div className="text-[13px] text-gray-400 font-bold py-1 select-none">
+                              無安排
                             </div>
-                          );
-                        })}
+                          ) : (
+                            day.events.map((evt) => {
+                              const isBday = (evt as any).isBirthday;
+                              return (
+                                <div
+                                  key={evt.id}
+                                  onClick={() => {
+                                    if (onNavigateToEvent) {
+                                      onNavigateToEvent(evt.id, evt.date || day.dateStr);
+                                    }
+                                  }}
+                                  className="flex items-center justify-between py-1.5 cursor-pointer hover:bg-gray-50/50 rounded px-1.5 active:bg-gray-100/50 transition-all text-left min-h-[40px] border-b border-dotted border-gray-100 last:border-b-0"
+                                >
+                                  <div className="flex items-baseline gap-2 min-w-0 flex-grow">
+                                    {/* 時間 */}
+                                    <span className="text-xs font-extrabold text-[#948274] font-mono shrink-0">
+                                      {isBday ? "全天" : (evt.time || "--:--")}
+                                    </span>
+
+                                    {/* 名稱與細節 */}
+                                    <div className="flex items-center gap-1.5 min-w-0 flex-wrap">
+                                      <span className={`text-[13px] font-black leading-snug truncate ${isBday ? "text-rose-850" : "text-[#2D2926]"}`}>
+                                        {isBday ? "🎂" : ""} {evt.title}
+                                      </span>
+                                      {evt.isPublic === false && (
+                                        <span className="bg-amber-50 text-amber-700 text-[9px] px-1 rounded border border-amber-100 font-bold shrink-0">
+                                          🔒 私人
+                                        </span>
+                                      )}
+                                      {evt.isFixed && !isBday && (
+                                        <span className="bg-rose-50 text-rose-500 text-[9px] px-1 rounded border border-rose-100 shrink-0 font-medium">
+                                          日常
+                                        </span>
+                                      )}
+                                    </div>
+                                  </div>
+                                  
+                                  <span className="text-gray-300 text-xs pl-2 select-none">›</span>
+                                </div>
+                              );
+                            })
+                          )}
+                        </div>
                       </div>
-                    )}
+                    ))}
                   </div>
-                </div>
-              ))}
-            </div>
+
+                  {/* 桌機版：保留原本的大卡片排列模式 */}
+                  <div className="hidden md:block space-y-4">
+                    {nextSevenDays.map((day) => (
+                      <div
+                        key={day.dateStr}
+                        style={{
+                          background: day.isToday ? "#FFF8F6" : "#FFFFFF",
+                          border: day.isToday ? "2px solid #F0C4B8" : "1px solid #E8E2D8",
+                        }}
+                        className="p-5 rounded-2xl flex flex-col md:flex-row md:items-center justify-between gap-4 transition-all duration-200 hover:-translate-y-0.5 shadow-sm"
+                      >
+                        <div className="flex items-center gap-3 shrink-0">
+                          <span className="text-2xl">
+                            {day.isToday ? "🗓️" : "🌱"}
+                          </span>
+                          <div>
+                            <span
+                              className={`text-sm font-black flex items-center gap-1.5 ${
+                                day.isToday ? "text-[#C76A5A]" : "text-[#7C6354]"
+                              }`}
+                            >
+                              {day.displayDate}
+                              {day.isToday && (
+                                <span className="bg-[#EAA59E] text-white text-[9px] px-2 py-0.5 rounded-full font-black animate-pulse">
+                                  今天
+                                </span>
+                              )}
+                            </span>
+                          </div>
+                        </div>
+
+                        <div className="flex-grow min-w-0 md:pl-6 border-l-0 md:border-l border-[#F2ECE4]">
+                          {day.events.length === 0 ? (
+                            <span className="text-xs text-gray-400 font-bold flex items-center gap-1 py-1.5 pl-1">
+                              無安排行程安排 🌷
+                            </span>
+                          ) : (
+                            <div className="space-y-4">
+                              {day.events.map((evt) => {
+                                const isBday = (evt as any).isBirthday;
+                                const involved = getInvolvedMembers(evt);
+                                const hasNote = evt.note && evt.note.trim().length > 0;
+                                
+                                return (
+                                  <div
+                                    key={evt.id}
+                                    onClick={() => {
+                                      if (onNavigateToEvent) {
+                                        onNavigateToEvent(evt.id, evt.date || day.dateStr);
+                                      }
+                                    }}
+                                    className={`group p-4 rounded-2xl border transition-all duration-300 cursor-pointer text-left flex flex-col gap-2.5 shadow-sm
+                                      hover:shadow-md hover:scale-[1.01] hover:bg-[#FFFDFB] hover:border-amber-200
+                                      ${
+                                        isBday
+                                          ? "bg-rose-50/70 border-rose-200/80 hover:bg-rose-50"
+                                          : "bg-[#FCFBF9] border-[#EFEAE2]"
+                                      }
+                                    `}
+                                  >
+                                    {/* 📅 Date & 🔒 Privacy info row */}
+                                    <div className="flex items-center justify-between flex-wrap gap-1 text-[10px] text-gray-400 font-bold">
+                                      <span className="flex items-center gap-1 bg-[#F2EDE4]/60 px-2 py-0.5 rounded text-gray-600">
+                                        <span>📅</span>
+                                        <span>{evt.date || day.dateStr}</span>
+                                      </span>
+                                      <span className={`flex items-center gap-1 px-1.5 py-0.5 rounded ${
+                                        evt.isPublic !== false
+                                          ? "bg-emerald-50 text-emerald-700"
+                                          : "bg-amber-50 text-amber-700 font-bold"
+                                      }`}>
+                                        {evt.isPublic !== false ? (
+                                          <>
+                                            <span>🔓</span>
+                                            <span>家庭公開</span>
+                                          </>
+                                        ) : (
+                                          <>
+                                            <span>🔒</span>
+                                            <span>私人</span>
+                                          </>
+                                        )}
+                                      </span>
+                                    </div>
+
+                                    {/* 🏷 Event title & category icon */}
+                                    <div className="flex items-start gap-2">
+                                      <span className="text-lg shrink-0">
+                                        {isBday ? "🎂" : getEventIcon(evt.title)}
+                                      </span>
+                                      <div className="space-y-0.5 min-w-0">
+                                        <h4 className={`text-sm font-black leading-tight truncate ${
+                                          isBday ? "text-rose-900" : "text-[#3C332D]"
+                                        }`}>
+                                          {isMultiDayEvent(evt)
+                                            ? `${getEventEmoji(evt.title)} ${evt.title} Day${getMultiDayLabel(evt.startDate!, evt.endDate!, day.dateStr).dayIndex}`
+                                            : evt.title
+                                          }
+                                        </h4>
+                                        {isMultiDayEvent(evt) && evt.dailyNotes?.[day.dateStr] && (
+                                          <div className="text-[11px] text-[#004B8F] font-bold bg-[#E1F0FF]/60 px-2 py-0.5 rounded-lg border border-sky-200 mt-1 inline-block truncate max-w-full text-left">
+                                            📘 {evt.dailyNotes[day.dateStr]}
+                                          </div>
+                                        )}
+                                        {evt.isFixed && !isBday && (
+                                          <span className="inline-block text-[9px] font-bold text-rose-500 bg-rose-50 px-1.5 py-0.2 rounded border border-rose-100">
+                                            固定日常
+                                          </span>
+                                        )}
+                                      </div>
+                                    </div>
+
+                                    {/* 🕒 Time info */}
+                                    <div className="flex items-center gap-1.5 text-xs text-gray-500 font-bold font-sans">
+                                      <span className="text-xs shrink-0 font-sans">🕒</span>
+                                      <span>{isBday ? "全天生日慶祝！ 🎉" : (evt.time || "無指定時間")}</span>
+                                    </div>
+
+                                    {/* 📝 Note container */}
+                                    {hasNote && (
+                                      <div className={`p-2.5 rounded-xl text-xs space-y-1 ${
+                                        isBday ? "bg-white/80 text-rose-800" : "bg-orange-50/50 text-gray-600 border border-orange-100/40"
+                                      }`}>
+                                        <div className="font-extrabold flex items-center gap-1 text-[10px] text-gray-500">
+                                          <span>📝</span>
+                                          <span>備註內容</span>
+                                        </div>
+                                        <p className="font-semibold whitespace-pre-wrap leading-relaxed">
+                                          {evt.note}
+                                        </p>
+                                      </div>
+                                    )}
+
+                                    {/* 👤 Involved members (optional) */}
+                                    {involved.length > 0 && (
+                                      <div className="flex flex-wrap items-center gap-1.5 pt-1.5 border-t border-[#F2ECE5]/30">
+                                        <span className="text-xs text-gray-400 shrink-0">👤 指派成員:</span>
+                                        {involved.map((name, idx) => (
+                                          <span
+                                            key={idx}
+                                            className="text-[10px] font-black text-amber-900 bg-amber-50 border border-amber-200/55 px-2 py-0.5 rounded-full"
+                                          >
+                                            {name}
+                                          </span>
+                                        ))}
+                                      </div>
+                                    )}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )
             )}
           </section>
+
+          {/* 📱 快速新增行程彈窗 (手機版專用) */}
+          {quickAddDate && (
+            <div className="fixed inset-0 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-in fade-in duration-250">
+              <div className="bg-white w-full max-w-md rounded-2xl shadow-xl overflow-hidden animate-in zoom-in-95 duration-200 border border-[#E8E2D8]">
+                <div className="bg-[#FAF9F6] px-5 py-4 border-b border-[#EFEAE2] flex items-center justify-between">
+                  <div>
+                    <h3 className="font-black text-sm text-[#3C332D]">⚡ 快速新增行程</h3>
+                    <p className="text-[11px] text-[#7C6354] font-medium mt-0.5">
+                      新增至：{quickAddDate}
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => setQuickAddDate(null)}
+                    className="p-1 px-2 text-xs rounded-full bg-gray-100 hover:bg-gray-200 text-gray-500 font-bold transition-all cursor-pointer"
+                  >
+                    ✕
+                  </button>
+                </div>
+
+                <form onSubmit={handleQuickAddSubmit} className="p-5 space-y-4">
+                  {/* 行程名稱 */}
+                  <div className="space-y-1">
+                    <label className="text-[11px] font-bold text-[#7C6354]/80 block">行程名稱 (必填)</label>
+                    <input
+                      type="text"
+                      value={quickAddTitle}
+                      onChange={(e) => setQuickAddTitle(e.target.value)}
+                      placeholder="例如：榮總看牙醫、游泳課..."
+                      className="w-full text-xs p-3 border border-[#EFEAE2] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#7C6354]/40 bg-white"
+                      required
+                    />
+                  </div>
+
+                  {/* 行程時間 */}
+                  <div className="space-y-1">
+                    <label className="text-[11px] font-bold text-[#7C6354]/80 block">時間 (選填)</label>
+                    <input
+                      type="text"
+                      value={quickAddTime}
+                      onChange={(e) => setQuickAddTime(e.target.value)}
+                      placeholder="例如：14:00、18:00~19:30"
+                      className="w-full text-xs p-3 border border-[#EFEAE2] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#7C6354]/40 bg-white"
+                    />
+                  </div>
+
+                  {/* 備註 */}
+                  <div className="space-y-1">
+                    <label className="text-[11px] font-bold text-[#7C6354]/80 block">備註 (選填)</label>
+                    <textarea
+                      value={quickAddNote}
+                      onChange={(e) => setQuickAddNote(e.target.value)}
+                      placeholder="簡單紀事..."
+                      rows={2}
+                      className="w-full text-xs p-3 border border-[#EFEAE2] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#7C6354]/40 bg-white resize-none"
+                    />
+                  </div>
+
+                  {/* 公開設定 */}
+                  <div className="flex items-center justify-between py-2 border-t border-[#F7F3EB]">
+                    <div className="flex flex-col">
+                      <span className="text-[11px] font-black text-[#3C332D]">家庭公開</span>
+                      <span className="text-[9px] text-gray-400 mt-0.5">全體家庭成員皆能瀏覽</span>
+                    </div>
+                    <label className="relative inline-flex items-center cursor-pointer select-none">
+                      <input
+                        type="checkbox"
+                        checked={quickAddPublic}
+                        onChange={(e) => setQuickAddPublic(e.target.checked)}
+                        className="sr-only peer"
+                      />
+                      <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-amber-600"></div>
+                    </label>
+                  </div>
+
+                  {/* 提交按鈕 */}
+                  <div className="flex gap-2 pt-2">
+                    <button
+                      type="button"
+                      onClick={() => setQuickAddDate(null)}
+                      className="flex-1 py-3 text-xs font-bold text-gray-500 bg-gray-100 hover:bg-gray-150 rounded-xl transition-all cursor-pointer text-center"
+                    >
+                      取消
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={isSubmitting}
+                      className="flex-1 py-3 text-xs font-black text-white bg-[#7C6354] hover:bg-[#634F43] rounded-xl transition-all shadow-md active:scale-[0.98] cursor-pointer text-center disabled:opacity-50"
+                    >
+                      {isSubmitting ? "建立中..." : "確認建立"}
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          )}
 
 
 
@@ -1692,9 +1941,13 @@ export default function HomeDashboard({
             className="p-5"
           >
             <div className="flex justify-between items-center pb-4 mb-4 border-b border-[#F7F3EB]">
-              <div className="flex items-center gap-2">
+              <div 
+                onClick={() => setIsAnnouncementExpanded(!isAnnouncementExpanded)}
+                className="flex items-center gap-2 cursor-pointer select-none"
+              >
                 <span className="text-lg">📢</span>
                 <h3 className="text-sm font-black text-[#3C332D]">家裡公告</h3>
+                {isAnnouncementExpanded ? <ChevronUp className="h-4 w-4 text-gray-400" /> : <ChevronDown className="h-4 w-4 text-gray-400" />}
               </div>
               {(currentUser.role === UserRole.ADMIN || currentUser.role === UserRole.PARENT) && (
                 <button
@@ -1707,19 +1960,20 @@ export default function HomeDashboard({
               )}
             </div>
 
-            {dataLoaded && !dataLoaded.announcements ? (
-              <ShimmerSkeleton count={2} />
-            ) : announcements.length === 0 ? (
-              <div className="text-center py-6 bg-[#FAF8F5] rounded-xl border border-dashed border-[#EFEAE2]">
-                <p className="text-xs text-gray-400 font-bold">目前沒有公告事項</p>
-              </div>
-            ) : (
-              <div className="space-y-3 max-h-60 overflow-y-auto pr-1">
-                {announcements.map((ann) => (
-                  <div
-                    key={ann.id}
-                    className="relative bg-[#FAF8F5] p-3.5 rounded-xl border border-[#EFEAE2] transition"
-                  >
+            {isAnnouncementExpanded && (
+              dataLoaded && !dataLoaded.announcements ? (
+                <ShimmerSkeleton count={2} />
+              ) : announcements.length === 0 ? (
+                <div className="text-center py-6 bg-[#FAF8F5] rounded-xl border border-dashed border-[#EFEAE2]">
+                  <p className="text-xs text-gray-400 font-bold">目前沒有公告事項</p>
+                </div>
+              ) : (
+                <div className="space-y-3 max-h-60 overflow-y-auto pr-1">
+                  {announcements.map((ann) => (
+                    <div
+                      key={ann.id}
+                      className="relative bg-[#FAF8F5] p-3.5 rounded-xl border border-[#EFEAE2] transition"
+                    >
                     {(currentUser.role === UserRole.ADMIN || currentUser.role === UserRole.PARENT) && (
                       <button
                         onClick={() => onDeleteAnnouncement(ann.id)}
@@ -1746,7 +2000,7 @@ export default function HomeDashboard({
                   </div>
                 ))}
               </div>
-            )}
+            ))}
           </section>
 
           {/* 4. ⭐ 家庭星星中心 (Maintains equal focus without rank sorting) */}
@@ -1759,26 +2013,33 @@ export default function HomeDashboard({
             }}
             className="p-5 font-sans"
           >
-            <div className="flex items-center gap-2 pb-4 mb-4 border-b border-[#F7F3EB]">
-              <span className="text-lg">⭐</span>
-              <h3 className="text-sm font-black text-[#3C332D]">家庭星星中心</h3>
+            <div 
+              onClick={() => setIsStarCenterExpanded(!isStarCenterExpanded)}
+              className="flex items-center justify-between pb-4 mb-4 border-b border-[#F7F3EB] cursor-pointer select-none"
+            >
+              <div className="flex items-center gap-2">
+                <span className="text-lg">⭐</span>
+                <h3 className="text-sm font-black text-[#3C332D]">家庭星星中心</h3>
+                {isStarCenterExpanded ? <ChevronUp className="h-4 w-4 text-gray-400" /> : <ChevronDown className="h-4 w-4 text-gray-400" />}
+              </div>
             </div>
 
-            {dataLoaded && !dataLoaded.members ? (
-              <ShimmerSkeleton count={2} />
-            ) : kidsMembers.length === 0 ? (
-              <div className="text-center py-6 text-gray-400 font-bold text-xs">
-                尚無孩子成員紀錄
-              </div>
-            ) : (
-              <div className="space-y-4">
-                {kidsMembers.map((kid) => {
-                  const closestGift = getClosestGiftInfoForKid(kid.stars || 0);
-                  return (
-                    <div
-                      key={kid.uid}
-                      className="p-4 bg-[#FAF8F5] border border-[#EFEAE2] rounded-2xl space-y-3 shadow-xs hover:bg-[#FFFDF8] transition duration-200"
-                    >
+            {isStarCenterExpanded && (
+              dataLoaded && !dataLoaded.members ? (
+                <ShimmerSkeleton count={2} />
+              ) : kidsMembers.length === 0 ? (
+                <div className="text-center py-6 text-gray-400 font-bold text-xs">
+                  尚無孩子成員紀錄
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {kidsMembers.map((kid) => {
+                    const closestGift = getClosestGiftInfoForKid(kid.stars || 0);
+                    return (
+                      <div
+                        key={kid.uid}
+                        className="p-4 bg-[#FAF8F5] border border-[#EFEAE2] rounded-2xl space-y-3 shadow-xs hover:bg-[#FFFDF8] transition duration-200"
+                      >
                       {/* Name of Kid and Stars */}
                       <div className="flex items-center justify-between gap-2 border-b border-gray-150/40 pb-2">
                         <div className="flex items-center gap-2.5">
@@ -1830,7 +2091,7 @@ export default function HomeDashboard({
                   );
                 })}
               </div>
-            )}
+            ))}
           </section>
 
           {/* 5. 🌱 即將完成任務 (Calculates and displays progress to available reward items) */}
@@ -1843,35 +2104,42 @@ export default function HomeDashboard({
             }}
             className="p-5"
           >
-            <div className="flex items-center gap-2 pb-4 mb-4 border-b border-[#F7F3EB]">
-              <span className="text-lg">🌱</span>
-              <h3 className="text-sm font-black text-[#3C332D]">即將完成任務</h3>
-              <span className="text-[9px] bg-emerald-50 text-emerald-700 px-1.5 py-0.5 rounded font-bold border border-emerald-100">
+            <div 
+              onClick={() => setIsUpcomingTasksExpanded(!isUpcomingTasksExpanded)}
+              className="flex items-center justify-between pb-4 mb-4 border-b border-[#F7F3EB] cursor-pointer select-none"
+            >
+              <div className="flex items-center gap-2">
+                <span className="text-lg font-sans">🌱</span>
+                <h3 className="text-sm font-black text-[#3C332D]">即將完成任務</h3>
+                {isUpcomingTasksExpanded ? <ChevronUp className="h-4 w-4 text-gray-400" /> : <ChevronDown className="h-4 w-4 text-gray-400" />}
+              </div>
+              <span className="text-[9px] bg-emerald-50 text-emerald-700 px-1.5 py-0.5 rounded font-bold border border-emerald-100 shrink-0">
                 願望達成進度
               </span>
             </div>
 
-            {dataLoaded && !dataLoaded.rewards ? (
-              <ShimmerSkeleton count={2} />
-            ) : kidRewardProgressList.length === 0 ? (
-              <div className="text-center py-6 text-gray-400 bg-[#FAF8F5] rounded-xl text-xs font-bold border border-dashed border-gray-200">
-                目前沒有可兌換的禮物項目
-              </div>
-            ) : (
-              <div className="space-y-4">
-                {kidRewardProgressList.map(({ kid, bestGoal }) => {
-                  if (!bestGoal) {
-                    return (
-                      <div key={kid.uid} className="p-3 bg-[#FAF8F5] rounded-xl border border-dashed border-[#EFEAE2]">
-                        <h4 className="font-bold text-xs text-gray-700">{kid.displayName}</h4>
-                        <p className="text-[10px] text-gray-400 font-bold mt-1">目前沒有上架的禮物可追蹤</p>
-                      </div>
-                    );
-                  }
+            {isUpcomingTasksExpanded && (
+              dataLoaded && !dataLoaded.rewards ? (
+                <ShimmerSkeleton count={2} />
+              ) : kidRewardProgressList.length === 0 ? (
+                <div className="text-center py-6 text-gray-400 bg-[#FAF8F5] rounded-xl text-xs font-bold border border-dashed border-gray-200">
+                  目前沒有可兌換的禮物項目
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {kidRewardProgressList.map(({ kid, bestGoal }) => {
+                    if (!bestGoal) {
+                      return (
+                        <div key={kid.uid} className="p-3 bg-[#FAF8F5] rounded-xl border border-dashed border-[#EFEAE2]">
+                          <h4 className="font-bold text-xs text-gray-700">{kid.displayName}</h4>
+                          <p className="text-[10px] text-gray-400 font-bold mt-1">目前沒有上架的禮物可追蹤</p>
+                        </div>
+                      );
+                    }
 
-                  const { reward, diff, pct, canRedeem } = bestGoal;
-                  return (
-                    <div key={kid.uid} className="bg-[#FAF8F5] p-3.5 rounded-2xl border border-[#EFEAE2] space-y-2.5">
+                    const { reward, diff, pct, canRedeem } = bestGoal;
+                    return (
+                      <div key={kid.uid} className="bg-[#FAF8F5] p-3.5 rounded-2xl border border-[#EFEAE2] space-y-2.5">
                       <div className="flex justify-between items-center">
                         <span className="text-xs font-black text-[#3C332D] flex items-center gap-1.5">
                           <Smile className="h-3.5 w-3.5 text-amber-500 fill-amber-100" />
@@ -1916,7 +2184,7 @@ export default function HomeDashboard({
                   );
                 })}
               </div>
-            )}
+            ))}
           </section>
 
           {/* 6. 🎂 家族生日小幫手 (Pre-birthday 14/7/3/1 days interactive checklist and countdown summary) */}
@@ -1929,17 +2197,25 @@ export default function HomeDashboard({
             }}
             className="p-5"
           >
-            <div className="flex items-center gap-2 pb-4 mb-4 border-b border-[#F7F3EB]">
-              <span className="text-lg">🎂</span>
-              <h3 className="text-sm font-black text-[#3C332D]">家族生日小幫手</h3>
-              <span className="text-[9px] bg-rose-55 px-1.5 py-0.5 rounded font-extrabold border border-rose-200 text-rose-600 bg-rose-50">
+            <div 
+              onClick={() => setIsBirthdayHelperExpanded(!isBirthdayHelperExpanded)}
+              className="flex items-center justify-between pb-4 mb-4 border-b border-[#F7F3EB] cursor-pointer select-none"
+            >
+              <div className="flex items-center gap-2">
+                <span className="text-lg">🎂</span>
+                <h3 className="text-sm font-black text-[#3C332D]">家族生日小幫手</h3>
+                {isBirthdayHelperExpanded ? <ChevronUp className="h-4 w-4 text-gray-400" /> : <ChevronDown className="h-4 w-4 text-gray-400" />}
+              </div>
+              <span className="text-[9px] bg-rose-55 px-1.5 py-0.5 rounded font-extrabold border border-rose-200 text-rose-600 bg-rose-50 shrink-0">
                 溫馨備忘
               </span>
             </div>
 
-            {/* 1. ⚠️ 重要生日準備清單 (Triggered on exactly 14, 7, 3, or 1 day before) */}
-            {birthdayReminders.warningCards.length > 0 && (
-              <div className="space-y-4 mb-5 border-b border-dashed border-gray-100 pb-5">
+            {isBirthdayHelperExpanded && (
+              <div className="space-y-4">
+                {/* 1. ⚠️ 重要生日準備清單 (Triggered on exactly 14, 7, 3, or 1 day before) */}
+                {birthdayReminders.warningCards.length > 0 && (
+                  <div className="space-y-4 mb-5 border-b border-dashed border-gray-100 pb-5">
                 {birthdayReminders.warningCards.map((card) => {
                   const giftKey = `${card.member.uid}-${card.targetYear}-gift`;
                   const cakeKey = `${card.member.uid}-${card.targetYear}-cake`;
@@ -2040,7 +2316,9 @@ export default function HomeDashboard({
                   ))}
                 </div>
               )}
-            </div>
+              </div>
+              </div>
+            )}
           </section>
 
           {/* 7. 🎉 最近完成任務 (Approved tasks within last 3 days) */}
@@ -2053,18 +2331,25 @@ export default function HomeDashboard({
             }}
             className="p-5"
           >
-            <div className="flex items-center gap-2 pb-4 mb-4 border-b border-[#F7F3EB]">
-              <span className="text-base">🎉</span>
-              <h3 className="text-sm font-black text-[#3C332D]">近三天達成成就</h3>
+            <div 
+              onClick={() => setIsRecentlyCompletedExpanded(!isRecentlyCompletedExpanded)}
+              className="flex items-center justify-between pb-4 mb-4 border-b border-[#F7F3EB] cursor-pointer select-none"
+            >
+              <div className="flex items-center gap-2">
+                <span className="text-base">🎉</span>
+                <h3 className="text-sm font-black text-[#3C332D]">近三天達成成就</h3>
+                {isRecentlyCompletedExpanded ? <ChevronUp className="h-4 w-4 text-gray-400" /> : <ChevronDown className="h-4 w-4 text-gray-400" />}
+              </div>
             </div>
 
-            {recentAchievements.length === 0 ? (
-              <div className="text-center py-6 text-gray-400 bg-[#FAF8F5] rounded-xl text-xs font-bold leading-relaxed border border-dashed border-[#EFEAE2]">
-                最近三天還沒有完成的新任務，加油喔！🌱
-              </div>
-            ) : (
-              <div className="space-y-3">
-                {recentAchievements.map((t) => {
+            {isRecentlyCompletedExpanded && (
+              recentAchievements.length === 0 ? (
+                <div className="text-center py-6 text-gray-400 bg-[#FAF8F5] rounded-xl text-xs font-bold leading-relaxed border border-dashed border-[#EFEAE2]">
+                  最近三天還沒有完成的新任務，加油喔！🌱
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {recentAchievements.map((t) => {
                   const assignee = familyMembers.find((m) => m.uid === t.assignedTo);
                   
                   // Format approvedDate visually
@@ -2101,7 +2386,7 @@ export default function HomeDashboard({
                   );
                 })}
               </div>
-            )}
+            ))}
           </section>
 
         </div>

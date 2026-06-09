@@ -181,6 +181,65 @@
         "createdAt": { "type": "string", "format": "date-time" }
       },
       "required": ["id", "familyId", "childUid", "childName", "amount", "type", "reason", "operatorUid", "operatorName"]
+    },
+    "AllowedFamilyCreator": {
+      "title": "AllowedFamilyCreator",
+      "description": "Whitelist of user emails allowed to build new families",
+      "type": "object",
+      "properties": {
+        "email": { "type": "string" },
+        "status": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["email", "status"]
+    },
+    "AuditLog": {
+      "title": "AuditLog",
+      "description": "Full audit log of security and system actions",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "userName": { "type": "string" },
+        "familyId": { "type": "string" },
+        "action": { "type": "string" },
+        "targetId": { "type": "string" },
+        "targetName": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "userId", "userName", "action", "createdAt"]
+    },
+    "LoginLog": {
+      "title": "LoginLog",
+      "description": "Authentication event tracking history",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "userName": { "type": "string" },
+        "email": { "type": "string" },
+        "loginTime": { "type": "string", "format": "date-time" },
+        "device": { "type": "string" },
+        "browser": { "type": "string" }
+      },
+      "required": ["id", "userId", "userName", "email", "loginTime"]
+    },
+    "JoinRequest": {
+      "title": "JoinRequest",
+      "description": "Access application submitted to join a family",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "userEmail": { "type": "string" },
+        "userName": { "type": "string" },
+        "familyId": { "type": "string" },
+        "familyName": { "type": "string" },
+        "role": { "type": "string" },
+        "status": { "type": "string", "enum": ["pending", "approved", "rejected"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "userId", "userEmail", "userName", "familyId", "familyName", "role", "status"]
     }
   },
   "firestore": {
@@ -227,6 +286,22 @@
     "star_transactions/{transactionId}": {
       "schema": "StarTransaction",
       "description": "Log of star point adjustments (additions and deductions) done by parents"
+    },
+    "allowed_family_creators/{creatorId}": {
+      "schema": "AllowedFamilyCreator",
+      "description": "Whitelist of user accounts (emails) permitted to create new family structures"
+    },
+    "audit_logs/{logId}": {
+      "schema": "AuditLog",
+      "description": "Tamper-preventative security log of system operations and role changes"
+    },
+    "login_logs/{logId}": {
+      "schema": "LoginLog",
+      "description": "Log of logins, tracking browser agent, platform device and session timestamp"
+    },
+    "join_requests/{requestId}": {
+      "schema": "JoinRequest",
+      "description": "Applications filed by users to seek entry and permissions within a family"
     }
   }
 }

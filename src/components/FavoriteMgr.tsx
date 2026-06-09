@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from "react";
 import { CommonTemplate, UserProfile, UserRole, getLocalToday } from "../types";
 import { Sparkles, Plus, Trash2, X, Star, Edit3, Settings2, Heart, Clock } from "lucide-react";
+import toast from "react-hot-toast";
 
 interface FavoriteMgrProps {
   currentUser: UserProfile;
@@ -8,6 +9,9 @@ interface FavoriteMgrProps {
   onAddFavorite: (activityData: Omit<CommonTemplate, "id" | "creatorUid" | "createdAt"> & { startDate?: string }) => Promise<void>;
   onDeleteFavorite: (activityId: string, deleteFutureEvents?: boolean) => Promise<void>;
   onEditFavorite?: (activityId: string, updatedData: Partial<CommonTemplate> & { startDate?: string }) => Promise<void>;
+  onAddEvent?: (eventData: any) => Promise<void>;
+  onAddTask?: (taskData: any) => Promise<void>;
+  familyMembers?: UserProfile[];
 }
 
 export default function FavoriteMgr({
@@ -16,6 +20,9 @@ export default function FavoriteMgr({
   onAddFavorite,
   onDeleteFavorite,
   onEditFavorite,
+  onAddEvent,
+  onAddTask,
+  familyMembers = [],
 }: FavoriteMgrProps) {
   const [showAddForm, setShowAddForm] = useState(false);
   const [editingActivity, setEditingActivity] = useState<CommonTemplate | null>(null);
@@ -31,6 +38,13 @@ export default function FavoriteMgr({
   const [hasDefaultTime, setHasDefaultTime] = useState(false);
   const [defaultStartTime, setDefaultStartTime] = useState("");
   const [defaultEndTime, setDefaultEndTime] = useState("");
+
+  // 秒速導入 States
+  const [applyingTemplate, setApplyingTemplate] = useState<CommonTemplate | null>(null);
+  const [applyDate, setApplyDate] = useState(getLocalToday());
+  const [applyAssignee, setApplyAssignee] = useState("");
+  const [applyStars, setApplyStars] = useState(10);
+  const [applyAsType, setApplyAsType] = useState<"calendar" | "task">("calendar");
 
   const isParent = currentUser.role === UserRole.ADMIN || currentUser.role === UserRole.PARENT;
 
@@ -98,6 +112,13 @@ export default function FavoriteMgr({
     setShowAddForm(true);
   };
 
+  const handleApplyQuick = (act: CommonTemplate) => {
+    setApplyingTemplate(act);
+    setApplyDate(getLocalToday());
+    setApplyAsType((act.usageType || act.type) === "task" ? "task" : "calendar");
+    setApplyAssignee("");
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!title.trim()) return;
@@ -141,126 +162,100 @@ export default function FavoriteMgr({
   };
 
   return (
-    <div id="favorite-activities-module" className="bg-[#FCFAF2] rounded-[24px] border border-[#EFEAE2] p-6 lg:p-8 soft-journal-shadow space-y-6">
-      {/* Header bar */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-[#F4EFE6] pb-5">
-        <div className="flex items-center gap-3">
-          <div className="p-3 bg-[#FFFBF0] text-[#EAA59E] rounded-2xl border border-[#EDD091]/30">
-            <Heart className="h-6 w-6 fill-[#EAA59E]" />
+    <div id="favorite-activities-module" className="bg-[#FCFAF2] rounded-2xl md:rounded-[24px] border-0 md:border md:border-[#EFEAE2] p-3 md:p-6 lg:p-8 md:soft-journal-shadow space-y-4 md:space-y-6">
+      {/* Header bar - Compressing height & padding to 40~60px / 12~16px */}
+      <div className="flex justify-between items-center border-b border-[#F4EFE6] pb-3">
+        <div className="flex items-center gap-2">
+          <div className="h-8 w-8 md:h-10 md:w-10 bg-[#FFFBF0] text-[#EAA59E] rounded-xl border border-[#EDD091]/30 flex items-center justify-center shrink-0">
+            <Heart className="h-4.5 w-4.5 fill-[#EAA59E]" />
           </div>
           <div>
-            <h2 className="text-2xl font-extrabold text-[#3C332D] font-sans">常用事項 / 任務</h2>
-            <p className="text-base text-gray-400 mt-1 font-medium">預先建立常用事物，建立日常行程、指派學習任務時一鍵秒速導入</p>
+            <h2 className="text-sm md:text-xl font-extrabold text-[#3C332D] font-sans">常用事項</h2>
+            <p className="hidden md:block text-xs text-gray-400 mt-0.5 font-medium">預先建立常用事物，一鍵秒速導入</p>
           </div>
         </div>
 
         {isParent && (
           <button
             onClick={handleOpenAddForm}
-            className="flex items-center gap-2 text-md font-black text-white bg-[#5B7283] hover:bg-[#4E6170] px-5 py-3 rounded-full transition cursor-pointer soft-journal-shadow transform hover:scale-102 active:scale-98"
+            className="flex items-center gap-1 text-xs font-black text-white bg-[#5B7283] hover:bg-[#4E6170] px-3 py-2 rounded-full transition cursor-pointer shadow-xs max-h-[38px]"
           >
-            <Plus className="h-5 w-5" /> <span>新增常用事項</span>
+            <Plus className="h-3.5 w-3.5" /> <span>新增</span>
           </button>
         )}
       </div>
 
       {favoriteActivities.length === 0 ? (
-        <div className="text-center py-20 border border-dashed border-[#EFEAE2] rounded-[24px] bg-white">
-          <Heart className="h-12 w-12 text-[#EAA59E]/40 mx-auto mb-3" />
-          <p className="text-lg text-gray-500 font-sans font-bold">目前還沒有任何常用事項唷</p>
-          <p className="text-sm text-gray-400 mt-2 max-w-md mx-auto leading-relaxed">
-            在這裡加入像是「自學畫畫課」、「牙醫回診」、「遛狗清砂盆」等常用項目，後續建立整月行程或指派任務時能秒速導入，節省重複打字的時間！
+        <div className="text-center py-16 border border-dashed border-[#EFEAE2] rounded-2xl bg-white">
+          <Heart className="h-10 w-10 text-[#EAA59E]/40 mx-auto mb-3" />
+          <p className="text-sm text-gray-500 font-sans font-bold">目前還沒有任何常用事項唷</p>
+          <p className="text-xs text-gray-400 mt-2 max-w-md mx-auto leading-relaxed px-5">
+            在這裡加入像是「自學畫畫課」、「牙醫回診」、「遛狗清砂盆」等常用項目，後續建立整月行程或指派任務時能秒速導入！
           </p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 overflow-visible">
+        <div className="space-y-2 md:grid md:grid-cols-2 lg:grid-cols-3 md:gap-4 lg:gap-6 overflow-visible">
           {favoriteActivities.map((act) => {
             const displayDefaultTime = act.hasDefaultTime && act.defaultStartTime
               ? `${act.defaultStartTime} ~ ${act.defaultEndTime || ""}`
-              : "無";
+              : "無預設時間";
+
+            const typeLabel = (act.usageType || act.type) === "calendar" 
+              ? "行事曆" 
+              : (act.usageType || act.type) === "task" 
+              ? "任務" 
+              : "行事曆＋任務";
+
+            const repeatLabel = act.isRecurring && act.repeatDays && act.repeatDays.length > 0
+              ? `每週${getWeekdaysString(act.repeatDays)}`
+              : "";
 
             return (
               <div
                 key={act.id}
-                style={{
-                  border: "1px solid #E9E2DB",
-                  borderRadius: "24px",
-                  background: "#FFFFFF",
-                  boxShadow: "0 2px 10px rgba(0,0,0,0.04)"
-                }}
-                className="p-6 relative flex flex-col justify-between h-auto min-h-[220px] overflow-visible transition duration-200 hover:-translate-y-0.5"
+                className="flex md:flex-col justify-between items-center md:items-start p-3 md:p-5 bg-white border border-[#E9E2DB] rounded-2xl md:rounded-3xl shadow-xs hover:-translate-y-0.5 transition duration-200 min-h-[76px] md:min-h-[190px]"
               >
-                {/* Upper right action buttons */}
-                {isParent && (
-                  <div className="absolute right-4 top-4 flex items-center gap-1.5 select-none z-10">
-                    <button
-                      onClick={() => handleOpenEditForm(act)}
-                      className="flex items-center gap-1 text-xs font-bold text-[#5B7283] hover:text-[#415362] bg-[#F7F3EB] hover:bg-[#EFEAE2] px-2 py-1 rounded-lg transition cursor-pointer"
-                      title="編輯此事項"
-                    >
-                      <Edit3 className="h-3 w-3" />
-                      <span>編輯</span>
-                    </button>
-                    <button
-                      onClick={() => setDeletingTemplate(act)}
-                      className="flex items-center gap-1 text-xs font-bold text-[#EAA59E] hover:text-red-700 bg-rose-50/50 hover:bg-rose-100/50 px-2 py-1 rounded-lg transition cursor-pointer"
-                      title="刪除"
-                    >
-                      <Trash2 className="h-3 w-3" />
-                      <span>刪除</span>
-                    </button>
+                {/* Information Area */}
+                <div className="flex-1 min-w-0 pr-3 md:pr-0 md:space-y-3">
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-xs md:text-base font-black text-[#3C332D] truncate block">
+                      {act.title}
+                    </span>
                   </div>
-                )}
-
-                <div className="space-y-4">
-                  {/* Title */}
-                  <h4 className="font-extrabold text-[#3C332D] text-lg pr-20 leading-snug">{act.title}</h4>
-
-                  {/* Type Capsule Tag */}
-                  <div className="flex flex-wrap gap-1">
-                    {(act.usageType || act.type) === "calendar" ? (
-                      <span className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-bold text-[#5B7283] bg-[#EAF0EB] rounded-full">
-                        📅 行事曆
-                      </span>
-                    ) : (act.usageType || act.type) === "task" ? (
-                      <span className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-bold text-[#EAA59E] bg-rose-50 rounded-full">
-                        ⭐ 任務
-                      </span>
-                    ) : (
-                      <span className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-bold text-[#7C6354] bg-[#F5EBE6] rounded-full">
-                        📅⭐ 行事曆＋任務
-                      </span>
-                    )}
-                  </div>
-
-                  {/* Body content info block */}
-                  <div className="space-y-2 text-xs font-semibold text-gray-500">
-                    <p>
-                      預設時間：
-                      <span className="text-[#3C332D] font-bold font-mono">
-                        {displayDefaultTime}
-                      </span>
-                    </p>
+                  
+                  <div className="flex flex-wrap items-center gap-1.5 text-[9.5px] md:text-xs text-gray-400 font-bold mt-0.5 md:mt-1">
+                    <span className="px-1.5 py-0.5 bg-gray-50 text-gray-500 rounded border border-gray-150">
+                      {typeLabel}
+                    </span>
+                    <span className="font-mono text-gray-500">
+                      {displayDefaultTime} {repeatLabel && `(${repeatLabel})`}
+                    </span>
                   </div>
                 </div>
 
-                <div className="mt-6 pt-3 border-t border-[#F7F3EB] text-xs">
-                  {act.isRecurring ? (
-                    <span className="flex flex-col gap-0.5 text-[#EAA59E] bg-rose-50/30 px-3 py-1.5 rounded-xl font-sans font-bold border border-rose-100/35">
-                      <span className="flex items-center gap-1">
-                        <Star className="h-3.5 w-3.5 fill-[#EAA59E] stroke-[#EAA59E]" />
-                        固定活動 / 週課表
-                      </span>
-                      {act.repeatDays && act.repeatDays.length > 0 && (
-                        <span className="text-xs text-[#3C332D] font-semibold mt-0.5">
-                          ({getWeekdaysString(act.repeatDays)})
-                        </span>
-                      )}
-                    </span>
-                  ) : (
-                    <span className="text-[#5B7283] font-sans font-bold bg-[#FAF8F4] border border-[#EFEAE2] px-3 py-1.5 rounded-xl inline-block">
-                      可快速加入行事曆
-                    </span>
+                {/* Actions Row */}
+                <div className="flex items-center gap-1 md:mt-4 md:w-full md:border-t md:border-gray-100 md:pt-3 shrink-0">
+                  <button
+                    onClick={() => handleApplyQuick(act)}
+                    className="px-2.5 py-1.5 text-[11px] font-black text-amber-900 bg-amber-50 hover:bg-amber-100 border border-amber-200 rounded-lg transition shadow-none cursor-pointer"
+                  >
+                    加入
+                  </button>
+                  {isParent && (
+                    <>
+                      <button
+                        onClick={() => handleOpenEditForm(act)}
+                        className="px-2 py-1.5 text-[11px] font-bold text-gray-600 bg-[#F7F3EB] hover:bg-gray-100 rounded-lg border border-gray-200 transition cursor-pointer"
+                      >
+                        編輯
+                      </button>
+                      <button
+                        onClick={() => setDeletingTemplate(act)}
+                        className="px-2 py-1.5 text-[11px] font-bold text-rose-600 bg-rose-50 hover:bg-rose-100 rounded-lg border border-rose-100/50 transition cursor-pointer"
+                      >
+                        刪除
+                      </button>
+                    </>
                   )}
                 </div>
               </div>
@@ -269,10 +264,153 @@ export default function FavoriteMgr({
         </div>
       )}
 
+      {/* ⚡ 快速套用常用事項 Dialog */}
+      {applyingTemplate && (
+        <div className="fixed inset-0 bg-[#3C332D]/40 backdrop-blur-xs flex items-center justify-center p-4 z-50 font-sans animate-in fade-in duration-150">
+          <div className="bg-white rounded-3xl border border-[#EFEAE2] p-5 max-w-xs w-full soft-journal-shadow space-y-4">
+            <div className="text-center">
+              <span className="text-[10px] font-black uppercase tracking-wider text-amber-600 block">
+                ⚡ 秒速導入：{applyingTemplate.title}
+              </span>
+              <h3 className="text-xs font-black text-[#3C332D] mt-1">
+                選擇套用日期與細節
+              </h3>
+            </div>
+
+            <div className="space-y-3">
+              {(applyingTemplate.usageType || applyingTemplate.type) === "both" && (
+                <div>
+                  <label className="block text-[10px] font-bold text-gray-500 mb-1">導入至哪裡？</label>
+                  <div className="grid grid-cols-2 gap-2 text-xs font-semibold">
+                    <button
+                      type="button"
+                      onClick={() => setApplyAsType("calendar")}
+                      className={`py-2 px-2 border rounded-xl transition ${
+                        applyAsType === "calendar"
+                          ? "bg-amber-50 border-amber-500 text-amber-900"
+                          : "bg-white border-gray-200 text-gray-500"
+                      }`}
+                    >
+                      📅 行事曆
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setApplyAsType("task")}
+                      className={`py-2 px-2 border rounded-xl transition ${
+                        applyAsType === "task"
+                          ? "bg-amber-50 border-amber-500 text-amber-900"
+                          : "bg-white border-gray-200 text-gray-500"
+                      }`}
+                    >
+                      ⭐ 任務
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              <div>
+                <label className="block text-[10px] font-bold text-gray-500 mb-1">日期</label>
+                <input
+                  type="date"
+                  value={applyDate}
+                  onChange={(e) => setApplyDate(e.target.value)}
+                  className="w-full text-xs border border-gray-200 rounded-xl px-2.5 py-2 focus:outline-none"
+                />
+              </div>
+
+              {applyAsType === "task" && (
+                <>
+                  <div>
+                    <label className="block text-[10px] font-bold text-gray-500 mb-1">指派給家族成員</label>
+                    <select
+                      value={applyAssignee}
+                      onChange={(e) => setApplyAssignee(e.target.value)}
+                      className="w-full text-xs border border-gray-200 rounded-xl px-2.5 py-2 bg-white focus:outline-none"
+                    >
+                      <option value="">（不指定，全體孩子）</option>
+                      {familyMembers?.filter(m => (m.role as string) === "Child" || (m.role as string) === "KID")?.map((m) => (
+                        <option key={m.uid} value={m.uid}>
+                          {m.displayName}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold text-gray-500 mb-1 flex justify-between">
+                      <span>獎勵星星點數</span>
+                      <span className="text-amber-600 font-extrabold">{applyStars} 🌟</span>
+                    </label>
+                    <input
+                      type="range"
+                      min="5"
+                      max="100"
+                      step="5"
+                      value={applyStars}
+                      onChange={(e) => setApplyStars(Number(e.target.value))}
+                      className="w-full accent-amber-500"
+                    />
+                  </div>
+                </>
+              )}
+            </div>
+
+            <div className="flex gap-2.5 pt-2">
+              <button
+                type="button"
+                onClick={() => setApplyingTemplate(null)}
+                className="flex-1 py-2 text-xs font-bold text-gray-400 bg-gray-50 hover:bg-gray-100 rounded-xl transition"
+              >
+                取消
+              </button>
+              <button
+                type="button"
+                onClick={async () => {
+                  try {
+                    setIsSubmitting(true);
+                    if (applyAsType === "calendar" && onAddEvent) {
+                      await onAddEvent({
+                        title: applyingTemplate.title,
+                        date: applyDate,
+                        time: applyingTemplate.defaultStartTime || "",
+                        isFixed: applyingTemplate.isRecurring || false,
+                        weekdays: applyingTemplate.isRecurring ? applyingTemplate.repeatDays : [],
+                        startDate: applyingTemplate.isRecurring ? applyDate : "",
+                        isPublic: true,
+                        note: "",
+                      });
+                    } else if (applyAsType === "task" && onAddTask) {
+                      await onAddTask({
+                        title: applyingTemplate.title,
+                        dueDate: applyDate,
+                        rewardStars: applyStars,
+                        assignedTo: applyAssignee || "all",
+                        description: `由常用事項秒速導入的學習任務：${applyingTemplate.title}`,
+                        status: "PENDING",
+                      });
+                    }
+                    toast.success("✓ 成功套用此常用項目！");
+                    setApplyingTemplate(null);
+                  } catch (err) {
+                    console.error("Apply template failed:", err);
+                    toast.error("套用失敗");
+                  } finally {
+                    setIsSubmitting(false);
+                  }
+                }}
+                disabled={isSubmitting}
+                className="flex-1 py-2 text-xs font-black text-white bg-amber-653 hover:bg-amber-700 bg-amber-600 rounded-xl shadow-xs transition"
+              >
+                {isSubmitting ? "導入中" : "確認"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Confirmation dialog box */}
       {deletingTemplate && (
         <div className="fixed inset-0 bg-[#3C332D]/40 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-in fade-in duration-150 font-sans">
-          <div className="bg-white rounded-[24px] border border-[#EFEAE2] p-8 max-w-md w-full soft-journal-shadow relative">
+          <div className="bg-white rounded-[24px] border border-[#EFEAE2] p-6 max-w-sm w-full soft-journal-shadow relative">
             <h3 className="text-lg font-black text-[#3C332D] mb-4 flex items-center gap-2">
               ⚠️ 確認刪除常用事項
             </h3>

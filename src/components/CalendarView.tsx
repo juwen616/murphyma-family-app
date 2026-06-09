@@ -189,14 +189,76 @@ export default function CalendarView({
     }
   }, [simulatedTodayDate]);
 
-  const [viewType, setViewType] = useState<"list" | "month" | "week">("month");
+  const [viewType, setViewType] = useState<"list" | "month" | "week">("list");
   const [selectedMobileDate, setSelectedMobileDate] = useState<string>(todayDateStr);
+  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
 
-  useEffect(() => {
-    if (window.innerWidth < 768) {
-      setViewType("list");
+  const [touchStart, setTouchStart] = useState<number | null>(null);
+  const [touchEnd, setTouchEnd] = useState<number | null>(null);
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    setTouchStart(e.targetTouches[0].clientX);
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    setTouchEnd(e.targetTouches[0].clientX);
+  };
+
+  const handleTouchEnd = () => {
+    if (!touchStart || !touchEnd) return;
+    const diff = touchStart - touchEnd;
+    const minSwipeDistance = 70; // pixels
+    if (diff > minSwipeDistance) {
+      handleNext();
+    } else if (diff < -minSwipeDistance) {
+      handlePrev();
     }
-  }, []);
+    setTouchStart(null);
+    setTouchEnd(null);
+  };
+
+  const formatMobileDrawerDate = (dateStr: string) => {
+    if (!dateStr) return "";
+    const parts = dateStr.split("-");
+    if (parts.length !== 3) return dateStr;
+    const y = parseInt(parts[0], 10);
+    const m = parseInt(parts[1], 10);
+    const d = parseInt(parts[2], 10);
+    const dateObj = new Date(y, m - 1, d);
+    const days = ["星期日", "星期一", "星期二", "星期三", "星期四", "星期五", "星期六"];
+    const monthFormatted = String(m).padStart(2, "0");
+    const dayFormatted = String(d).padStart(2, "0");
+    return `${monthFormatted}/${dayFormatted} ${days[dateObj.getDay()]}`;
+  };
+
+  const formatListDayHeader = (dateStr: string) => {
+    try {
+      const parts = dateStr.split("-");
+      if (parts.length !== 3) return dateStr;
+      const y = parseInt(parts[0], 10);
+      const m = parseInt(parts[1], 10);
+      const d = parseInt(parts[2], 10);
+      const dateObj = new Date(y, m - 1, d);
+      const dayFormatted = String(d).padStart(2, "0");
+      const monthFormatted = String(m).padStart(2, "0");
+      const dow = ["星期日", "星期一", "星期二", "星期三", "星期四", "星期五", "星期六"][dateObj.getDay()];
+      return `${monthFormatted}/${dayFormatted} ${dow}`;
+    } catch (_) {
+      return dateStr;
+    }
+  };
+
+  const cleanTitleForMobileCell = (evt: CalendarEvent, currentDateStr?: string) => {
+    let title = evt.title;
+    if ((evt as any).isBirthday) {
+      return `${(evt as any).birthdayMemberName} 生日`;
+    }
+    if (isMultiDayEvent(evt) && currentDateStr && evt.startDate && evt.endDate) {
+      const info = getMultiDayLabel(evt.startDate, evt.endDate, currentDateStr);
+      title = `${evt.title} Day${info.dayIndex}`;
+    }
+    return title.replace(/[\u2700-\u27BF]|[\uE000-\uF8FF]|\uD83C[\uDC00-\uDFFF]|\uD83D[\uDC00-\uDFFF]|[\u2011-\u26FF]|\uD83E[\uDD10-\uDDFF]/g, "").trim();
+  };
 
   const selectedMobileMonthDayStr = useMemo(() => {
     if (!selectedMobileDate) return "";
@@ -1081,7 +1143,7 @@ export default function CalendarView({
   };
 
   return (
-    <div id="calendar-module" className="bg-white rounded-[24px] border border-[#EFEAE2] p-3 md:p-6 lg:p-8 soft-journal-shadow space-y-4 md:space-y-6">
+    <div id="calendar-module" onTouchStart={handleTouchStart} onTouchMove={handleTouchMove} onTouchEnd={handleTouchEnd} className="w-full max-w-full bg-transparent md:bg-white md:rounded-[24px] md:border md:border-[#EFEAE2] p-2 md:p-6 lg:p-8 md:soft-journal-shadow space-y-3 md:space-y-6">
       
       {/* Calendar header controls - Sticky top below primary app navigation bar */}
       <div className="sticky top-[48px] md:top-[74px] bg-white z-30 py-2.5 md:py-3 border-b border-[#EFEAE2]/60 flex flex-col md:flex-row justify-between items-center gap-3">
@@ -1120,116 +1182,56 @@ export default function CalendarView({
         </div>
 
         {/* Calendar View Toggle switches - 3 Tabs for Mobile, beautifully horizontal & scrollable */}
-        <div className="flex items-center gap-1 p-1 bg-[#FFFDF8] border border-[#EFEAE2] rounded-full font-sans w-full md:w-auto justify-between md:justify-start overflow-x-auto scrollbar-none">
+        <div className="flex items-center gap-1 p-1 bg-[#FFFDF8] border border-[#EFEAE2] rounded-full font-sans w-full md:w-auto justify-between md:justify-start overflow-x-auto scrollbar-none animate-in fade-in">
           <button
             onClick={() => setViewType("list")}
-            className={`flex-1 md:flex-initial px-3.5 py-1.5 text-xs font-bold transition rounded-full cursor-pointer whitespace-nowrap ${
+            className={`flex-1 md:flex-initial px-4 py-2 text-xs font-black transition rounded-full cursor-pointer whitespace-nowrap ${
               viewType === "list"
-                ? "bg-white text-[#5B7283] border border-[#EFEAE2]/60 shadow-xs font-black"
-                : "text-gray-400 hover:text-gray-500"
+                ? "bg-amber-100 text-amber-800 border border-amber-200 shadow-sm"
+                : "text-gray-500 hover:text-gray-700 hover:bg-[#F7F3EB]"
             }`}
           >
-            📋 行程列表
+            列表
           </button>
           <button
             onClick={() => setViewType("month")}
-            className={`flex-1 md:flex-initial px-3.5 py-1.5 text-xs font-bold transition rounded-full cursor-pointer whitespace-nowrap ${
+            className={`flex-1 md:flex-initial px-4 py-2 text-xs font-black transition rounded-full cursor-pointer whitespace-nowrap ${
               viewType === "month"
-                ? "bg-white text-[#5B7283] border border-[#EFEAE2]/60 shadow-xs font-black"
-                : "text-gray-400 hover:text-gray-500"
+                ? "bg-amber-100 text-amber-800 border border-amber-200 shadow-sm"
+                : "text-gray-500 hover:text-gray-700 hover:bg-[#F7F3EB]"
             }`}
           >
-            📅 月曆檢視
+            月曆
           </button>
           <button
             onClick={() => setViewType("week")}
-            className={`flex-1 md:flex-initial px-3.5 py-1.5 text-xs font-bold transition rounded-full cursor-pointer whitespace-nowrap ${
+            className={`flex-1 md:flex-initial px-4 py-2 text-xs font-black transition rounded-full cursor-pointer whitespace-nowrap ${
               viewType === "week"
-                ? "bg-white text-[#5B7283] border border-[#EFEAE2]/60 shadow-xs font-black"
-                : "text-gray-400 hover:text-gray-500"
+                ? "bg-amber-100 text-amber-800 border border-amber-200 shadow-sm"
+                : "text-gray-500 hover:text-gray-700 hover:bg-[#F7F3EB]"
             }`}
           >
-            📊 週曆檢視
+            週曆
           </button>
         </div>
       </div>
 
-      {/* List View (📋 行程列表) — Mobile Default, Detailed Agenda Cards */}
       {viewType === "list" && (
-        <div id="list-view-wrapper" className="space-y-4 font-sans">
-          {/* Today Highlight Header Container */}
-          <div className="p-4 bg-gradient-to-br from-[#FFF8F6] to-white border border-[#F0C4B8] rounded-[24px] shadow-sm">
-            <div className="flex justify-between items-center mb-3">
-              <h3 className="text-xs md:text-sm font-black text-[#C76A5A] flex items-center gap-1.5">
-                <span>🗓️</span> 今天安排 ({new Date(todayDateStr).getMonth() + 1}/{new Date(todayDateStr).getDate()})
-              </h3>
-              <button
-                onClick={() => handleOpenAdd(todayDateStr)}
-                className="text-[11px] font-black bg-[#EAA59E] hover:bg-[#D98E85] text-white px-3 py-1.5 rounded-full transition shadow-xs"
-              >
-                + 新增今日安排
-              </button>
-            </div>
-            
-            {getEventsForDate(todayDateStr).length === 0 ? (
-              <p className="text-xs text-gray-400 font-bold py-2.5">今天沒有排行程安排，好愜意！🍵</p>
-            ) : (
-              <div className="space-y-2.5">
-                {getEventsForDate(todayDateStr).map((evt) => {
-                  const isBday = (evt as any).isBirthday;
-                  return (
-                    <div
-                      key={evt.id}
-                      onClick={() => handleOpenEdit(evt, todayDateStr)}
-                      className={`p-3.5 rounded-2xl border text-left flex flex-col gap-1.5 relative cursor-pointer hover:shadow-xs transition duration-200 ${
-                        isBday ? "bg-rose-50/50 border-rose-200 text-rose-700" : "bg-white border-[#EFEAE2] text-[#3C332D]"
-                      }`}
-                    >
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="font-extrabold text-sm truncate flex items-center gap-1">
-                          {getEventTitleWithPrefix(evt, isBday, todayDateStr)}
-                        </span>
-                        
-                        {isUserAllowedToDelete(evt) && (
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              triggerDeleteConfirm(evt, todayDateStr);
-                            }}
-                            className="text-gray-400 hover:text-red-500 p-1 rounded transition"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </button>
-                        )}
-                      </div>
-                      
-                      {evt.time && (
-                        <span className="text-xs font-mono font-bold text-gray-500 flex items-center gap-1">
-                          🕐 {evt.time}
-                        </span>
-                      )}
-                      {evt.dailyNotes?.[todayDateStr] && (
-                        <p className="text-xs text-[#004B8F] font-bold bg-[#E1F0FF]/40 border border-sky-100 rounded px-2 py-1 self-start mt-0.5">
-                          📝 {evt.dailyNotes[todayDateStr]}
-                        </p>
-                      )}
-                      <span className="text-[10px] text-gray-400 mt-1 font-bold flex items-center gap-1 select-none">
-                        {evt.isPublic ? "🔓 家庭公開" : "🔒 私有行程"}
-                        {evt.creatorName && ` · 由 ${evt.creatorName}  建立`}
-                      </span>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
+        <div id="list-view-wrapper" className="space-y-6 font-sans">
+          {/* Quick Add and Header block */}
+          <div className="flex justify-between items-center py-2 border-b border-gray-100">
+            <h3 className="text-xs font-black text-[#5B7283]">
+              {year}年{month + 1}月行程清單
+            </h3>
+            <button
+              onClick={() => handleOpenAdd(todayDateStr)}
+              className="text-xs font-black bg-[#EAA59E] hover:bg-[#D98E85] text-white px-4 py-2 rounded-full transition shadow-xs"
+            >
+              + 新增本日行程
+            </button>
           </div>
 
-          {/* Month Events list block */}
-          <div className="space-y-4">
-            <h3 className="text-xs md:text-sm font-black text-[#5B7283] pt-2 flex items-center gap-1.5 select-none">
-              <span>📋</span> {year}年{month + 1}月 行程手帳清單
-            </h3>
-
+          <div className="space-y-6 select-none">
             {(() => {
               const daysInMonthWithEvents = monthDays.filter(cell => cell.isCurrentMonth).map(cell => {
                 const dayEvts = getEventsForDate(cell.dateStr);
@@ -1241,91 +1243,99 @@ export default function CalendarView({
 
               if (daysInMonthWithEvents.length === 0) {
                 return (
-                  <div className="text-center py-10 border border-dashed border-[#EFEAE2] rounded-[24px] bg-white">
-                    <span className="text-3xl block mb-2 animate-bounce">🌱</span>
-                    <p className="text-xs text-gray-400 font-bold">這個月目前沒有排任何行程安排喔！</p>
+                  <div className="text-center py-12 border border-dashed border-[#EFEAE2] rounded-2xl bg-[#FFFDFB]">
+                    <span className="text-3xl block mb-2">🍵</span>
+                    <p className="text-xs text-gray-400 font-bold">這個月目前還沒有任何行程安排喔！</p>
+                    <button
+                      onClick={() => handleOpenAdd(todayDateStr)}
+                      className="mt-3 text-xs bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-200 px-4 py-2 rounded-full transition font-black"
+                    >
+                      ＋ 建立第一個行程
+                    </button>
                   </div>
                 );
               }
 
               return daysInMonthWithEvents.map(dayCell => {
-                const holiday = getHolidayForDate(dayCell.dateStr);
-                const activeMode = getActiveModeForDate(dayCell.dateStr);
+                const isToday = todayDateStr === dayCell.dateStr;
                 return (
-                  <div key={dayCell.dateStr} className="bg-white border border-[#EFEAE2] rounded-2xl p-4 shadow-xs space-y-3">
-                    <div className="flex justify-between items-center border-b border-gray-100 pb-2 flex-wrap gap-2">
-                      <div className="flex items-center gap-2">
-                        <span className={`text-xs font-black px-2.5 py-1 rounded-full ${
-                          dayCell.isToday ? "bg-[#EAA59E] text-white" : "bg-gray-100 text-gray-600"
-                        }`}>
-                          {dayCell.day} 日
+                  <div key={dayCell.dateStr} className="space-y-3">
+                    {/* Day header block */}
+                    <div className={`p-2.5 rounded-xl font-black text-sm flex justify-between items-center ${
+                      isToday 
+                        ? "bg-[#FFE9EF]/55 text-rose-700 border border-rose-100/50" 
+                        : "bg-[#FFFDFB]/85 text-[#3C332D]"
+                    }`}>
+                      <span className="font-mono">
+                        {formatListDayHeader(dayCell.dateStr)}
+                      </span>
+                      {isToday && (
+                        <span className="text-[10px] bg-rose-100 text-rose-800 font-black px-2 py-0.5 rounded-full select-none animate-pulse">
+                          今天
                         </span>
-                        <span className="text-xs font-black text-[#3C332D]">
-                          {dayCell.dayName}
-                        </span>
-                        {dayCell.isToday && (
-                          <span className="text-[9px] bg-rose-100 text-rose-800 font-black px-2 py-0.5 rounded-full select-none">今天</span>
-                        )}
-                        {holiday && (
-                          <span className="text-[9px] bg-amber-50 text-amber-700 border border-amber-100 px-2 py-0.5 rounded-full font-bold">{holiday.name}</span>
-                        )}
-                        {activeMode && (
-                          <span className="text-[9px] bg-indigo-50 text-indigo-700 border border-indigo-100 px-2 py-0.5 rounded-full font-bold">{activeMode.name}</span>
-                        )}
-                      </div>
-                      
-                      <button
-                        onClick={() => handleOpenAdd(dayCell.dateStr)}
-                        className="text-[10px] font-bold text-[#5B7283] hover:text-[#3C332D] font-sans px-2.5 py-1.5 bg-gray-50 hover:bg-gray-100 rounded-lg border border-[#EFEAE2] transition"
-                      >
-                        + 新增行程
-                      </button>
+                      )}
                     </div>
 
-                    <div className="space-y-2 mt-2">
+                    {/* Events detailed vertical layout - stripped of extra decorative icons */}
+                    <div className="space-y-4 pl-3">
                       {dayCell.events.map(evt => {
                         const isBday = (evt as any).isBirthday;
+                        const cleanTitle = cleanTitleForMobileCell(evt, dayCell.dateStr);
                         return (
                           <div
                             key={evt.id}
-                            onClick={() => handleOpenEdit(evt, dayCell.dateStr)}
-                            className={`p-3.5 rounded-xl border flex flex-col gap-1 text-left relative cursor-pointer hover:bg-gray-50/20 transition ${
-                              isBday ? "bg-rose-50/20 border-rose-100 text-rose-700" : "bg-[#FFFDFB]/80 border-[#EFEAE2]"
-                            }`}
+                            onClick={() => {
+                              if (window.innerWidth < 768) {
+                                setSelectedMobileDate(dayCell.dateStr);
+                                setIsDrawerOpen(true);
+                              } else {
+                                handleOpenEdit(evt, dayCell.dateStr);
+                              }
+                            }}
+                            className="text-left py-1 cursor-pointer hover:bg-gray-5/40 rounded px-2 transition group/listitem flex justify-between items-start gap-4"
                           >
-                            <div className="flex items-center justify-between gap-2">
-                              <span className="font-extrabold text-xs text-[#3C332D] truncate max-w-[85%] block">
-                                {getEventTitleWithPrefix(evt, isBday, dayCell.dateStr)}
-                              </span>
-                              
+                            <div className="space-y-1">
+                              <h4 className="font-extrabold text-sm text-[#3C332D]">
+                                {cleanTitle}
+                              </h4>
+                              {evt.time && (
+                                <span className="text-xs font-mono font-bold text-gray-400 block">
+                                  {evt.time}
+                                </span>
+                              )}
+                            </div>
+                            
+                            <div className="flex gap-1.5 shrink-0 select-none">
+                              {!isBday && (
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleOpenEdit(evt, dayCell.dateStr);
+                                  }}
+                                  className="text-[11px] bg-gray-50 hover:bg-gray-100 border border-gray-200 px-2 py-1 text-gray-600 font-bold rounded-lg transition"
+                                >
+                                  編輯
+                                </button>
+                              )}
                               {isUserAllowedToDelete(evt) && (
                                 <button
                                   onClick={(e) => {
                                     e.stopPropagation();
                                     triggerDeleteConfirm(evt, dayCell.dateStr);
                                   }}
-                                  className="text-gray-400 hover:text-red-500 p-0.5 rounded transition"
+                                  className="text-gray-400 hover:text-red-500 p-1 rounded transition"
                                 >
-                                  <Trash2 className="h-3.5 w-3.5" />
+                                  <Trash2 className="h-4 w-4" />
                                 </button>
                               )}
                             </div>
-                            
-                            {evt.time && <span className="text-[10px] font-mono font-bold text-gray-405">🕒 {evt.time}</span>}
-                            {isMultiDayEvent(evt) && evt.startDate && evt.endDate && (
-                              <span className="text-[9px] bg-sky-50 text-sky-850 border border-sky-100 rounded px-1.5 py-0.5 font-black self-start mt-0.5">
-                                跨日行程 · 第 {getMultiDayLabel(evt.startDate, evt.endDate, dayCell.dateStr).dayIndex} 天 / 共 {getMultiDayLabel(evt.startDate, evt.endDate, dayCell.dateStr).totalDays} 天
-                              </span>
-                            )}
-                            {evt.dailyNotes?.[dayCell.dateStr] && (
-                              <p className="text-[10px] text-[#004B8F] font-bold bg-[#E1F0FF]/40 border border-sky-100 rounded px-1.5 py-0.5 self-start">
-                                📝 {evt.dailyNotes[dayCell.dateStr]}
-                              </p>
-                            )}
                           </div>
                         );
                       })}
                     </div>
+
+                    {/* Divider line style */}
+                    <div className="border-b border-[#EFEAE2]/60 pt-4" />
                   </div>
                 );
               });
@@ -1336,8 +1346,9 @@ export default function CalendarView({
 
       {/* Monthly View Grid */}
       {viewType === "month" && (
-        <div id="monthly-view-wrapper" className="border border-[#EFEAE2] rounded-[24px] overflow-hidden soft-journal-shadow bg-white">
-          <div className="grid grid-cols-7 bg-[#FFFDF8] border-b border-[#EFEAE2] text-center py-3.5 text-xs md:text-sm font-black text-[#5B7283] tracking-wide select-none">
+        <div id="monthly-view-wrapper" className="w-full border-0 md:border md:border-[#EFEAE2] rounded-none md:rounded-[24px] overflow-hidden bg-white shadow-none md:soft-journal-shadow select-none">
+          {/* Weekday headers - small and elegant */}
+          <div className="grid grid-cols-7 bg-[#FFFDF8] border-b border-[#EFEAE2] text-center py-2.5 md:py-3.5 text-[10px] md:text-sm font-black text-[#5B7283] tracking-wide">
             <div>週日</div>
             <div>週一</div>
             <div>週二</div>
@@ -1368,7 +1379,7 @@ export default function CalendarView({
               const activeMode = getActiveModeForDate(cell.dateStr);
               const isMobileSelected = selectedMobileDate === cell.dateStr;
 
-              // Sort events: prioritize multi-day events so they always stack on the top rows, then public/personal, and stable format by id
+              // Sort events: prioritize multi-day events so they stack on top rows
               const sortedDayEvents = [...dayEvents].sort((a, b) => {
                 const isMultiA = isMultiDayEvent(a) ? 1 : 0;
                 const isMultiB = isMultiDayEvent(b) ? 1 : 0;
@@ -1381,30 +1392,27 @@ export default function CalendarView({
                 return a.id.localeCompare(b.id);
               });
 
-              // Determine background block colors based on request rules
+              // Apply color theme backgrounds
               let cellBg = "bg-white";
               if (isToday) {
-                cellBg = "bg-[#FFE9EF]/45 ring-2 ring-[#EAA59E] ring-inset z-10"; // pale pink for Today
+                // Today: light pink background instead of thick red borders, satisfying design rules
+                cellBg = "bg-[#FFE9EF]/45";
               } else if (activeMode) {
                 if (activeMode.type === "travel") cellBg = "bg-[#EAF6FF]";
                 else if (activeMode.type === "exam") cellBg = "bg-[#FFF5D9]";
                 else if (activeMode.type === "vacation") cellBg = "bg-[#F2FFF0]";
                 else cellBg = "bg-[#EEF2FF]";
               } else if (holiday && holiday.isNational) {
-                cellBg = "bg-[#FFF1F0]/50"; // subtle festive red tint for national holidays
+                cellBg = "bg-[#FFF1F0]/50";
               } else if (holiday) {
-                cellBg = "bg-[#FAF5FF]/50"; // subtle purple/orange tint for festival days
+                cellBg = "bg-[#FAF5FF]/50";
               } else if (cell.isWeekend) {
                 const dayIndex = new Date(cell.dateStr).getDay();
-                if (dayIndex === 6) {
-                  cellBg = "bg-[#EAF4FF]/80"; // Saturday pale blue
-                } else {
-                  cellBg = "bg-[#FFF0F5]/80"; // Sunday pale pink
-                }
+                cellBg = dayIndex === 6 ? "bg-[#EAF4FF]/80" : "bg-[#FFF0F5]/80";
               }
 
               if (!cell.isCurrentMonth) {
-                cellBg += " opacity-30 bg-gray-50/20";
+                cellBg += " opacity-30 bg-gray-50/10";
               }
 
               return (
@@ -1414,6 +1422,7 @@ export default function CalendarView({
                   onClick={() => {
                     if (window.innerWidth < 768) {
                       setSelectedMobileDate(cell.dateStr);
+                      setIsDrawerOpen(true);
                     } else {
                       if (activeMode) {
                         setSelectedModeForDetail({ mode: activeMode, dateStr: cell.dateStr });
@@ -1422,45 +1431,66 @@ export default function CalendarView({
                       }
                     }
                   }}
-                  className={`min-h-[64px] md:min-h-[160px] p-1 md:p-2.5 border-r border-b border-[#EFEAE2] flex flex-col justify-between transition group hover:bg-[#FFFDF8]/90 cursor-pointer ${
-                    isMobileSelected ? "ring-2 ring-amber-400 z-10 bg-amber-50/10" : ""
-                  } ${cellBg}`}
+                  className={`min-h-[80px] h-[80px] md:min-h-[160px] md:h-auto p-1 md:p-2.5 border-r border-b border-[#EFEAE2]/60 flex flex-col justify-between transition group hover:bg-[#FFFDF8]/90 cursor-pointer overflow-hidden ${cellBg}`}
                 >
-                  {/* MOBILE VIEW COMPACT BLOCK - Date + Event count, no vertical wrapping */}
-                  <div className="block md:hidden text-center flex flex-col justify-between items-center h-full w-full py-1">
-                    <span
-                      className={`text-xs font-black rounded-full h-6 w-6 flex items-center justify-center font-mono ${
-                        isToday
-                          ? "bg-[#EAA59E] text-white shadow-xs font-extrabold"
-                          : cell.isWeekend
-                          ? holiday
-                             ? "text-amber-800 font-extrabold"
-                             : "text-[#3C332D]/74"
-                          : "text-[#3C332D]"
-                      }`}
-                    >
-                      {cell.day}
-                    </span>
-                    
-                    <div className="mt-1">
-                      <span className={`text-[8.5px] font-black px-1.5 py-0.5 rounded ${
-                        dayEvents.length > 0 
-                          ? "bg-amber-100 text-amber-800 font-extrabold border border-amber-200" 
-                          : "bg-gray-100 text-gray-400 font-bold"
-                      }`}>
-                        📌 {dayEvents.length}項
+                  {/* MOBILE VIEW COMPACT CELL */}
+                  <div className="block md:hidden text-left flex flex-col justify-between h-full w-full overflow-hidden">
+                    <div className="flex justify-between items-center select-none">
+                      <span
+                        className={`text-[10px] font-black rounded-full h-5 w-5 flex items-center justify-center font-mono ${
+                          isToday
+                            ? "bg-rose-100 text-rose-600 font-extrabold"
+                            : cell.isWeekend
+                            ? "text-[#3C332D]/70"
+                            : "text-[#3C332D]"
+                        }`}
+                      >
+                        {cell.day}
                       </span>
+                      {holiday && (
+                        <span className="text-[10px]" title={holiday.name}>
+                          {holiday.emoji}
+                        </span>
+                      )}
+                    </div>
+                    
+                    {/* Compact Events in date slot */}
+                    <div className="flex-1 flex flex-col justify-end overflow-hidden space-y-0.5 mt-1 pb-0.5 select-none">
+                      {(() => {
+                        const limit = 2;
+                        const displayedEvents = sortedDayEvents.slice(0, limit);
+                        const hiddenCount = sortedDayEvents.length - limit;
+                        return (
+                          <>
+                            {displayedEvents.map((evt) => {
+                              const cleanTitle = cleanTitleForMobileCell(evt, cell.dateStr);
+                              return (
+                                <div
+                                  key={evt.id}
+                                  className="text-[8px] leading-[9.5px] py-[1px] px-[2px] font-bold truncate rounded bg-white/70 border border-gray-150 text-[#3C332D] tracking-tight"
+                                >
+                                  {cleanTitle}
+                                </div>
+                              );
+                            })}
+                            {hiddenCount > 0 && (
+                              <div className="text-[7.5px] text-gray-400 font-extrabold text-right pr-0.5 tracking-tighter leading-none mt-0.5">
+                                +{hiddenCount}
+                              </div>
+                            )}
+                          </>
+                        );
+                      })()}
                     </div>
                   </div>
 
                   {/* DESKTOP VIEW DETAILED BLOCK */}
                   <div className="hidden md:block w-full">
                     <div className="flex justify-between items-start">
-                      {/* Day number */}
                       <span
                         className={`text-sm font-black rounded-full h-7.5 w-7.5 flex items-center justify-center font-mono ${
                           isToday
-                            ? "bg-[#EAA59E] text-white shadow-sm font-extrabold"
+                            ? "bg-[#EAA59E] text-white shadow-xs font-extrabold"
                             : cell.isWeekend
                             ? holiday
                                ? "text-amber-800 font-extrabold"
@@ -1471,7 +1501,6 @@ export default function CalendarView({
                         {cell.day}
                       </span>
 
-                      {/* Right-aligned Mode tag label */}
                       {activeMode && (
                         <span className="text-[9px] uppercase font-black px-1.5 py-0.5 rounded shadow-none flex items-center gap-0.5 shrink-0 select-none scale-90 translate-x-1"
                           style={{
@@ -1488,8 +1517,8 @@ export default function CalendarView({
                         >
                           {activeMode.type === "travel" && "✈旅遊"}
                           {activeMode.type === "exam" && "📚考試"}
-                          {activeMode.type === "vacation" && "🏕寒暑假"}
-                          {activeMode.type === "custom" && "🏠自訂模式"}
+                          {activeMode.type === "vacation" && "🏕假期"}
+                          {activeMode.type === "custom" && "🏠自訂"}
                         </span>
                       )}
 
@@ -1500,7 +1529,6 @@ export default function CalendarView({
                       )}
                     </div>
 
-                    {/* Holiday or festival tag below the date */}
                     {holiday && (
                       <div className="mt-1 flex flex-wrap gap-1">
                         <span className={`inline-flex items-center gap-0.5 text-[9.5px] font-black px-1.5 py-0.5 rounded-md border shadow-sm select-none shrink-0 ${
@@ -1513,7 +1541,6 @@ export default function CalendarView({
                       </div>
                     )}
 
-                    {/* Highlight active mode title bar in month view cell */}
                     {activeMode && (
                       <div className="text-[10.5px] font-semibold py-1 px-2 rounded-xl truncate shrink-0 font-sans flex items-center gap-1.5 mt-1.5"
                         style={{
@@ -1548,10 +1575,8 @@ export default function CalendarView({
                       </div>
                     )}
 
-                    {/* List of sorted events inside monthly cell */}
                     <div className="flex-grow space-y-1.5 mt-2.5 overflow-hidden">
                       {sortedDayEvents.map((evt) => {
-                        const emoji = getEventEmoji(evt.title);
                         const isBday = (evt as any).isBirthday;
                         return (
                           <div
@@ -1573,7 +1598,6 @@ export default function CalendarView({
                                     triggerDeleteConfirm(evt, cell.dateStr);
                                   }}
                                   className="hidden group-hover/item:inline-block text-gray-400 hover:text-red-500 p-0.5 ml-auto cursor-pointer transition"
-                                  title="刪除"
                                 >
                                   <Trash2 className="h-3.5 w-3.5" />
                                 </button>
@@ -1581,7 +1605,7 @@ export default function CalendarView({
                             </div>
                             {evt.dailyNotes?.[cell.dateStr] && (
                               <div className="text-[10px] text-[#004B8F] font-bold bg-[#E1F0FF]/45 border border-sky-150 rounded px-1.5 py-0.5 mt-1 truncate max-w-full text-left font-sans self-start">
-                                📘 {evt.dailyNotes[cell.dateStr]}
+                                📝 {evt.dailyNotes[cell.dateStr]}
                               </div>
                             )}
                             {evt.time && (
@@ -1590,8 +1614,8 @@ export default function CalendarView({
                               </span>
                             )}
                             {!evt.isPublic && (
-                              <span className="text-[9px] font-sans text-[#EAA59E] mt-0.5 font-bold">
-                                🔐 私人行程
+                              <span className="text-[9px] font-sans text-amber-800 mt-0.5 font-bold">
+                                🔐 私有
                               </span>
                             )}
                           </div>
@@ -1604,7 +1628,7 @@ export default function CalendarView({
             })}
           </div>
 
-          {/* MOBILE DETAILED DATE AGENDA (SECTIONS SEVEN & EIGHT: CARD DESIGN & MULTI-DAY SUPPORT) */}
+          {/* MOBILE DETAILED DATE AGENDA */}
           <div className="block md:hidden border-t border-[#EFEAE2]/60 p-4 space-y-4 font-sans bg-[#FCFBF9]">
             <div className="flex justify-between items-center bg-white border border-[#EFEAE2] p-3 rounded-2xl shadow-xs">
               <div>
@@ -1680,9 +1704,8 @@ export default function CalendarView({
                         </span>
                       )}
 
-                      {/* CHAPTER EIGHT: MULTI DAY EVENTS SUPPORT IN MOBILE VIEW */}
                       {isMultiDayEvent(evt) && evt.startDate && evt.endDate && (
-                        <span className="text-[10px] bg-sky-50 text-sky-850 border border-sky-100 rounded px-2 py-0.5 font-bold self-start mt-0.5">
+                        <span className="text-[10px] bg-sky-50 text-sky-850 border border-sky-100 rounded px-2 py-0.5 font-bold self-start mt-0.5 font-mono">
                           📚 跨日行程 · 第 {getMultiDayLabel(evt.startDate, evt.endDate, selectedMobileDate).dayIndex} 天 / 共 {getMultiDayLabel(evt.startDate, evt.endDate, selectedMobileDate).totalDays} 天
                         </span>
                       )}
