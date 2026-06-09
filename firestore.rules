@@ -1,0 +1,171 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Global Safety Net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Common Helpers
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function getUserFamilyId(uid) {
+      return exists(/databases/$(database)/documents/users/$(uid)) ? 
+        get(/databases/$(database)/documents/users/$(uid)).data.get('familyId', null) : null;
+    }
+
+    function getUserRole(uid) {
+      return exists(/databases/$(database)/documents/users/$(uid)) ? 
+        get(/databases/$(database)/documents/users/$(uid)).data.get('role', 'none') : 'none';
+    }
+
+    function isMemberOfFamily(familyId) {
+      return isSignedIn() && getUserFamilyId(request.auth.uid) == familyId;
+    }
+
+    function isUserParentOrAdmin(uid) {
+      return getUserRole(uid) == "admin" || getUserRole(uid) == "parent";
+    }
+
+    function isUserAdmin(uid) {
+      return getUserRole(uid) == "admin";
+    }
+
+    // 1. Users Collection
+    match /users/{userId} {
+      allow get: if isSignedIn() && (
+        request.auth.uid == userId || 
+        getUserFamilyId(request.auth.uid) == resource.data.get('familyId', null)
+      );
+      allow list: if isSignedIn() && (
+        getUserFamilyId(request.auth.uid) == resource.data.get('familyId', null)
+      );
+      allow create: if isSignedIn() && (
+        request.auth.uid == userId ||
+        (getUserFamilyId(request.auth.uid) == request.resource.data.get('familyId', null) && isUserParentOrAdmin(request.auth.uid))
+      );
+      allow update: if isSignedIn() && (
+        request.auth.uid == userId || 
+        (getUserFamilyId(request.auth.uid) == resource.data.get('familyId', null) && isUserParentOrAdmin(request.auth.uid))
+      );
+      allow delete: if isSignedIn() && (
+        getUserFamilyId(request.auth.uid) == resource.data.get('familyId', null) && isUserParentOrAdmin(request.auth.uid)
+      );
+    }
+
+    // 2. Families Collection
+    match /families/{familyId} {
+      allow get: if isSignedIn();
+      allow list: if isSignedIn() && isMemberOfFamily(familyId);
+      allow create: if isSignedIn() && request.resource.data.get('adminUid', null) == request.auth.uid;
+      allow update: if isSignedIn() && getUserFamilyId(request.auth.uid) == familyId && isUserAdmin(request.auth.uid);
+      allow delete: if false;
+    }
+
+    // 3. Family Members Collection
+    match /family_members/{memberId} {
+      allow read: if isSignedIn() && isMemberOfFamily(resource.data.get('familyId', null));
+      allow create: if isSignedIn() && (
+        isMemberOfFamily(request.resource.data.get('familyId', null)) ||
+        get(/databases/$(database)/documents/families/$(request.resource.data.get('familyId', null))).data.get('adminUid', null) == request.auth.uid
+      );
+      allow update: if isSignedIn() && isMemberOfFamily(resource.data.get('familyId', null)) && (
+        request.auth.uid == resource.data.get('userId', null) || 
+        isUserParentOrAdmin(request.auth.uid)
+      );
+      allow delete: if isSignedIn() && isMemberOfFamily(resource.data.get('familyId', null)) && isUserParentOrAdmin(request.auth.uid);
+    }
+
+    // 4. Calendar Events Collection
+    match /calendar_events/{eventId} {
+      allow read: if isSignedIn() && isMemberOfFamily(resource.data.get('familyId', null));
+      allow create: if isSignedIn() && isMemberOfFamily(request.resource.data.get('familyId', null));
+      allow update, delete: if isSignedIn() && isMemberOfFamily(resource.data.get('familyId', null)) && (
+        isUserParentOrAdmin(request.auth.uid) || 
+        resource.data.get('creatorUid', null) == request.auth.uid
+      );
+    }
+
+    // 5. Tasks Collection
+    match /tasks/{taskId} {
+      allow read: if isSignedIn() && isMemberOfFamily(resource.data.get('familyId', null));
+      allow create: if isSignedIn() && isMemberOfFamily(request.resource.data.get('familyId', null)) && isUserParentOrAdmin(request.auth.uid);
+      allow update: if isSignedIn() && isMemberOfFamily(resource.data.get('familyId', null)) && (
+        isUserParentOrAdmin(request.auth.uid) || 
+        request.auth.uid == resource.data.get('assignedTo', null) || 
+        resource.data.get('assignedTo', null) == "all"
+      );
+      allow delete: if isSignedIn() && isMemberOfFamily(resource.data.get('familyId', null)) && isUserParentOrAdmin(request.auth.uid);
+    }
+
+    // 6. Rewards Collection
+    match /rewards/{rewardId} {
+      allow read: if isSignedIn() && isMemberOfFamily(resource.data.get('familyId', null));
+      allow create: if isSignedIn() && isMemberOfFamily(request.resource.data.get('familyId', null));
+      allow update: if isSignedIn() && isMemberOfFamily(resource.data.get('familyId', null)) && (
+        isUserParentOrAdmin(request.auth.uid) || 
+        request.auth.uid == resource.data.get('creatorUid', null) ||
+        (getUserRole(request.auth.uid) == "kid" && resource.data.get('status', null) == "available")
+      );
+      allow delete: if isSignedIn() && isMemberOfFamily(resource.data.get('familyId', null)) && isUserParentOrAdmin(request.auth.uid);
+    }
+
+    // 7. Announcements Collection
+    match /announcements/{announcementId} {
+      allow read: if isSignedIn() && isMemberOfFamily(resource.data.get('familyId', null));
+      allow create: if isSignedIn() && isMemberOfFamily(request.resource.data.get('familyId', null)) && isUserAdmin(request.auth.uid);
+      allow update: if isSignedIn() && isMemberOfFamily(resource.data.get('familyId', null)) && isUserAdmin(request.auth.uid);
+      allow delete: if isSignedIn() && isMemberOfFamily(resource.data.get('familyId', null)) && isUserAdmin(request.auth.uid);
+    }
+
+    // 8. Common Templates Collection (Unified 常用事項／任務範本 - Legacy Fallback)
+    match /commonTemplates/{templateId} {
+      allow read: if isSignedIn() && isMemberOfFamily(resource.data.get('familyId', null));
+      allow create: if isSignedIn() && isMemberOfFamily(request.resource.data.get('familyId', null)) && isUserParentOrAdmin(request.auth.uid);
+      allow update: if isSignedIn() && isMemberOfFamily(resource.data.get('familyId', null)) && isUserParentOrAdmin(request.auth.uid);
+      allow delete: if isSignedIn() && isMemberOfFamily(resource.data.get('familyId', null)) && isUserParentOrAdmin(request.auth.uid);
+    }
+
+    // 8b. Favorite Activities Collection (Unified 常用事項與行事曆同步)
+    match /favorite_activities/{activityId} {
+      allow read: if isSignedIn() && isMemberOfFamily(resource.data.get('familyId', null));
+      allow create: if isSignedIn() && isMemberOfFamily(request.resource.data.get('familyId', null)) && isUserParentOrAdmin(request.auth.uid);
+      allow update: if isSignedIn() && isMemberOfFamily(resource.data.get('familyId', null)) && isUserParentOrAdmin(request.auth.uid);
+      allow delete: if isSignedIn() && isMemberOfFamily(resource.data.get('familyId', null)) && isUserParentOrAdmin(request.auth.uid);
+    }
+
+    // 8c. Redemptions Collection
+    match /redemptions/{redemptionId} {
+      allow read: if isSignedIn() && isMemberOfFamily(resource.data.get('familyId', null));
+      allow create: if isSignedIn() && isMemberOfFamily(request.resource.data.get('familyId', null));
+      allow update, delete: if isSignedIn() && isMemberOfFamily(resource.data.get('familyId', null)) && isUserParentOrAdmin(request.auth.uid);
+    }
+
+    // 9. Settings Collection
+    match /settings/{settingId} {
+      allow read: if isSignedIn() && isMemberOfFamily(settingId);
+      allow create: if isSignedIn() && (
+        isMemberOfFamily(settingId) || 
+        get(/databases/$(database)/documents/families/$(settingId)).data.get('adminUid', null) == request.auth.uid
+      );
+      allow update: if isSignedIn() && isMemberOfFamily(settingId) && isUserParentOrAdmin(request.auth.uid);
+      allow delete: if false;
+    }
+
+    // 10. Travel Modes Collection
+    match /travel_modes/{modeId} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn() && isUserParentOrAdmin(request.auth.uid);
+    }
+
+    // 11. Star Transactions Collection
+    match /star_transactions/{transactionId} {
+      allow read: if isSignedIn() && isMemberOfFamily(resource.data.get('familyId', null));
+      allow create: if isSignedIn() && isMemberOfFamily(request.resource.data.get('familyId', null)) && isUserParentOrAdmin(request.auth.uid);
+      allow update, delete: if false;
+    }
+  }
+}

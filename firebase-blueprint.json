@@ -1,0 +1,232 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User profile matching their Google credentials",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "email": { "type": "string" },
+        "displayName": { "type": "string" },
+        "photoURL": { "type": "string" },
+        "familyId": { "type": "string" },
+        "role": { "type": "string", "enum": ["admin", "parent", "kid", "member"] },
+        "stars": { "type": "number" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "email", "displayName", "role"]
+    },
+    "Family": {
+      "title": "Family",
+      "description": "A single family group linking multiple members",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "adminUid": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "name", "adminUid"]
+    },
+    "FamilyMember": {
+      "title": "FamilyMember",
+      "description": "A member profile associated with a specific family",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "familyId": { "type": "string" },
+        "userId": { "type": "string" },
+        "displayName": { "type": "string" },
+        "role": { "type": "string", "enum": ["admin", "parent", "kid", "member"] },
+        "stars": { "type": "number" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "familyId", "userId", "displayName", "role"]
+    },
+    "CalendarEvent": {
+      "title": "CalendarEvent",
+      "description": "A family or private scheduled calendar event",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "familyId": { "type": "string" },
+        "title": { "type": "string" },
+        "date": { "type": "string" },
+        "time": { "type": "string" },
+        "category": { "type": "string" },
+        "isFixed": { "type": "boolean" },
+        "note": { "type": "string" },
+        "isPublic": { "type": "boolean" },
+        "creatorUid": { "type": "string" },
+        "creatorName": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "familyId", "title", "date", "creatorUid"]
+    },
+    "Task": {
+      "title": "Task",
+      "description": "A chore or task that kids can complete to earn stars",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "familyId": { "type": "string" },
+        "title": { "type": "string" },
+        "requirement": { "type": "string" },
+        "starsReward": { "type": "number" },
+        "assignedTo": { "type": "string" },
+        "status": { "type": "string", "enum": ["pending", "submitted", "approved", "rejected"] },
+        "submissionNote": { "type": "string" },
+        "rejectionNote": { "type": "string" },
+        "submittedAt": { "type": "string", "format": "date-time" },
+        "approvedAt": { "type": "string", "format": "date-time" },
+        "approvedBy": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "familyId", "title", "starsReward", "status"]
+    },
+    "Reward": {
+      "title": "Reward",
+      "description": "Prizes that kids can purchase or wish for with their stars",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "familyId": { "type": "string" },
+        "title": { "type": "string" },
+        "starsCost": { "type": "number" },
+        "stock": { "type": "number" },
+        "status": { "type": "string", "enum": ["pending_approval", "approved_shipped", "wished", "available"] },
+        "creatorUid": { "type": "string" },
+        "creatorName": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "familyId", "title", "starsCost", "status"]
+    },
+    "Announcement": {
+      "title": "Announcement",
+      "description": "Important messages pinned on the family bulletin board",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "familyId": { "type": "string" },
+        "title": { "type": "string" },
+        "content": { "type": "string" },
+        "creatorUid": { "type": "string" },
+        "creatorName": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "familyId", "title", "content", "creatorUid"]
+    },
+    "CommonTemplate": {
+      "title": "CommonTemplate",
+      "description": "Unified templates for calendar activities and chore tasks",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "familyId": { "type": "string" },
+        "title": { "type": "string" },
+        "type": { "type": "string", "enum": ["calendar", "task", "both"] },
+        "isRecurring": { "type": "boolean" },
+        "repeatDays": { "type": "array", "items": { "type": "number" } },
+        "defaultStartTime": { "type": "string" },
+        "defaultEndTime": { "type": "string" },
+        "creatorUid": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "familyId", "title", "type"]
+    },
+    "Setting": {
+      "title": "Setting",
+      "description": "Family settings including the active system mode",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "familyId": { "type": "string" },
+        "systemMode": { "type": "string", "enum": ["daily", "travel", "exam", "vacation"] },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "familyId", "systemMode"]
+    },
+    "Redemption": {
+      "title": "Redemption",
+      "description": "Redemption request submitted by a kid and approved/rejected by parents",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "familyId": { "type": "string" },
+        "rewardId": { "type": "string" },
+        "rewardTitle": { "type": "string" },
+        "starsRequired": { "type": "number" },
+        "childUid": { "type": "string" },
+        "childName": { "type": "string" },
+        "status": { "type": "string", "enum": ["pending", "approved", "rejected"] },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "approvedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["familyId", "rewardId", "rewardTitle", "starsRequired", "childUid", "childName", "status"]
+    },
+    "StarTransaction": {
+      "title": "StarTransaction",
+      "description": "Ledger of additions or deductions to user star points",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "familyId": { "type": "string" },
+        "childUid": { "type": "string" },
+        "childName": { "type": "string" },
+        "amount": { "type": "number" },
+        "type": { "type": "string", "enum": ["increase", "decrease"] },
+        "reason": { "type": "string" },
+        "operatorUid": { "type": "string" },
+        "operatorName": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "familyId", "childUid", "childName", "amount", "type", "reason", "operatorUid", "operatorName"]
+    }
+  },
+  "firestore": {
+    "users/{userId}": {
+      "schema": "User",
+      "description": "User profile records containing names, roles, and current star counts"
+    },
+    "families/{familyId}": {
+      "schema": "Family",
+      "description": "Family groups containing name and administrator info"
+    },
+    "family_members/{memberId}": {
+      "schema": "FamilyMember",
+      "description": "Profiles linked to specific families to track stars and custom names"
+    },
+    "calendar_events/{eventId}": {
+      "schema": "CalendarEvent",
+      "description": "The schedule elements mapped across standard/weekly calendar views"
+    },
+    "tasks/{taskId}": {
+      "schema": "Task",
+      "description": "Daily or custom chores that kids complete for checking and stars"
+    },
+    "rewards/{rewardId}": {
+      "schema": "Reward",
+      "description": "Market items where kids buy or wish with accumulated stars"
+    },
+    "announcements/{announcementId}": {
+      "schema": "Announcement",
+      "description": "Bullettin board posts visible on the main page for announcements"
+    },
+    "favorite_activities/{activityId}": {
+      "schema": "CommonTemplate",
+      "description": "Predefined actions and chores easily prefilled into calendar events or kids tasks"
+    },
+    "settings/{settingId}": {
+      "schema": "Setting",
+      "description": "Active systems preferences, particularly Daily, Travel, Exam, or Vacation parameters"
+    },
+    "redemptions/{redemptionId}": {
+      "schema": "Redemption",
+      "description": "Log of reward redemption petitions sent by children and corresponding states"
+    },
+    "star_transactions/{transactionId}": {
+      "schema": "StarTransaction",
+      "description": "Log of star point adjustments (additions and deductions) done by parents"
+    }
+  }
+}
