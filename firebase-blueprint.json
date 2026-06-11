@@ -116,6 +116,22 @@
       },
       "required": ["id", "familyId", "title", "content", "creatorUid"]
     },
+    "FamilyNote": {
+      "title": "FamilyNote",
+      "description": "Family shared notes and logs of daily events",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "familyId": { "type": "string" },
+        "title": { "type": "string" },
+        "content": { "type": "string" },
+        "date": { "type": "string" },
+        "creatorUid": { "type": "string" },
+        "creatorName": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "familyId", "title", "content", "creatorUid"]
+    },
     "CommonTemplate": {
       "title": "CommonTemplate",
       "description": "Unified templates for calendar activities and chore tasks",
@@ -270,6 +286,10 @@
     "announcements/{announcementId}": {
       "schema": "Announcement",
       "description": "Bullettin board posts visible on the main page for announcements"
+    },
+    "family_notes/{noteId}": {
+      "schema": "FamilyNote",
+      "description": "Daily shared log and notes entries for notes/notebook functions"
     },
     "favorite_activities/{activityId}": {
       "schema": "CommonTemplate",

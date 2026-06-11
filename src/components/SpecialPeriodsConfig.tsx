@@ -420,42 +420,6 @@ export const SpecialPeriodsConfig: React.FC<SpecialPeriodsConfigProps> = ({
               </button>
             </div>
 
-            {/* 2. Exam Study Card */}
-            <div className="bg-[#FFF5D9]/60 border border-[#FFE6A3] rounded-xl px-3 py-2 flex items-center justify-between gap-3 min-h-[60px] transition hover:shadow-xs">
-              <div className="flex items-center gap-2.5 min-w-0">
-                <div className="text-2xl shrink-0">📚</div>
-                <div className="min-w-0">
-                  <h4 className="font-extrabold text-xs text-yellow-950 leading-tight">考試特別衝刺</h4>
-                  <p className="text-[10px] text-amber-805/85 leading-none mt-0.5 truncate">設定學科、目標、家長叮嚀</p>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => handleOpenAddMode(SystemMode.EXAM)}
-                className="py-1.5 px-3 shrink-0 text-[10px] font-black bg-[#DCA21D] hover:bg-[#C28E14] text-white rounded-lg shadow-xs cursor-pointer transition uppercase"
-              >
-                + 建立
-              </button>
-            </div>
-
-            {/* 3. Vacation Camps Card */}
-            <div className="bg-[#F2FFF0]/60 border border-[#D8F3D1] rounded-xl px-3 py-2 flex items-center justify-between gap-3 min-h-[60px] transition hover:shadow-xs">
-              <div className="flex items-center gap-2.5 min-w-0">
-                <div className="text-2xl shrink-0">🏕️</div>
-                <div className="min-w-0">
-                  <h4 className="font-extrabold text-xs text-emerald-950 leading-tight">寒暑假安排</h4>
-                  <p className="text-[10px] text-emerald-800/85 leading-none mt-0.5 truncate">假期打卡作息與學習打卡</p>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => handleOpenAddMode(SystemMode.VACATION)}
-                className="py-1.5 px-3 shrink-0 text-[10px] font-black bg-[#2E7D32] hover:bg-[#206023] text-white rounded-lg shadow-xs cursor-pointer transition uppercase"
-              >
-                + 建立
-              </button>
-            </div>
-
             {/* 4. Custom arrangements Theme Card */}
             <div className="bg-[#EEF2FF]/65 border border-[#CCD6FF] rounded-xl px-3 py-2 flex items-center justify-between gap-3 min-h-[60px] transition hover:shadow-xs">
               <div className="flex items-center gap-2.5 min-w-0">
@@ -897,11 +861,9 @@ export const SpecialPeriodsConfig: React.FC<SpecialPeriodsConfigProps> = ({
               {/* Type Category Selection */}
               <div className="space-y-1">
                 <label className="block font-black text-[#3C332D]">1. 選擇特別期間類別：</label>
-                <div className="grid grid-cols-4 gap-2">
+                <div className="grid grid-cols-2 gap-2">
                   {[
                     { id: SystemMode.TRAVEL, label: "✈ 旅遊計畫", icon: "✈" },
-                    { id: SystemMode.EXAM, label: "📚 考試計畫", icon: "📚" },
-                    { id: SystemMode.VACATION, label: "🏡 假期計畫", icon: "🏡" },
                     { id: SystemMode.CUSTOM, label: "🎨 其它自訂", icon: "🎨" },
                   ].map((opt) => (
                     <button

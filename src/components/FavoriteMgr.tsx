@@ -31,7 +31,7 @@ export default function FavoriteMgr({
 
   // Form states
   const [title, setTitle] = useState("");
-  const [usageType, setUsageType] = useState<"calendar" | "task" | "both">("both");
+  const [usageType, setUsageType] = useState<"calendar" | "task" | "both">("calendar");
   const [isRecurring, setIsRecurring] = useState(false);
   const [repeatDays, setRepeatDays] = useState<number[]>([]);
   const [startDate, setStartDate] = useState(getLocalToday());
@@ -89,7 +89,7 @@ export default function FavoriteMgr({
   const handleOpenAddForm = () => {
     setEditingActivity(null);
     setTitle("");
-    setUsageType("both");
+    setUsageType("calendar");
     setIsRecurring(false);
     setRepeatDays([]);
     setStartDate(getLocalToday());

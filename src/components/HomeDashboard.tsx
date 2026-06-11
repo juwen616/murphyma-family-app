@@ -48,6 +48,7 @@ interface HomeDashboardProps {
   rewards?: Reward[];
   redemptions?: Redemption[];
   onAddAnnouncement: (title: string, content: string) => Promise<void>;
+  onUpdateAnnouncement?: (id: string, title: string, content: string) => Promise<void>;
   onDeleteAnnouncement: (id: string) => Promise<void>;
   onNavigateToEvent?: (eventId: string, date: string) => void;
   onAddEvent?: (eventData: any) => Promise<any>;
@@ -214,6 +215,7 @@ export default function HomeDashboard({
   rewards = [],
   redemptions = [],
   onAddAnnouncement,
+  onUpdateAnnouncement,
   onDeleteAnnouncement,
   onNavigateToEvent,
   onAddEvent,
@@ -229,6 +231,7 @@ export default function HomeDashboard({
   const [newAnnTitle, setNewAnnTitle] = useState("");
   const [newAnnContent, setNewAnnContent] = useState("");
   const [showAddAnnModal, setShowAddAnnModal] = useState(false);
+  const [editingAnnouncement, setEditingAnnouncement] = useState<Announcement | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Quick add event states & handler (used by next 7 days mobile layout)
@@ -1066,9 +1069,20 @@ export default function HomeDashboard({
     if (!newAnnTitle.trim() || !newAnnContent.trim()) return;
     setIsSubmitting(true);
     try {
-      await onAddAnnouncement(newAnnTitle, newAnnContent);
+      if (editingAnnouncement) {
+        if (onUpdateAnnouncement) {
+          await onUpdateAnnouncement(editingAnnouncement.id, newAnnTitle.trim(), newAnnContent.trim());
+          toast.success("✓ 公告修改成功！");
+        } else {
+          toast.error("❌ 系統不支援修改公告。");
+        }
+      } else {
+        await onAddAnnouncement(newAnnTitle, newAnnContent);
+        toast.success("🎉 公告發布成功！");
+      }
       setNewAnnTitle("");
       setNewAnnContent("");
+      setEditingAnnouncement(null);
       setShowAddAnnModal(false);
     } catch (err) {
       console.error(err);
@@ -1963,9 +1977,14 @@ export default function HomeDashboard({
                 <h3 className="text-sm font-black text-[#3C332D]">家裡公告</h3>
                 {isAnnouncementExpanded ? <ChevronUp className="h-4 w-4 text-gray-400" /> : <ChevronDown className="h-4 w-4 text-gray-400" />}
               </div>
-              {(currentUser.role === UserRole.ADMIN || currentUser.role === UserRole.PARENT) && (
+              {isParent && (
                 <button
-                  onClick={() => setShowAddAnnModal(true)}
+                  onClick={() => {
+                    setEditingAnnouncement(null);
+                    setNewAnnTitle("");
+                    setNewAnnContent("");
+                    setShowAddAnnModal(true);
+                  }}
                   className="flex items-center gap-1 px-2.5 py-1 text-[10px] font-bold text-[#5B7283] bg-[#EAF0EB] rounded-lg hover:bg-[#DEE7E0] transition cursor-pointer"
                 >
                   <Plus className="h-3 w-3" />
@@ -1988,16 +2007,34 @@ export default function HomeDashboard({
                       key={ann.id}
                       className="relative bg-[#FAF8F5] p-3.5 rounded-xl border border-[#EFEAE2] transition"
                     >
-                    {(currentUser.role === UserRole.ADMIN || currentUser.role === UserRole.PARENT) && (
-                      <button
-                        onClick={() => onDeleteAnnouncement(ann.id)}
-                        className="absolute right-2.5 top-2.5 text-gray-400 hover:text-red-500 p-0.5 transition cursor-pointer"
-                        title="刪除"
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </button>
+                    {isParent && (
+                      <div className="absolute right-2.5 top-2 flex items-center gap-1 z-10">
+                        <button
+                          onClick={() => {
+                            setEditingAnnouncement(ann);
+                            setNewAnnTitle(ann.title);
+                            setNewAnnContent(ann.content);
+                            setShowAddAnnModal(true);
+                          }}
+                          className="p-1 text-gray-400 hover:text-[#7C6354] hover:bg-gray-100 rounded-lg cursor-pointer transition"
+                          title="修改公告"
+                        >
+                          <Edit3 className="h-3.5 w-3.5" />
+                        </button>
+                        <button
+                          onClick={() => {
+                            if (confirm("您確認要刪除此公告項目嗎？")) {
+                              onDeleteAnnouncement(ann.id);
+                            }
+                          }}
+                          className="p-1 text-gray-400 hover:text-rose-500 hover:bg-rose-50 rounded-lg cursor-pointer transition"
+                          title="刪除"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
                     )}
-                    <h4 className="font-bold text-[#3C332D] text-xs pr-6 mb-1 flex items-center gap-1">
+                    <h4 className="font-bold text-[#3C332D] text-xs pr-14 mb-1 flex items-center gap-1">
                       📌 {ann.title}
                     </h4>
                     <p className="text-[11px] text-gray-650 leading-relaxed font-semibold">
@@ -2330,9 +2367,9 @@ export default function HomeDashboard({
                   ))}
                 </div>
               )}
-              </div>
-              </div>
-            )}
+            </div>
+          </div>
+          )}
           </section>
 
           {/* 7. 🎉 最近完成任務 (Approved tasks within last 3 days) */}
@@ -2364,124 +2401,82 @@ export default function HomeDashboard({
               ) : (
                 <div className="space-y-3">
                   {recentAchievements.map((t) => {
-                  const assignee = familyMembers.find((m) => m.uid === t.assignedTo);
-                  
-                  // Format approvedDate visually
-                  let dateStr = "近期";
-                  if (t.approvedAt?.seconds) {
-                    const d = new Date(t.approvedAt.seconds * 1000);
-                    const mm = String(d.getMonth() + 1).padStart(2, "0");
-                    const dd = String(d.getDate()).padStart(2, "0");
-                    dateStr = `${mm}/${dd}`;
-                  } else if (t.approvedAt instanceof Date) {
-                    const mm = String(t.approvedAt.getMonth() + 1).padStart(2, "0");
-                    const dd = String(t.approvedAt.getDate()).padStart(2, "0");
-                    dateStr = `${mm}/${dd}`;
-                  }
+                    const assignee = familyMembers.find((m) => m.uid === t.assignedTo);
+                    
+                    // Format approvedDate visually
+                    let dateStr = "近期";
+                    if (t.approvedAt?.seconds) {
+                      const d = new Date(t.approvedAt.seconds * 1000);
+                      const mm = String(d.getMonth() + 1).padStart(2, "0");
+                      const dd = String(d.getDate()).padStart(2, "0");
+                      dateStr = `${mm}/${dd}`;
+                    } else if (t.approvedAt instanceof Date) {
+                      const mm = String(t.approvedAt.getMonth() + 1).padStart(2, "0");
+                      const dd = String(t.approvedAt.getDate()).padStart(2, "0");
+                      dateStr = `${mm}/${dd}`;
+                    }
 
-                  return (
-                    <div
-                      key={t.id}
-                      className="flex justify-between items-start p-3 bg-emerald-50/35 border border-emerald-100/50 rounded-2xl"
-                    >
-                      <div className="min-w-0">
-                        <h4 className="font-extrabold text-xs text-gray-800 break-all flex items-center gap-1">
-                          <CheckCircle className="h-3.5 w-3.5 text-emerald-500 fill-emerald-100 flex-shrink-0" />
-                          <span>{t.title}</span>
-                        </h4>
-                        <p className="text-[10px] text-gray-500 mt-1 font-bold pl-4.5">
-                          完成者: <strong className="text-gray-700">{assignee?.displayName || "小孩"}</strong> (於 {dateStr} 審核通過)
-                        </p>
+                    return (
+                      <div
+                        key={t.id}
+                        className="flex justify-between items-start p-3 bg-emerald-50/35 border border-emerald-100/50 rounded-2xl"
+                      >
+                        <div className="min-w-0">
+                          <h4 className="font-extrabold text-xs text-gray-800 break-all flex items-center gap-1">
+                            <CheckCircle className="h-3.5 w-3.5 text-emerald-500 fill-emerald-100 flex-shrink-0" />
+                            <span>{t.title}</span>
+                          </h4>
+                          <p className="text-[10px] text-gray-500 mt-1 font-bold pl-4.5">
+                            完成者: <strong className="text-gray-700">{assignee?.displayName || "小孩"}</strong> (於 {dateStr} 審核通過)
+                          </p>
+                        </div>
+                        <span className="flex-shrink-0 text-[10px] font-black text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-lg font-mono">
+                          +{t.starsReward}★
+                        </span>
                       </div>
-                      <span className="flex-shrink-0 text-[10px] font-black text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-lg font-mono">
-                        +{t.starsReward}★
-                      </span>
-                    </div>
-                  );
-                })}
-              </div>
-            ))}
+                    );
+                  })}
+                </div>
+              )
+            )}
           </section>
 
         </div>
       </div>
+      </div> {/* Closes desktop layout container */}
 
-      {/* Add Announcement Modal */}
-      {showAddAnnModal && (
-        <div className="fixed inset-0 bg-[#2D2926]/40 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-2xl border border-[#E5E1DA] p-6 max-w-md w-full shadow-xl">
-            <h3 className="text-[#2D2926] font-extrabold mb-4 flex items-center gap-2 whitespace-nowrap">
-              <FileText className="h-5 w-5 text-[#4A6076]" />
-              發佈新家庭公告通知
-            </h3>
-            <form onSubmit={handleCreateAnnouncement} className="space-y-4">
-              <div>
-                <label className="block text-xs font-bold text-gray-500 mb-1">公告標題</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="請輸入主標題..."
-                  value={newAnnTitle}
-                  onChange={(e) => setNewAnnTitle(e.target.value)}
-                  className="w-full text-sm border border-[#EFEAE2] rounded-lg px-3.5 py-2 bg-[#FAF8F5] focus:outline-none"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-bold text-gray-500 mb-1">公告詳細項目與說明</label>
-                <textarea
-                  required
-                  rows={4}
-                  placeholder="請輸入公告內容描述..."
-                  value={newAnnContent}
-                  onChange={(e) => setNewAnnContent(e.target.value)}
-                  className="w-full text-sm border border-[#EFEAE2] rounded-lg px-3.5 py-2 bg-[#FAF8F5] focus:outline-none resize-none"
-                />
-              </div>
-              <div className="flex justify-end gap-2.5 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setShowAddAnnModal(false)}
-                  className="px-4 py-2 text-xs font-bold text-[#666] hover:bg-gray-50 border border-[#EFEAE2] rounded-lg transition"
-                >
-                  取消
-                </button>
-                <button
-                  type="submit"
-                  disabled={isSubmitting}
-                  className="px-4 py-2 text-xs font-black text-white bg-[#5B7283] hover:bg-[#4E6170] rounded-lg shadow-sm transition disabled:opacity-50 cursor-pointer"
-                >
-                  {isSubmitting ? "發佈中..." : "確認發佈"}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
+      {/* Modals are moved to the root level below to prevent active-state responsive hiding */}
 
       {/* Mode Schedule Scheduler form Modal */}
       {showModeModal && (
-        <div className="fixed inset-0 bg-[#2D2926]/40 backdrop-blur-sm flex items-center justify-center p-4 z-50 overflow-y-auto">
-          <div className="bg-white rounded-2xl border border-[#E5E1DA] p-6 max-w-lg w-full shadow-2xl relative my-8 animate-in fade-in zoom-in-95 duration-150">
-            <button
-              onClick={() => setShowModeModal(false)}
-              className="absolute top-4 right-4 p-1.5 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition cursor-pointer"
-            >
-              <X className="h-4 w-4" />
-            </button>
-
-            <div className="flex items-center gap-2 border-b border-gray-100 pb-3 mb-4">
-              <div className="p-2 bg-indigo-50 text-indigo-600 rounded-lg">
-                <Calendar className="h-5 w-5" />
+        <div className="fixed inset-0 bg-[#2D2926]/40 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-in fade-in duration-200">
+          <div className="bg-white rounded-[24px] border border-[#E5E1DA] w-[92%] max-w-lg max-h-[80vh] flex flex-col overflow-hidden shadow-2xl relative font-sans text-xs animate-in fade-in zoom-in-95 duration-150">
+            {/* Header - Fixed */}
+            <div className="p-4 border-b border-gray-100 flex items-center justify-between bg-[#FFFDF8] shrink-0">
+              <div className="flex items-center gap-2">
+                <div className="p-2 bg-indigo-50 text-indigo-600 rounded-lg">
+                  <Calendar className="h-4 w-4" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-black text-[#2D2926]">
+                    {editingModeConfig ? "🔧 編輯特殊期間設定" : "✨ 新建特殊期間規劃"}
+                  </h3>
+                  <p className="text-[9px] text-gray-400 mt-0.5">預約特殊期間，與對應做作息提示</p>
+                </div>
               </div>
-              <div>
-                <h3 className="text-sm font-black text-[#2D2926] font-sans">
-                  {editingModeConfig ? "🔧 編輯特殊期間設定" : "✨ 新建特殊期間規劃"}
-                </h3>
-                <p className="text-[10px] text-gray-405 mt-0.5">預約特殊期間，系統將自動套用色彩與對應作息小提示</p>
-              </div>
+              <button
+                type="button"
+                onClick={() => setShowModeModal(false)}
+                className="p-1.5 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition cursor-pointer"
+              >
+                <X className="h-4 w-4" />
+              </button>
             </div>
 
-            <form onSubmit={handleSaveModeSubmit} className="space-y-4 font-sans text-xs">
+            {/* Form wrapping flexible content & sticky footer */}
+            <form onSubmit={handleSaveModeSubmit} className="flex-1 flex flex-col overflow-hidden">
+              {/* Content area - scrollable */}
+              <div className="p-5 overflow-y-auto flex-1 space-y-4 text-xs font-sans">
               {/* Type select */}
               <div className="space-y-1">
                 <label className="block font-black text-[#3C332D]">1. 選擇特殊期間類別：</label>
@@ -2902,12 +2897,14 @@ export default function HomeDashboard({
                 )}
               </div>
 
-              {/* Submit button footer */}
-              <div className="pt-3.5 border-t border-gray-100 flex justify-end gap-2.5">
+              </div>
+
+              {/* Fixed Footer */}
+              <div className="p-4 border-t border-gray-100 bg-[#FFFDF8] flex justify-end gap-2.5 shrink-0">
                 <button
                   type="button"
                   onClick={() => setShowModeModal(false)}
-                  className="px-4 py-2 text-xs font-bold text-gray-500 hover:bg-gray-50 border border-gray-200 rounded-xl transition cursor-pointer"
+                  className="px-4 py-2 text-xs font-bold text-gray-500 border border-gray-200 rounded-xl hover:bg-gray-50 transition cursor-pointer"
                 >
                   取消
                 </button>
@@ -2971,7 +2968,6 @@ export default function HomeDashboard({
           </div>
         </div>
       )}
-      </div>
 
       {/* 📱 MOBILE MOTHER PORTAL HOME VIEW (block md:hidden) */}
       <div className="block md:hidden space-y-4 pt-1 text-[#3C332D]">
@@ -2997,8 +2993,73 @@ export default function HomeDashboard({
             </div>
           );
         })()}
+        <div className="bg-white border border-[#EFEAE2] rounded-2xl p-3.5 space-y-2.5 shadow-xs">
+          <div className="flex items-center justify-between">
+            <h3 className="text-xs font-black flex items-center gap-1">
+              <span>📢</span> 家庭公布欄
+            </h3>
+            <div className="flex items-center gap-1.5">
+              {isParent && (
+                <button
+                  onClick={() => {
+                    setEditingAnnouncement(null);
+                    setNewAnnTitle("");
+                    setNewAnnContent("");
+                    setShowAddAnnModal(true);
+                  }}
+                  className="text-[10.5px] font-bold text-white bg-rose-500 hover:bg-rose-605 px-2 py-0.5 rounded-lg flex items-center gap-0.5 cursor-pointer transition-colors"
+                >
+                  + 新增公告
+                </button>
+              )}
+              <button 
+                onClick={() => setShowAllAnnouncements(true)}
+                className="text-[10.5px] font-bold text-[#7C6354] bg-[#F5EBE6] px-2 py-0.5 rounded-lg flex items-center gap-0.5 cursor-pointer"
+              >
+                所有公告 <ChevronRight className="h-3 w-3 stroke-[2]" />
+              </button>
+            </div>
+          </div>
 
-        {/* ① 今日重點事項 */}
+          {announcements.length === 0 ? (
+            <div className="text-center py-4 bg-[#FCFBF9] border border-dashed border-[#EFEAE2] rounded-xl">
+              <p className="text-[10.5px] text-gray-400 font-bold">目前無公佈事項</p>
+            </div>
+          ) : (
+            <div className="space-y-1.5">
+              {announcements.slice(0, 3).map((ann) => {
+                const dateStr = ann.createdAt?.seconds
+                  ? new Date(ann.createdAt.seconds * 1000).toLocaleDateString("zh-TW", { month: "numeric", day: "numeric" })
+                  : "剛剛";
+                return (
+                  <div
+                    key={ann.id}
+                    onClick={() => setSelectedAnnouncement(ann)}
+                    className="p-2.5 bg-[#FCFBF9] hover:bg-[#F5EBE6]/30 border border-[#F2ECE0] rounded-xl flex items-center justify-between gap-3 transition-colors cursor-pointer"
+                  >
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="text-[9.5px] font-black bg-[#EAA59E]/10 border border-[#EAA59E]/30 text-rose-700 px-1 py-0.2 rounded-md">
+                          {ann.creatorName}
+                        </span>
+                        <span className="text-[8.5px] font-mono text-gray-400 font-bold">{dateStr}</span>
+                      </div>
+                      <h4 className="text-xs font-bold text-[#3C332D] truncate mt-1">
+                        📢 {ann.title}
+                      </h4>
+                      <p className="text-[10px] text-gray-450 truncate whitespace-pre-wrap mt-0.5">
+                        {ann.content}
+                      </p>
+                    </div>
+                    <ChevronRight className="h-3.5 w-3.5 text-gray-400 shrink-0" />
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* ② 今日重點事項 */}
         <div className="bg-white border border-[#EFEAE2] rounded-2xl p-3.5 space-y-2.5 shadow-xs">
           <div className="flex items-center justify-between">
             <h3 className="text-xs font-black flex items-center gap-1">
@@ -3067,7 +3128,7 @@ export default function HomeDashboard({
           )}
         </div>
 
-        {/* ② 未來5天行程 */}
+        {/* ③ 未來5天行程 */}
         <div className="bg-white border border-[#EFEAE2] rounded-2xl p-3.5 space-y-3 shadow-xs">
           <div className="flex items-center justify-between">
             <h3 className="text-xs font-black flex items-center gap-1">
@@ -3169,58 +3230,6 @@ export default function HomeDashboard({
           </button>
         </div>
 
-        {/* ③ 家庭公布欄 */}
-        <div className="bg-white border border-[#EFEAE2] rounded-2xl p-3.5 space-y-2.5 shadow-xs">
-          <div className="flex items-center justify-between">
-            <h3 className="text-xs font-black flex items-center gap-1">
-              <span>📢</span> 家庭公布欄
-            </h3>
-            <button 
-              onClick={() => setShowAllAnnouncements(true)}
-              className="text-[10.5px] font-bold text-[#7C6354] bg-[#F5EBE6] px-2 py-0.5 rounded-lg flex items-center gap-0.5 cursor-pointer"
-            >
-              所有公告 <ChevronRight className="h-3 w-3 stroke-[2]" />
-            </button>
-          </div>
-
-          {announcements.length === 0 ? (
-            <div className="text-center py-4 bg-[#FCFBF9] border border-dashed border-[#EFEAE2] rounded-xl">
-              <p className="text-[10.5px] text-gray-400 font-bold">目前無公佈事項</p>
-            </div>
-          ) : (
-            <div className="space-y-1.5">
-              {announcements.slice(0, 3).map((ann) => {
-                const dateStr = ann.createdAt?.seconds
-                  ? new Date(ann.createdAt.seconds * 1000).toLocaleDateString("zh-TW", { month: "numeric", day: "numeric" })
-                  : "剛剛";
-                return (
-                  <div
-                    key={ann.id}
-                    onClick={() => setSelectedAnnouncement(ann)}
-                    className="p-2.5 bg-[#FCFBF9] hover:bg-[#F5EBE6]/30 border border-[#F2ECE0] rounded-xl flex items-center justify-between gap-3 transition-colors cursor-pointer"
-                  >
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-1.5 flex-wrap">
-                        <span className="text-[9.5px] font-black bg-[#EAA59E]/10 border border-[#EAA59E]/30 text-rose-700 px-1 py-0.2 rounded-md">
-                          {ann.creatorName}
-                        </span>
-                        <span className="text-[8.5px] font-mono text-gray-400 font-bold">{dateStr}</span>
-                      </div>
-                      <h4 className="text-xs font-bold text-[#3C332D] truncate mt-1">
-                        📢 {ann.title}
-                      </h4>
-                      <p className="text-[10px] text-gray-450 truncate whitespace-pre-wrap mt-0.5">
-                        {ann.content}
-                      </p>
-                    </div>
-                    <ChevronRight className="h-3.5 w-3.5 text-gray-400 shrink-0" />
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
-
         {/* ④ 小孩星星與禮物進度 */}
         <div className="bg-white border border-[#EFEAE2] rounded-2xl p-3.5 space-y-2.5 shadow-xs">
           <div className="flex items-center justify-between pb-1 boundary font-sans">
@@ -3243,7 +3252,7 @@ export default function HomeDashboard({
             }
             if (kidsList.length === 0) {
               return (
-                <div className="bg-[#FFFDF9] border border-[#F5EBE6] rounded-xl p-2.5 text-center text-[10px] text-gray-450 font-bold">
+                <div className="bg-[#FFFDF9] border border-[#F5EBE6] rounded-xl p-2.5 text-center text-[10px] text-gray-455 font-bold">
                   目前暫無設定小孩成員帳號喔
                 </div>
               );
@@ -3275,9 +3284,9 @@ export default function HomeDashboard({
                         </div>
                         <div className="min-w-0 flex-1 leading-tight">
                           <h4 className="font-black text-[10.5px] text-[#3C332D] truncate">
-                            ⭐ {kid.displayName}
+                            {kid.displayName}
                           </h4>
-                          <span className="text-[7.5px] text-gray-400 font-bold">目前星星</span>
+                          <span className="text-[7.5px] text-gray-400 font-bold font-sans">目前星星</span>
                         </div>
                       </div>
 
@@ -3363,7 +3372,7 @@ export default function HomeDashboard({
           })()}
         </div>
 
-        {/* 🔀 快速功能排定入口 */}
+        {/* ⑤ 快速功能排定入口 */}
         <div className="bg-white border border-[#EFEAE2] rounded-2xl p-3.5 space-y-2 shadow-xs">
           <div className="border-b border-rose-50/20 pb-1 flex items-center justify-between">
             <h3 className="text-xs font-black flex items-center gap-1 text-gray-650">
@@ -3480,16 +3489,32 @@ export default function HomeDashboard({
                       className="p-3 bg-[#FCFBF9] border border-[#EFEAE2] rounded-xl relative space-y-1"
                     >
                       {isParent && (
-                        <button
-                          onClick={() => {
-                            if (confirm("您確認要刪除此公告項目嗎？")) {
-                              onDeleteAnnouncement(ann.id);
-                            }
-                          }}
-                          className="absolute right-2 top-2 p-1 text-gray-400 hover:text-rose-500 hover:bg-rose-50 rounded-lg cursor-pointer transition"
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </button>
+                        <div className="absolute right-2 top-2 flex items-center gap-1 z-10">
+                          <button
+                            onClick={() => {
+                              setEditingAnnouncement(ann);
+                              setNewAnnTitle(ann.title);
+                              setNewAnnContent(ann.content);
+                              setShowAllAnnouncements(false);
+                              setShowAddAnnModal(true);
+                            }}
+                            className="p-1 text-gray-400 hover:text-[#7C6354] hover:bg-gray-100 rounded-lg cursor-pointer transition"
+                            title="修改公告"
+                          >
+                            <Edit3 className="h-3.5 w-3.5" />
+                          </button>
+                          <button
+                            onClick={() => {
+                              if (confirm("您確認要刪除此公告項目嗎？")) {
+                                onDeleteAnnouncement(ann.id);
+                              }
+                            }}
+                            className="p-1 text-gray-400 hover:text-rose-500 hover:bg-[#FEF2F2] rounded-lg cursor-pointer transition"
+                            title="刪除公告"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
                       )}
                       
                       <div className="flex items-center gap-1.5 flex-wrap">
@@ -3519,6 +3544,102 @@ export default function HomeDashboard({
                 關閉列表
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* 🔮 2b. ADD / EDIT ANNOUNCEMENT POPUP FORM MODAL */}
+      {showAddAnnModal && (
+        <div className="fixed inset-0 bg-[#3C332D]/40 backdrop-blur-xs z-50 flex items-center justify-center p-4 animate-in fade-in duration-250">
+          <div className="bg-white rounded-[24px] border border-[#EFEAE2] p-6 w-full max-w-sm shadow-2xl relative space-y-4 font-sans text-xs">
+            {/* Modal Header */}
+            <div className="flex items-center gap-2 pb-3 border-b border-[#F5F2EB]">
+              <div className="p-2 bg-[#FAF8F5] border border-[#EFEAE2] rounded-xl text-lg">
+                📢
+              </div>
+              <div>
+                <h3 className="text-sm font-black text-[#3C332D]">
+                  {editingAnnouncement ? "🔧 編輯公告設定" : "✨ 發佈全新家庭公告"}
+                </h3>
+                <p className="text-[10px] text-gray-400 font-bold mt-0.5">
+                  {editingAnnouncement ? "修改目前已發佈的公告內容" : "向所有家庭成員發布重要公告通知"}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setNewAnnTitle("");
+                  setNewAnnContent("");
+                  setEditingAnnouncement(null);
+                  setShowAddAnnModal(false);
+                }}
+                className="absolute right-4 top-4 p-1 rounded-full bg-gray-50 hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition cursor-pointer"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            {/* Modal Input Form */}
+            <form onSubmit={handleCreateAnnouncement} className="space-y-4">
+              <div className="space-y-1">
+                <label className="text-[10.5px] font-black text-gray-500 block">
+                  公告標題： <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={newAnnTitle}
+                  onChange={(e) => setNewAnnTitle(e.target.value)}
+                  placeholder="例如：今日客廳大掃除、週末家族露營"
+                  className="w-full bg-[#FAF8F5] border border-[#EFEAE2] placeholder-gray-300 rounded-xl px-3.5 py-2.5 text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-rose-450 focus:bg-white transition"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-[10.5px] font-black text-gray-500 block">
+                  公告詳細內容： <span className="text-red-500">*</span>
+                </label>
+                <textarea
+                  required
+                  rows={4}
+                  value={newAnnContent}
+                  onChange={(e) => setNewAnnContent(e.target.value)}
+                  placeholder="請在此輸入公告的詳細內容與注意事項..."
+                  className="w-full bg-[#FAF8F5] border border-[#EFEAE2] placeholder-gray-300 rounded-xl px-3.5 py-2.5 text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-rose-450 focus:bg-white transition resize-none leading-relaxed"
+                />
+              </div>
+
+              {/* Action Buttons */}
+              <div className="pt-3 border-t border-[#F5F2EB] flex justify-end gap-2 text-xs font-black">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setNewAnnTitle("");
+                    setNewAnnContent("");
+                    setEditingAnnouncement(null);
+                    setShowAddAnnModal(false);
+                  }}
+                  className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-600 rounded-xl cursor-pointer transition"
+                  disabled={isSubmitting}
+                >
+                  取消
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 bg-[#7C6354] hover:bg-[#685245] text-white rounded-xl shadow-md cursor-pointer transition flex items-center gap-1.5"
+                  disabled={isSubmitting}
+                >
+                  {isSubmitting ? (
+                    <>
+                      <div className="animate-spin text-white h-3.5 w-3.5 border-2 border-white border-t-transparent rounded-full" />
+                      <span>正在發布中...</span>
+                    </>
+                  ) : (
+                    <span>{editingAnnouncement ? "確認修改" : "發佈公告"}</span>
+                  )}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

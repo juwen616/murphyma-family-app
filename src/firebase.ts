@@ -11,17 +11,35 @@ import firebaseConfig from "../firebase-applet-config.json";
 const app = initializeApp(firebaseConfig);
 
 let databaseInstance;
+let usePersistence = false;
+
 try {
-  databaseInstance = initializeFirestore(app, {
-    localCache: persistentLocalCache({
-      tabManager: persistentMultipleTabManager()
-    })
-  }, firebaseConfig.firestoreDatabaseId);
+  // Check if we are inside an iframe or if IndexedDB is nested/sandboxed
+  const isIFrame = window.self !== window.top;
+  if (!isIFrame && typeof window.indexedDB !== "undefined") {
+    usePersistence = true;
+  }
 } catch (e) {
-  console.warn(
-    "Firestore persistent local cache failed to initialize (usually due to iframe third-party sandbox restrictions). Falling back to standard memory/default storage.",
-    e
-  );
+  // Cross-origin frame or sandboxed environment
+  usePersistence = false;
+}
+
+if (usePersistence) {
+  try {
+    databaseInstance = initializeFirestore(app, {
+      localCache: persistentLocalCache({
+        tabManager: persistentMultipleTabManager()
+      })
+    }, firebaseConfig.firestoreDatabaseId);
+  } catch (e) {
+    console.warn(
+      "Firestore persistent local cache failed to initialize. Falling back to standard memory/default storage.",
+      e
+    );
+    databaseInstance = getFirestore(app, firebaseConfig.firestoreDatabaseId);
+  }
+} else {
+  console.log("IFrame or sandboxed context detected. Disabling persistent local cache to ensure reliable connection.");
   databaseInstance = getFirestore(app, firebaseConfig.firestoreDatabaseId);
 }
 

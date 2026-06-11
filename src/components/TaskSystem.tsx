@@ -1090,18 +1090,18 @@ export default function TaskSystem({
       {/* Editor Modal for Adding/Editing Task */}
       {showAddForm && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-[24px] border border-[#DEEFE5] p-8 max-w-md w-full shadow-2xl relative font-sans animate-in fade-in duration-150">
+          <div className="bg-white rounded-[24px] border border-[#DEEFE5] p-6 md:p-8 max-w-md w-full max-h-[90vh] overflow-y-auto scrollbar-thin shadow-2xl relative font-sans animate-in fade-in duration-150">
             <button
               onClick={() => {
                 setShowAddForm(false);
                 setEditingTask(null);
               }}
-              className="absolute right-5 top-5 text-gray-400 hover:text-gray-700 transition cursor-pointer animate-none"
+              className="absolute right-5 top-5 text-gray-400 hover:text-gray-700 transition cursor-pointer animate-none z-10"
             >
               <X className="h-6 w-6" />
             </button>
 
-            <h3 className="text-xl font-extrabold text-[#32453A] mb-6 flex items-center gap-2">
+            <h3 className="text-xl font-extrabold text-[#32453A] mb-4 md:mb-6 flex items-center gap-2 shrink-0">
               <Plus className="h-6 w-6 text-emerald-600" />
               {editingTask ? "編輯事項任務" : "指派全新項目"}
             </h3>

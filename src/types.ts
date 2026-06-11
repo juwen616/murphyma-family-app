@@ -142,6 +142,17 @@ export interface Announcement {
   createdAt: any;
 }
 
+export interface FamilyNote {
+  id: string;
+  familyId: string;
+  title: string;
+  content: string;
+  date: string; // YYYY-MM-DD format
+  creatorUid: string;
+  creatorName: string;
+  createdAt: any;
+}
+
 export interface CommonTemplate {
   id: string;
   familyId: string;

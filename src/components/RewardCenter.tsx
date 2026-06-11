@@ -998,28 +998,28 @@ export default function RewardCenter({
                         </div>
 
                         <div>
-                          <h4 className="font-extrabold text-[#3C332D] text-md leading-tight break-all">
-                            ✨ {item.title}
+                          <h4 className="font-extrabold text-[#2C231E] text-base leading-snug break-all tracking-tight flex items-center gap-1.5">
+                            🧸 {item.title}
                           </h4>
                           {item.description && (
-                            <p className="text-[11px] text-gray-450 font-bold mt-1 line-clamp-2 leading-relaxed">
+                            <p className="text-[11px] text-gray-500 font-medium mt-1 line-clamp-2 leading-relaxed">
                               {item.description}
                             </p>
                           )}
                         </div>
 
                         {item.note && (
-                          <div className="bg-[#FAF9F5] border-l-2 border-amber-450 p-2 rounded-r-lg text-[10px] font-bold text-gray-650">
+                          <div className="bg-[#FAF9F5] border-l-2 border-amber-405 p-2 rounded-r-lg text-[10px] font-bold text-gray-650">
                             <span className="text-amber-900 block text-[9px] uppercase font-black">爸媽備註 / 額外任務規定：</span>
                             <p className="italic mt-0.5 whitespace-pre-wrap">{item.note}</p>
                           </div>
                         )}
 
                         {/* Progress slider bar */}
-                        <div className="space-y-1 border-t border-gray-100 pt-2.5 font-sans select-none">
-                          <div className="flex justify-between items-center text-[10px] font-bold text-gray-400">
-                            <span className="text-amber-900 bg-[#FFF8E8] border border-[#F4E2A8]/50 px-1.5 py-0.5 rounded font-black">
-                              單價: {item.starsCost} ★
+                        <div className="space-y-1.5 border-t border-gray-100/70 pt-3 font-sans select-none">
+                          <div className="flex justify-between items-center text-[10px] font-bold text-gray-450">
+                            <span className="text-amber-800 bg-[#FFF5DC] border border-[#F5DEAB] px-2.5 py-1 rounded-full font-black text-[10px] shadow-3xs flex items-center gap-1">
+                              ⭐ 價格: <span className="text-amber-900 text-xs font-mono font-black">{item.starsCost}</span> 顆星
                             </span>
                             <span>
                               {deficit === 0 ? (
@@ -1029,9 +1029,9 @@ export default function RewardCenter({
                               )}
                             </span>
                           </div>
-                          <div className="w-full bg-gray-100 rounded-full h-1.5 overflow-hidden">
+                          <div className="w-full bg-[#FAF5EF] border border-[#E9E2DB]/40 rounded-full h-2.5 relative overflow-hidden shadow-inner">
                             <div
-                              className={`h-full rounded-full transition-all duration-300 ${deficit === 0 ? "bg-emerald-500" : "bg-[#EAA59E]"}`}
+                              className={`h-full rounded-full transition-all duration-300 ${deficit === 0 ? "bg-gradient-to-r from-emerald-400 to-teal-400" : "bg-gradient-to-r from-[#FBCFE8] to-[#F472B6]"}`}
                               style={{ width: `${pct}%` }}
                             />
                           </div>
@@ -1086,26 +1086,26 @@ export default function RewardCenter({
                     >
                       <div className="flex-1 min-w-0 flex flex-col justify-between">
                         <div>
-                          <h4 className="font-extrabold text-[#3C332D] text-xs leading-snug truncate">
-                            {item.title}
+                          <h4 className="font-extrabold text-[#2C231E] text-xs leading-snug truncate flex items-center gap-1">
+                            🧸 {item.title}
                           </h4>
-                          <p className="text-[10px] text-gray-400 mt-0.5 font-bold">
-                            需要: <span className="text-amber-805 font-mono font-black">{item.starsCost} 課星星</span>
+                          <p className="text-[10px] text-[#A27B5C] mt-0.5 font-bold flex items-center gap-0.5">
+                            🌟 需要：<span className="bg-[#FFF5DC] border border-[#F5DEAB] px-1.5 py-0.2 rounded-full text-amber-950 font-mono font-black text-[10px]">{item.starsCost} ★</span>
                           </p>
                         </div>
 
                         {/* Progress Indicator */}
-                        <div className="mt-1 font-sans">
-                          <div className="flex justify-between text-[9px] font-bold text-gray-400 mb-0.5">
+                        <div className="mt-1.5 font-sans">
+                          <div className="flex justify-between text-[9px] font-bold text-gray-500 mb-0.5">
                             {deficit === 0 ? (
-                              <span className="text-emerald-600 font-extrabold">🎉 已達標可換</span>
+                              <span className="text-emerald-600 font-extrabold">🎉 已達標可兌換</span>
                             ) : (
                               <span>進度:{pct}% | 差 {deficit}★</span>
                             )}
                           </div>
-                          <div className="w-full bg-gray-100 rounded-full h-1 relative overflow-hidden">
+                          <div className="w-full bg-[#FAF5EF] border border-[#E9E2DB]/40 rounded-full h-1.5 relative overflow-hidden shadow-inner">
                             <div
-                              className={`h-full rounded-full transition-all duration-300 ${deficit === 0 ? "bg-emerald-500" : "bg-rose-400"}`}
+                              className={`h-full rounded-full transition-all duration-300 ${deficit === 0 ? "bg-gradient-to-r from-emerald-400 to-teal-400" : "bg-gradient-to-r from-[#FBCFE8] to-[#F472B6]"}`}
                               style={{ width: `${pct}%` }}
                             />
                           </div>

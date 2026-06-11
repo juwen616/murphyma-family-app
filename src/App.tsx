@@ -40,6 +40,7 @@ import {
   Reward,
   RewardStatus,
   Announcement,
+  FamilyNote,
   CommonTemplate,
   FamilySetting,
   Redemption,
@@ -53,6 +54,7 @@ import CalendarView from "./components/CalendarView";
 import TaskSystem from "./components/TaskSystem";
 import RewardCenter from "./components/RewardCenter";
 import FavoriteMgr from "./components/FavoriteMgr";
+import FamilyNotesView from "./components/FamilyNotesView";
 import { canManageFamily } from "./utils/permissionUtils";
 import MembersCenter from "./components/MembersCenter";
 import { SpecialPeriodsConfig } from "./components/SpecialPeriodsConfig";
@@ -76,6 +78,7 @@ import {
   Menu,
   Bell,
   Settings,
+  BookOpen,
 } from "lucide-react";
 
 export default function App() {
@@ -99,7 +102,7 @@ export default function App() {
   const [pendingRequests, setPendingRequests] = useState<any[]>([]);
 
   // Navigation page state
-  const [activePage, setActivePage] = useState<"home" | "calendar" | "tasks" | "rewards" | "favorites" | "members" | "special-periods" | "admin-center" | "admin" | "more">("home");
+  const [activePage, setActivePage] = useState<"home" | "calendar" | "tasks" | "rewards" | "favorites" | "members" | "special-periods" | "admin-center" | "admin" | "notes" | "more">("home");
   const [calendarDeepLink, setCalendarDeepLink] = useState<{ eventId: string; date: string } | null>(null);
   const [showMobileMoreMenu, setShowMobileMoreMenu] = useState(false);
   const [activeMobileSection, setActiveMobileSection] = useState<string>("home");
@@ -113,6 +116,7 @@ export default function App() {
   const [developerModeActive, setDeveloperModeActive] = useState(false);
   const [simulatedRole, setSimulatedRole] = useState<UserRole | null>(null);
   const [simulatedMemberId, setSimulatedMemberId] = useState<string | null>(null);
+  const [simulatedFamilyId, setSimulatedFamilyId] = useState<string | null>(null);
   const [showDevPanel, setShowDevPanel] = useState(false);
   const [showIdentityModal, setShowIdentityModal] = useState(false);
   const [devModalTab, setDevModalTab] = useState<"roles" | "metrics" | "logs">("roles");
@@ -161,6 +165,7 @@ export default function App() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [rewards, setRewards] = useState<Reward[]>([]);
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
+  const [familyNotes, setFamilyNotes] = useState<FamilyNote[]>([]);
   const [favoriteActivities, setFavoriteActivities] = useState<CommonTemplate[]>([]);
   const [redemptions, setRedemptions] = useState<Redemption[]>([]);
   const [starTransactions, setStarTransactions] = useState<any[]>([]);
@@ -219,6 +224,10 @@ export default function App() {
 
     let base = { ...currentUserProfile };
 
+    if (simulatedFamilyId) {
+      base.familyId = simulatedFamilyId;
+    }
+
     if (developerModeActive) {
       // Find the member if simulatedMemberId is specified:
       if (simulatedMemberId) {
@@ -253,7 +262,7 @@ export default function App() {
     }
 
     return base as UserProfile;
-  }, [developerModeActive, simulatedRole, simulatedMemberId, currentUserProfile, familyMembers, activeFamily]);
+  }, [developerModeActive, simulatedRole, simulatedMemberId, simulatedFamilyId, currentUserProfile, familyMembers, activeFamily]);
 
   // Restrict navigation if Kid or Pet (auto fallback) - must be declared before any conditional returns
   useEffect(() => {
@@ -422,6 +431,7 @@ export default function App() {
         setTasks([]);
         setRewards([]);
         setAnnouncements([]);
+        setFamilyNotes([]);
         setFavoriteActivities([]);
         setRedemptions([]);
       }
@@ -507,8 +517,8 @@ export default function App() {
   };
 
   const loadAppletData = async (forceRefreshMembers = false) => {
-    if (!user || !currentUserProfile?.familyId) return;
-    const famId = currentUserProfile.familyId;
+    if (!user || !effectiveUserProfile?.familyId) return;
+    const famId = effectiveUserProfile.familyId;
     
     const startTimeStamp = performance.now();
     
@@ -531,15 +541,73 @@ export default function App() {
 
   useEffect(() => {
     loadAppletData();
-  }, [user?.uid, currentUserProfile?.familyId, activePage]);
+  }, [user?.uid, effectiveUserProfile?.familyId]);
 
   // Comprehensive Real-time database sync listener for all tables
   useEffect(() => {
-    if (!user || !currentUserProfile?.familyId) return;
-    const famId = currentUserProfile.familyId;
+    if (!user || !effectiveUserProfile?.familyId) return;
+    const famId = effectiveUserProfile.familyId;
     
-    // 9 separate snapshots
-    setListenerCount(9);
+    // 11 separate snapshots (including family, settings, and join requests)
+    setListenerCount(11);
+
+    // Warm-up states instantly from offline localStorage cache for sub-second system load
+    const cacheKey = (tbl: string) => `cache_${tbl}_${famId}`;
+    
+    const cachedFamily = getCachedData(cacheKey("family"));
+    if (cachedFamily) {
+      setActiveFamily(cachedFamily);
+      setDataLoaded((prev) => ({ ...prev, family: true }));
+    }
+    const cachedSettings = getCachedData(cacheKey("settings"));
+    if (cachedSettings) {
+      setActiveSetting(cachedSettings);
+      setDataLoaded((prev) => ({ ...prev, settings: true }));
+    }
+    const cachedMembers = getCachedData(cacheKey("members"));
+    if (cachedMembers) {
+      setFamilyMembers(cachedMembers);
+      setDataLoaded((prev) => ({ ...prev, members: true }));
+    }
+    const cachedAnn = getCachedData(cacheKey("announcements"));
+    if (cachedAnn) {
+      setAnnouncements(cachedAnn);
+      setDataLoaded((prev) => ({ ...prev, announcements: true }));
+    }
+    const cachedNotes = getCachedData(cacheKey("notes"));
+    if (cachedNotes) {
+      setFamilyNotes(cachedNotes);
+    }
+    const cachedTasks = getCachedData(cacheKey("tasks"));
+    if (cachedTasks) {
+      setTasks(cachedTasks);
+      setDataLoaded((prev) => ({ ...prev, tasks: true }));
+    }
+    const cachedEvents = getCachedData(cacheKey("events"));
+    if (cachedEvents) {
+      setEvents(cachedEvents);
+      setDataLoaded((prev) => ({ ...prev, events: true }));
+    }
+    const cachedRewards = getCachedData(cacheKey("rewards"));
+    if (cachedRewards) {
+      setRewards(cachedRewards);
+      setDataLoaded((prev) => ({ ...prev, rewards: true }));
+    }
+    const cachedFavs = getCachedData(cacheKey("favorites"));
+    if (cachedFavs) {
+      setFavoriteActivities(cachedFavs);
+      setDataLoaded((prev) => ({ ...prev, favorites: true }));
+    }
+    const cachedReds = getCachedData(cacheKey("redemptions"));
+    if (cachedReds) {
+      setRedemptions(cachedReds);
+      setDataLoaded((prev) => ({ ...prev, redemptions: true }));
+    }
+    const cachedStarTx = getCachedData(cacheKey("startx"));
+    if (cachedStarTx) {
+      setStarTransactions(cachedStarTx);
+      setDataLoaded((prev) => ({ ...prev, starTransactions: true }));
+    }
 
     // 1. Announcements
     const unsubAnn = onSnapshot(
@@ -551,12 +619,32 @@ export default function App() {
           list.push(snap.data() as Announcement);
         });
         setAnnouncements(list);
+        setCachedData(cacheKey("announcements"), list);
         setDataLoaded((prev) => ({ ...prev, announcements: true }));
         logFirestoreOp("list", "announcements", "success", `載入 ${list.length} 筆公告`);
       },
       (err) => {
         logFirestoreOp("list", "announcements", "error", err.message);
         handleFirestoreError(err, OperationType.LIST, "announcements");
+      }
+    );
+
+    // 1b. Family Notes
+    const unsubNotes = onSnapshot(
+      query(collection(db, "family_notes"), where("familyId", "==", famId)),
+      (snapshot) => {
+        incrementQueries(1);
+        const list: FamilyNote[] = [];
+        snapshot.forEach((snap) => {
+          list.push(snap.data() as FamilyNote);
+        });
+        setFamilyNotes(list);
+        setCachedData(cacheKey("notes"), list);
+        logFirestoreOp("list", "family_notes", "success", `載入 ${list.length} 筆家庭記事`);
+      },
+      (err) => {
+        logFirestoreOp("list", "family_notes", "error", err.message);
+        handleFirestoreError(err, OperationType.LIST, "family_notes");
       }
     );
 
@@ -570,6 +658,7 @@ export default function App() {
           list.push(snap.data() as Task);
         });
         setTasks(list);
+        setCachedData(cacheKey("tasks"), list);
         setDataLoaded((prev) => ({ ...prev, tasks: true }));
         logFirestoreOp("list", "tasks", "success", `載入 ${list.length} 筆任務`);
       },
@@ -589,6 +678,7 @@ export default function App() {
           list.push(snap.data() as CalendarEvent);
         });
         setEvents(list);
+        setCachedData(cacheKey("events"), list);
         setDataLoaded((prev) => ({ ...prev, events: true }));
         logFirestoreOp("list", "calendar_events", "success", `載入 ${list.length} 筆日曆行程`);
       },
@@ -608,6 +698,7 @@ export default function App() {
           list.push(snap.data() as Reward);
         });
         setRewards(list);
+        setCachedData(cacheKey("rewards"), list);
         setDataLoaded((prev) => ({ ...prev, rewards: true }));
         logFirestoreOp("list", "rewards", "success", `載入 ${list.length} 筆禮物商品`);
       },
@@ -627,6 +718,7 @@ export default function App() {
           list.push({ id: snap.id, ...snap.data() } as CommonTemplate);
         });
         setFavoriteActivities(list);
+        setCachedData(cacheKey("favorites"), list);
         setDataLoaded((prev) => ({ ...prev, favorites: true }));
         logFirestoreOp("list", "favorite_activities", "success", `載入 ${list.length} 筆常用事項`);
       },
@@ -646,6 +738,7 @@ export default function App() {
           list.push({ id: snap.id, ...snap.data() } as Redemption);
         });
         setRedemptions(list);
+        setCachedData(cacheKey("redemptions"), list);
         setDataLoaded((prev) => ({ ...prev, redemptions: true }));
         logFirestoreOp("list", "redemptions", "success", `載入 ${list.length} 筆兌換清單`);
       },
@@ -670,6 +763,7 @@ export default function App() {
           return tB - tA;
         });
         setStarTransactions(list);
+        setCachedData(cacheKey("startx"), list);
         setDataLoaded((prev) => ({ ...prev, starTransactions: true }));
         logFirestoreOp("list", "star_transactions", "success", `載入 ${list.length} 筆星星異動紀錄`);
       },
@@ -689,6 +783,7 @@ export default function App() {
           list.push(snap.data() as UserProfile);
         });
         setFamilyMembers(list);
+        setCachedData(cacheKey("members"), list);
         setCachedData(CACHE_KEY_MEMBERS(famId), list);
         const myFreshProfile = list.find((m) => m.uid === user.uid);
         if (myFreshProfile) {
@@ -711,6 +806,7 @@ export default function App() {
         if (snap.exists()) {
           const sData = snap.data() as FamilySetting;
           setActiveSetting(sData);
+          setCachedData(cacheKey("settings"), sData);
           setCachedData(CACHE_KEY_SETTINGS(famId), sData);
           logFirestoreOp("get", `settings/${famId}`, "success", `同步系統模式: ${sData.systemMode}`);
         }
@@ -739,8 +835,27 @@ export default function App() {
       }
     );
 
+    // 11. Family Info (Real-time sync to avoid getDoc on tab switches)
+    const unsubFamily = onSnapshot(
+      doc(db, "families", famId),
+      (snap) => {
+        incrementQueries(1);
+        if (snap.exists()) {
+          const fData = snap.data() as Family;
+          setActiveFamily(fData);
+          setCachedData(cacheKey("family"), fData);
+        }
+        setDataLoaded((prev) => ({ ...prev, family: true }));
+        logFirestoreOp("get", `families/${famId}`, "success", "同步家庭基本資料");
+      },
+      (err) => {
+        console.error("Failed to load family snapshot:", err);
+      }
+    );
+
     return () => {
       unsubAnn();
+      unsubNotes();
       unsubTasks();
       unsubEvents();
       unsubRewards();
@@ -750,9 +865,10 @@ export default function App() {
       unsubUsersGroup();
       unsubSettingsGroup();
       unsubJoinRequests();
+      unsubFamily();
       setListenerCount(0);
     };
-  }, [user?.uid, currentUserProfile?.familyId]);
+  }, [user?.uid, effectiveUserProfile?.familyId]);
 
   // login pipe
   const handleGoogleLogin = async () => {
@@ -1106,20 +1222,33 @@ export default function App() {
 
   // Write announcement
   const handleAddAnnouncement = async (title: string, content: string) => {
-    if (!currentUserProfile?.familyId) return;
+    if (!effectiveUserProfile?.familyId) return;
     try {
       const annId = `ann_${Math.random().toString(36).substr(2, 9)}`;
       await setDoc(doc(db, "announcements", annId), {
         id: annId,
-        familyId: currentUserProfile.familyId,
+        familyId: effectiveUserProfile.familyId,
         title,
         content,
         creatorUid: user?.uid || "",
-        creatorName: currentUserProfile.displayName,
+        creatorName: effectiveUserProfile.displayName,
         createdAt: serverTimestamp(),
       });
     } catch (err) {
       handleFirestoreError(err, OperationType.CREATE, "announcements");
+    }
+  };
+
+  // Update announcement
+  const handleUpdateAnnouncement = async (id: string, title: string, content: string) => {
+    try {
+      await updateDoc(doc(db, "announcements", id), {
+        title,
+        content,
+        updatedAt: serverTimestamp(),
+      });
+    } catch (err) {
+      handleFirestoreError(err, OperationType.UPDATE, `announcements/${id}`);
     }
   };
 
@@ -1129,6 +1258,52 @@ export default function App() {
       await deleteDoc(doc(db, "announcements", id));
     } catch (err) {
       handleFirestoreError(err, OperationType.DELETE, `announcements/${id}`);
+    }
+  };
+
+  // Write family note
+  const handleAddFamilyNote = async (title: string, content: string, date: string) => {
+    if (!effectiveUserProfile?.familyId) return;
+    try {
+      const noteId = `note_${Math.random().toString(36).substr(2, 9)}`;
+      await setDoc(doc(db, "family_notes", noteId), {
+        id: noteId,
+        familyId: effectiveUserProfile.familyId,
+        title,
+        content,
+        date,
+        creatorUid: user?.uid || "",
+        creatorName: effectiveUserProfile.displayName,
+        createdAt: serverTimestamp(),
+      });
+      toast.success("🎉 家庭記事新增成功！");
+    } catch (err: any) {
+      toast.error("❌ 新增家庭記事失敗：" + err.message);
+    }
+  };
+
+  // Update family note
+  const handleUpdateFamilyNote = async (id: string, title: string, content: string, date: string) => {
+    try {
+      await updateDoc(doc(db, "family_notes", id), {
+        title,
+        content,
+        date,
+        updatedAt: serverTimestamp(),
+      });
+      toast.success("✓ 家庭記事修改成功！");
+    } catch (err: any) {
+      toast.error("❌ 修改家庭記事失敗：" + err.message);
+    }
+  };
+
+  // Delete family note
+  const handleDeleteFamilyNote = async (id: string) => {
+    try {
+      await deleteDoc(doc(db, "family_notes", id));
+      toast.success("✓ 已刪除該筆家庭記事");
+    } catch (err: any) {
+      toast.error("❌ 刪除家庭記事失敗：" + err.message);
     }
   };
 
@@ -1658,7 +1833,7 @@ export default function App() {
     try {
       await deleteDoc(doc(db, "rewards", rewardId));
       logFirestoreOp("delete", `rewards/${rewardId}`, "success", "刪除禮物及商品");
-      toast.success("✅ 禮物商品已刪除！");
+      toast.success("禮物商品已刪除！");
     } catch (err: any) {
       logFirestoreOp("delete", `rewards/${rewardId}`, "error", err.message);
       toast.error(`❌ 刪除禮物失敗: ${err.message}`);
@@ -2902,6 +3077,17 @@ function generateTemplateDates(startDateStr: string, weekdays: number[], count: 
                 </button>
               )}
 
+              <button
+                onClick={() => setActivePage("notes")}
+                className={`px-3.5 py-1 text-xs font-black rounded-full transition-all duration-200 border cursor-pointer whitespace-nowrap ${
+                  activePage === "notes"
+                    ? "bg-[#F5EBE6] text-[#7C6354] border-[#E7DCD5] shadow-sm font-extrabold"
+                    : "bg-white text-[#666666] border-[#E5E1DA] hover:bg-gray-50/55"
+                }`}
+              >
+                家庭記事
+              </button>
+
               {isSuperAdmin && (
                 <button
                   onClick={() => setActivePage("admin")}
@@ -2943,6 +3129,7 @@ function generateTemplateDates(startDateStr: string, weekdays: number[], count: 
                   rewards={rewards}
                   redemptions={redemptions}
                   onAddAnnouncement={handleAddAnnouncement}
+                  onUpdateAnnouncement={handleUpdateAnnouncement}
                   onDeleteAnnouncement={handleDeleteAnnouncement}
                   onNavigateToEvent={handleNavigateToEvent}
                   onAddEvent={handleAddEvent}
@@ -3068,6 +3255,16 @@ function generateTemplateDates(startDateStr: string, weekdays: number[], count: 
                 />
               )}
 
+              {activePage === "notes" && effectiveUserProfile && (
+                <FamilyNotesView
+                  currentUser={effectiveUserProfile}
+                  notes={familyNotes}
+                  onAddNote={handleAddFamilyNote}
+                  onUpdateNote={handleUpdateFamilyNote}
+                  onDeleteNote={handleDeleteFamilyNote}
+                />
+              )}
+
               {activePage === "admin" && isSuperAdmin && (
                 <AdminCenter 
                   currentUser={effectiveUserProfile}
@@ -3083,6 +3280,12 @@ function generateTemplateDates(startDateStr: string, weekdays: number[], count: 
                   simulatedTodayDate={simulatedTodayDate}
                   onSetSimulatedTodayDate={setSimulatedTodayDate}
                   handleResetCounters={handleResetCounters}
+                  simulatedFamilyId={simulatedFamilyId}
+                  onSetSimulatedFamilyId={setSimulatedFamilyId}
+                  simulatedRole={simulatedRole}
+                  onSetSimulatedRole={setSimulatedRole}
+                  simulatedMemberId={simulatedMemberId}
+                  onSetSimulatedMemberId={setSimulatedMemberId}
                 />
               )}
             </div>
@@ -3104,6 +3307,7 @@ function generateTemplateDates(startDateStr: string, weekdays: number[], count: 
                         rewards={rewards}
                         redemptions={redemptions}
                         onAddAnnouncement={handleAddAnnouncement}
+                        onUpdateAnnouncement={handleUpdateAnnouncement}
                         onDeleteAnnouncement={handleDeleteAnnouncement}
                         onNavigateToEvent={(eventId, date) => {
                           setCalendarDeepLink({ eventId, date });
@@ -3275,6 +3479,27 @@ function generateTemplateDates(startDateStr: string, weekdays: number[], count: 
                     </div>
                   )}
 
+                  {/* 家庭記事 */}
+                  {activePage === "notes" && (
+                    <div id="mobile-view-notes" className="animate-in fade-in duration-200 space-y-4">
+                      <div className="flex items-center gap-2 mb-1">
+                        <button
+                          onClick={() => setActivePage("more")}
+                          className="px-3 py-1.5 bg-white text-[#7C6354] border border-[#EFEAE2] rounded-full text-xs font-black cursor-pointer shadow-xs active:scale-95 transition"
+                        >
+                          ⬅ 返回更多功能
+                        </button>
+                      </div>
+                      <FamilyNotesView
+                        currentUser={effectiveUserProfile}
+                        notes={familyNotes}
+                        onAddNote={handleAddFamilyNote}
+                        onUpdateNote={handleUpdateFamilyNote}
+                        onDeleteNote={handleDeleteFamilyNote}
+                      />
+                    </div>
+                  )}
+
                   {/* 系統管理 */}
                   {activePage === "admin" && isSuperAdmin && (
                     <div id="mobile-view-admin" className="animate-in fade-in duration-200 space-y-4">
@@ -3300,6 +3525,12 @@ function generateTemplateDates(startDateStr: string, weekdays: number[], count: 
                         simulatedTodayDate={simulatedTodayDate}
                         onSetSimulatedTodayDate={setSimulatedTodayDate}
                         handleResetCounters={handleResetCounters}
+                        simulatedFamilyId={simulatedFamilyId}
+                        onSetSimulatedFamilyId={setSimulatedFamilyId}
+                        simulatedRole={simulatedRole}
+                        onSetSimulatedRole={setSimulatedRole}
+                        simulatedMemberId={simulatedMemberId}
+                        onSetSimulatedMemberId={setSimulatedMemberId}
                       />
                     </div>
                   )}
@@ -3368,6 +3599,20 @@ function generateTemplateDates(startDateStr: string, weekdays: number[], count: 
                           <div>
                             <h3 className="text-[12px] font-black mt-1.5">🛡️ 系統管理</h3>
                             <p className="text-[9px] text-gray-400 leading-tight mt-0.5">模擬測試與重置</p>
+                          </div>
+                        </button>
+
+                        {/* 5. 家庭記事 */}
+                        <button
+                          onClick={() => setActivePage("notes")}
+                          className="p-3 bg-white border border-[#EFEAE2] rounded-2xl text-left flex flex-col justify-between min-h-[95px] shadow-xs active:scale-97 hover:border-rose-200 transition cursor-pointer col-span-2 sm:col-span-1"
+                        >
+                          <div className="h-7 w-7 bg-rose-50 rounded-lg flex items-center justify-center text-rose-500">
+                            <BookOpen className="h-4 w-4 text-rose-500" />
+                          </div>
+                          <div>
+                            <h3 className="text-[12px] font-black mt-1.5">📜 家庭記事</h3>
+                            <p className="text-[9px] text-gray-400 leading-tight mt-0.5">保留家庭重要大事記與美好回憶</p>
                           </div>
                         </button>
                       </div>

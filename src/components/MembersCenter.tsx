@@ -97,6 +97,31 @@ export default function MembersCenter({
   const [isUpdating, setIsUpdating] = useState(false);
   const [copied, setCopied] = useState(false);
 
+  // Custom Confirmation Dialog States
+  const [confirmDialog, setConfirmDialog] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    onConfirm: () => void | Promise<void>;
+  }>({
+    isOpen: false,
+    title: "",
+    message: "",
+    onConfirm: () => {},
+  });
+
+  const showConfirm = (title: string, message: string, onConfirm: () => void | Promise<void>) => {
+    setConfirmDialog({
+      isOpen: true,
+      title,
+      message,
+      onConfirm: async () => {
+        await onConfirm();
+        setConfirmDialog((prev) => ({ ...prev, isOpen: false }));
+      }
+    });
+  };
+
   // Sub-tabs for Owner views
   const [memberSubTab, setMemberSubTab] = useState<"list" | "invites">("list");
   const [invites, setInvites] = useState<any[]>([]);
@@ -173,13 +198,18 @@ export default function MembersCenter({
   };
 
   const handleDeleteInvite = async (inviteId: string, code: string) => {
-    if (!confirm(`確認要刪除/使此邀請碼「${code}」失效嗎？刪除後新進者將無法再憑此代碼加入！`)) return;
-    try {
-      await deleteDoc(doc(db, "invites", inviteId));
-      toast.success("✓ 已撤銷該邀請碼");
-    } catch (err: any) {
-      toast.error("❌ 撤銷失敗：" + err.message);
-    }
+    showConfirm(
+      "使邀請碼失效",
+      `確認要刪除/使此邀請碼「${code}」失效嗎？刪除後新進者將無法再憑此代碼加入！`,
+      async () => {
+        try {
+          await deleteDoc(doc(db, "invites", inviteId));
+          toast.success("✓ 已撤銷該邀請碼");
+        } catch (err: any) {
+          toast.error("❌ 撤銷失敗：" + err.message);
+        }
+      }
+    );
   };
 
   // Expanded Mode detail viewing
@@ -626,13 +656,17 @@ export default function MembersCenter({
 
   const handleDeleteMember = async (memberUid: string, name: string) => {
     if (!onDeleteMember) return;
-    if (confirm(`確認要從家庭中移除「${name}」嗎？這將會同步清除其關聯資料。`)) {
-      try {
-        await onDeleteMember(memberUid);
-      } catch (err) {
-        console.error(err);
+    showConfirm(
+      "從家庭中移除成員",
+      `確認要從家庭中移除「${name}」嗎？這將會同步清除其關聯資料。`,
+      async () => {
+        try {
+          await onDeleteMember(memberUid);
+        } catch (err) {
+          console.error(err);
+        }
       }
-    }
+    );
   };
 
   return (
@@ -756,10 +790,14 @@ export default function MembersCenter({
                         ✓ 同意加入
                       </button>
                       <button
-                        onClick={async () => {
-                          if (confirm("確定要拒絕對方的加入嗎？")) {
-                            if (onRejectJoinRequest) await onRejectJoinRequest(req);
-                          }
+                        onClick={() => {
+                          showConfirm(
+                            "拒絕加入申請",
+                            `您確定要拒絕「${req.userName}」的家庭加入申請嗎？`,
+                            async () => {
+                              if (onRejectJoinRequest) await onRejectJoinRequest(req);
+                            }
+                          );
                         }}
                         className="bg-[#FFFDFB] hover:bg-gray-50 text-gray-500 border border-gray-200 font-semibold text-xs px-3.5 py-1.5 rounded-xl cursor-pointer transition"
                       >
@@ -1610,15 +1648,19 @@ export default function MembersCenter({
                   {editingMember && onDeleteMember && (currentUser.role === UserRole.ADMIN || currentUser.role === UserRole.PARENT) && editingMember.uid !== currentUser.uid ? (
                     <button
                       type="button"
-                      onClick={async () => {
-                        if (confirm(`⚠ 確定要將「${editingMember.displayName}」從家庭中完全移除嗎？此對應所有雲端資料與紀錄都將連帶刪除，且無法原復！`)) {
-                          try {
-                            await onDeleteMember(editingMember.uid);
-                            setShowFormModal(false);
-                          } catch (err: any) {
-                            toast.error("刪除失敗：" + err.message);
+                      onClick={() => {
+                        showConfirm(
+                          "⚠ 移除家庭成員",
+                          `⚠ 確定要將「${editingMember.displayName}」從家庭中完全移除嗎？此對應所有雲端資料與紀錄都將連帶刪除，且無法原復！`,
+                          async () => {
+                            try {
+                              await onDeleteMember(editingMember.uid);
+                              setShowFormModal(false);
+                            } catch (err: any) {
+                              toast.error("刪除失敗：" + err.message);
+                            }
                           }
-                        }
+                        );
                       }}
                       className="text-xs font-black text-rose-500 hover:text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 px-3 py-2 rounded-xl transition cursor-pointer"
                     >
@@ -2268,6 +2310,36 @@ export default function MembersCenter({
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* ⚠️ Custom Cozy Confirmation Modal */}
+      {confirmDialog.isOpen && (
+        <div className="fixed inset-0 bg-[#2D2926]/40 backdrop-blur-[2px] flex items-center justify-center p-4 z-[9999] animate-in fade-in duration-100">
+          <div className="bg-[#FFFDF9] rounded-2xl border border-[#F2ECE5] p-5 max-w-sm w-full shadow-lg relative flex flex-col font-sans">
+            <h3 className="text-sm font-black text-[#5C4537] mb-2 border-b border-[#FAF6F0] pb-2 flex items-center gap-1.5">
+              <span>⚠️</span> {confirmDialog.title}
+            </h3>
+            <p className="text-xs text-gray-600 leading-relaxed mb-5">
+              {confirmDialog.message}
+            </p>
+            <div className="flex justify-end gap-2.5">
+              <button
+                type="button"
+                onClick={() => setConfirmDialog((prev) => ({ ...prev, isOpen: false }))}
+                className="px-3.5 py-2 text-xs font-bold text-gray-500 hover:bg-gray-100/60 border border-[#E5E1DA] rounded-xl transition cursor-pointer font-medium"
+              >
+                取消
+              </button>
+              <button
+                type="button"
+                onClick={confirmDialog.onConfirm}
+                className="px-4 py-2 text-xs font-black text-white bg-[#EAA59E] hover:bg-[#D98E85] rounded-xl shadow-xs transition active:scale-97 cursor-pointer"
+              >
+                確定
+              </button>
+            </div>
           </div>
         </div>
       )}

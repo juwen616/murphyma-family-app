@@ -1481,15 +1481,15 @@ export default function CalendarView({
                       if (activeMode) {
                         setSelectedModeForDetail({ mode: activeMode, dateStr: cell.dateStr });
                       } else {
-                        setShowAddTypeSelection({ show: true, dateStr: cell.dateStr });
+                        handleOpenAdd(cell.dateStr);
                       }
                     }
                   }}
-                  className={`min-h-[105px] h-[105px] md:min-h-[160px] md:h-auto p-1 md:p-2.5 border-r border-b border-[#EFEAE2]/60 flex flex-col justify-between transition group hover:bg-[#FFFDF8]/90 cursor-pointer overflow-hidden ${cellBg}`}
+                  className={`min-h-[105px] h-[105px] md:min-h-[160px] md:h-auto p-1 md:p-2.5 border-r border-b border-[#EFEAE2]/60 flex flex-col justify-start md:justify-between gap-1 md:gap-0 transition group hover:bg-[#FFFDF8]/90 cursor-pointer overflow-hidden ${cellBg}`}
                 >
                   {/* MOBILE VIEW COMPACT CELL */}
-                  <div className="block md:hidden text-left flex flex-col justify-between h-full w-full overflow-hidden">
-                    <div className="flex justify-between items-center select-none">
+                  <div className="block md:hidden text-left flex flex-col justify-start h-full w-full overflow-hidden font-sans">
+                    <div className="flex justify-between items-center select-none mb-0.5 pb-[2px] border-b border-gray-100/50">
                       <span
                         className={`text-[10px] font-black rounded-full h-5 w-5 flex items-center justify-center font-mono ${
                           isToday
@@ -1508,11 +1508,11 @@ export default function CalendarView({
                       )}
                     </div>
                     
-                    {/* Compact Events in date slot */}
-                    <div className="flex-1 flex flex-col justify-end overflow-hidden space-y-0.5 mt-1 pb-0.5 select-none">
+                    {/* Compact Events in date slot - immediately below date header, top aligned */}
+                    <div className="flex-1 flex flex-col justify-start overflow-hidden space-y-1 mt-0.5 pb-0.5 select-none">
                       {activeMode && (
                         <div 
-                          className="font-black text-white px-1 py-[1.5px] rounded truncate text-[7.5px] leading-tight mb-0.5 animate-pulse select-none cursor-pointer"
+                          className="font-black text-white px-1 py-[1.5px] rounded truncate text-[8.5px] leading-tight mb-0.5 animate-pulse select-none cursor-pointer"
                           style={{
                             backgroundColor:
                               activeMode.type === "travel"
@@ -1529,24 +1529,37 @@ export default function CalendarView({
                         </div>
                       )}
                       {(() => {
-                        const limit = 3;
+                        const limit = 2;
                         const displayedEvents = sortedDayEvents.slice(0, limit);
                         const hiddenCount = sortedDayEvents.length - limit;
                         return (
                           <>
                             {displayedEvents.map((evt) => {
                               const cleanTitle = cleanTitleForMobileCell(evt, cell.dateStr);
+                              // Assign lovely high-contrast pastel background to meet user requests
+                              let bgStyle = "bg-[#F7F5F0] border-[#E7E2D8] text-[#3C332D]"; // milktea
+                              
+                              if ((evt as any).isBirthday || evt.title.includes("生日") || evt.title.includes("慶生")) {
+                                bgStyle = "bg-[#FFF0F5] border-[#FFB6C1] text-[#C71585]"; // 淺粉
+                              } else if (evt.isFixed) {
+                                bgStyle = "bg-[#EBF5FF] border-[#ADCFFF] text-[#0052A3]"; // 淺藍
+                              } else if (evt.title.includes("玩") || evt.title.includes("游泳") || evt.title.includes("課") || evt.title.includes("旅行") || evt.title.includes("出遊")) {
+                                bgStyle = "bg-[#EEFBF0] border-[#C2ECCD] text-[#1E7134]"; // 淺綠
+                              } else {
+                                bgStyle = "bg-[#FAF1EC] border-[#ECD5C8] text-[#7A3E23]"; // 暖橘 / 奶茶
+                              }
+                              
                               return (
                                 <div
                                   key={evt.id}
-                                  className="text-[8px] leading-[9.5px] py-[1px] px-[2px] font-bold truncate rounded bg-amber-50/70 border border-amber-150 text-[#3C332D] tracking-tight"
+                                  className={`text-[9.5px] leading-[11.5px] py-[1.5px] px-[2px] font-black truncate rounded border ${bgStyle} tracking-tight`}
                                 >
                                   {cleanTitle}
                                 </div>
                               );
                             })}
                             {hiddenCount > 0 && (
-                              <div className="text-[7.5px] text-gray-400 font-extrabold text-right pr-0.5 tracking-tighter leading-none mt-0.5">
+                              <div className="text-[8px] text-gray-500 font-extrabold text-right pr-0.5 tracking-tighter leading-none mt-0.5">
                                 +{hiddenCount}
                               </div>
                             )}
@@ -2050,7 +2063,7 @@ export default function CalendarView({
 
       {/* Confirmation of Delete Event Dialog */}
       {eventToDelete && (
-        <div className="fixed inset-0 bg-[#3C332D]/40 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-in fade-in duration-100 font-sans">
+        <div className="fixed inset-0 bg-[#3C332D]/40 backdrop-blur-sm flex items-center justify-center p-4 z-[100] animate-in fade-in duration-100 font-sans">
           {eventToDelete.isFixed ? (
             <div className="bg-white rounded-[24px] border border-[#EFEAE2] p-8 max-w-md w-full soft-journal-shadow space-y-5">
               <h3 className="text-lg font-black text-[#3C332D] flex items-center gap-2">
@@ -2146,7 +2159,7 @@ export default function CalendarView({
 
       {/* Confirmation of Editing Fixed Event Options Modal */}
       {updatingFixedEventOptions && (
-        <div className="fixed inset-0 bg-[#3C332D]/40 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-in fade-in duration-100 font-sans">
+        <div className="fixed inset-0 bg-[#3C332D]/40 backdrop-blur-sm flex items-center justify-center p-4 z-[100] animate-in fade-in duration-100 font-sans">
           <div className="bg-white rounded-[24px] border border-[#EFEAE2] p-8 max-w-md w-full soft-journal-shadow space-y-5">
             <h3 className="text-lg font-black text-[#3C332D] flex items-center gap-2">
               <Info className="h-6 w-6 text-[#5B7283]" />
@@ -2208,7 +2221,7 @@ export default function CalendarView({
 
       {/* Confirmation of Editing Recurring Option */}
       {updatingRecurringEvent && (
-        <div className="fixed inset-0 bg-[#3C332D]/40 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-in fade-in duration-100 font-sans">
+        <div className="fixed inset-0 bg-[#3C332D]/40 backdrop-blur-sm flex items-center justify-center p-4 z-[100] animate-in fade-in duration-100 font-sans">
           <div className="bg-white rounded-[24px] border border-[#EFEAE2] p-8 max-w-md w-full soft-journal-shadow space-y-5">
             <h3 className="text-lg font-black text-[#3C332D] flex items-center gap-2">
               <Info className="h-6 w-6 text-[#5B7283]" />
@@ -2250,13 +2263,13 @@ export default function CalendarView({
 
       {/* New Calendar Event Modal popup window */}
       {showAddForm && (
-        <div className="fixed inset-0 bg-[#3C332D]/40 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-in fade-in duration-150 font-sans">
+        <div className="fixed inset-0 bg-[#3C332D]/40 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4 z-[95] animate-in fade-in duration-150 font-sans">
           <form
             onSubmit={handleFormSubmit}
             className="bg-white rounded-[24px] border border-[#EFEAE2] max-w-md w-full soft-journal-shadow relative flex flex-col max-h-[90vh] md:max-h-[800px]"
           >
             {/* Header (Fixed) */}
-            <div className="p-6 pb-4 border-b border-[#EFEAE2] flex items-center justify-between shrink-0 bg-[#FFFDF8]">
+            <div className="p-4 md:p-6 pb-3 md:pb-4 border-b border-[#EFEAE2] flex items-center justify-between shrink-0 bg-[#FFFDF8]">
               <h3 className="text-lg font-black text-[#3C332D] flex items-center gap-2">
                 <CalendarDays className="h-5.5 w-5.5 text-[#5B7283]" />
                 {editingEvent ? "編輯/查看行程" : "新增行事曆行程"}
@@ -2271,7 +2284,39 @@ export default function CalendarView({
             </div>
 
             {/* Scrollable Container */}
-            <div className="p-6 overflow-y-auto space-y-4 flex-grow select-none">
+            <div className="p-4 md:p-6 overflow-y-auto space-y-4 flex-grow select-none">
+              {/* Quick advanced toggles for Switch of Modes */}
+              {!editingEvent && (
+                <div className="flex gap-2 mb-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const d = selectedDate || getLocalToday();
+                      setShowAddForm(false);
+                      setNewTravelName("");
+                      setNewTravelStartDate(d);
+                      setNewTravelEndDate(d);
+                      setNewTravelType("international");
+                      setShowCreateTravelModal({ startDate: d, endDate: d });
+                    }}
+                    className="flex-1 py-2 px-3 bg-orange-50 border border-orange-200 hover:bg-orange-100 text-orange-750 text-[11px] font-black rounded-xl transition flex items-center justify-center gap-1 cursor-pointer shadow-xs"
+                  >
+                    ✨ 切換為旅遊計畫
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowAddForm(false);
+                      if (onChangePage) {
+                        onChangePage("special-periods");
+                      }
+                    }}
+                    className="flex-1 py-2 px-3 bg-[#EEF2FF] border border-indigo-200 hover:bg-[#E0E7FF] text-[#4F46E5] text-[11px] font-black rounded-xl transition flex items-center justify-center gap-1 cursor-pointer shadow-xs"
+                  >
+                    ✨ 切換為自訂計畫
+                  </button>
+                </div>
+              )}
               {/* Quick autofill select bar */}
               {!editingEvent && favoriteActivities.length > 0 && (() => {
                 const calendarTemplates = favoriteActivities.filter((t) => {
@@ -2649,7 +2694,7 @@ export default function CalendarView({
             </div>
 
             {/* Footer (Fixed) */}
-            <div className="p-6 border-t border-[#EFEAE2] flex justify-between items-center bg-[#FFFDF8] shrink-0 rounded-b-[24px]">
+            <div className="p-4 md:p-6 border-t border-[#EFEAE2] flex justify-between items-center bg-[#FFFDF8] shrink-0 rounded-b-[24px]">
               {editingEvent && isUserAllowedToDelete(editingEvent) ? (
                 <button
                   type="button"
@@ -2684,7 +2729,7 @@ export default function CalendarView({
       )}
 
       {birthdayAlert && (
-        <div className="fixed inset-0 bg-[#2D2926]/40 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+        <div className="fixed inset-0 bg-[#2D2926]/40 backdrop-blur-sm flex items-center justify-center p-4 z-[100]">
           <div className="bg-white rounded-3xl border border-[#EAA59E] p-6 max-w-sm w-full shadow-xl text-center space-y-4">
             <div className="h-12 w-12 bg-rose-50 border border-rose-200 rounded-2xl flex items-center justify-center text-2xl mx-auto">
               🎂
@@ -2738,7 +2783,7 @@ export default function CalendarView({
         const dayPlan = isTravel ? mode.itinerary?.[dateStr] : null;
 
         return (
-          <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in font-sans">
+          <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4 animate-fade-in font-sans">
             <div className="bg-white rounded-[32px] max-w-xl w-full max-h-[90vh] overflow-y-auto soft-journal-shadow border border-[#EFEAE2] flex flex-col transition-all">
               {/* Header color accent */}
               <div className="h-4 w-full shrink-0"
@@ -3107,7 +3152,7 @@ export default function CalendarView({
 
       {/* ⚠️ Prompt: Synchronize multi-day calendar event into a Special Period */}
       {promptSpecialPeriod && pendingAddPayload && (
-        <div id="sync-special-modal" className="fixed inset-0 bg-[#3C332D]/40 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-in fade-in duration-200 font-sans">
+        <div id="sync-special-modal" className="fixed inset-0 bg-[#3C332D]/40 backdrop-blur-sm flex items-center justify-center p-4 z-[100] animate-in fade-in duration-200 font-sans">
           <div className="bg-white rounded-[24px] border border-[#EFEAE2] p-8 max-w-md w-full shadow-2xl space-y-6 relative text-center">
             
             <div className="text-center space-y-2">
@@ -3180,7 +3225,7 @@ export default function CalendarView({
 
       {/* 🏕️ Choose Special Period Type popup */}
       {chosenSpecialType === "select-type" && pendingAddPayload && (
-        <div id="choose-special-type-modal" className="fixed inset-0 bg-[#3C332D]/40 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-in fade-in duration-200 font-sans">
+        <div id="choose-special-type-modal" className="fixed inset-0 bg-[#3C332D]/40 backdrop-blur-sm flex items-center justify-center p-4 z-[100] animate-in fade-in duration-200 font-sans">
           <div className="bg-white rounded-[24px] border border-[#EFEAE2] p-8 max-w-sm w-full shadow-2xl space-y-6 text-center">
             
             <div className="space-y-1.5 text-center">
@@ -3303,22 +3348,17 @@ export default function CalendarView({
         </div>
       )}
 
-      {/* 📱 MOBILE SLIDEOUT BOTTOM SHEET (DRILL-IN AGENDA DETAIL) */}
+      {/* 📱 PORTABLE POPUP DIALOG (DRILL-IN AGENDA DETAIL) */}
       {isDrawerOpen && (
-        <div className="fixed inset-0 z-50 flex items-end justify-center font-sans md:hidden">
+        <div className="fixed inset-0 z-[90] flex items-center justify-center p-4 font-sans md:hidden">
           {/* Backdrop */}
           <div 
             className="fixed inset-0 bg-[#2D2926]/40 backdrop-blur-xs transition-opacity duration-200"
             onClick={() => setIsDrawerOpen(false)}
           />
-          {/* Content (sliding bottom sheet) */}
-          <div className="relative w-full max-w-lg bg-white rounded-t-[28px] shadow-2xl border-t border-[#EFEAE2] p-5 pb-8 space-y-4 max-h-[75vh] overflow-y-auto animate-in slide-in-from-bottom duration-250 z-10 text-[#3C332D]">
-            {/* Grab handle/indicator bar */}
-            <div className="flex justify-center -mt-2 mb-2">
-              <div className="w-12 h-1 bg-gray-300 rounded-full" />
-            </div>
-            
-            <div className="flex justify-between items-center pb-2 border-b border-[#F2ECE5]">
+          {/* Content (centered modal dialog) */}
+          <div className="relative w-full max-w-sm bg-white rounded-[24px] shadow-2xl border border-[#EFEAE2] flex flex-col max-h-[75vh] overflow-hidden animate-in fade-in zoom-in-95 duration-200 z-10 text-[#3C332D]">
+            <div className="flex justify-between items-center px-5 pt-4 pb-3 border-b border-[#F2ECE5] shrink-0 bg-white">
               <div>
                 <h3 className="text-sm font-black text-[#3C332D] flex items-center gap-1.5">
                   <span>📅</span> {selectedMobileMonthDayStr} 行程明細
@@ -3350,86 +3390,91 @@ export default function CalendarView({
               </button>
             </div>
 
-            {/* Quick Add button merged nicely inside sheet */}
-            <div className="flex justify-end">
+            {/* Scrollable container section with safety padding at bottom to avoid blocking by sticky footer button */}
+            <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4 pb-32">
+              {getEventsForDate(selectedMobileDate).length === 0 ? (
+                <div className="py-8 text-center border border-dashed border-[#EFEAE2] rounded-2xl bg-white/40">
+                  <span className="text-2xl block mb-1">🍵</span>
+                  <p className="text-xs text-gray-400 font-black font-sans">當天沒有任何行程安排，好愜意！</p>
+                </div>
+              ) : (
+                <div className="space-y-2.5 font-sans">
+                  {getEventsForDate(selectedMobileDate).map((evt) => {
+                    const isBday = (evt as any).isBirthday;
+                    return (
+                      <div
+                        key={evt.id}
+                        onClick={() => {
+                          setIsDrawerOpen(false); // Close first to prevent overlap
+                          handleOpenEdit(evt, selectedMobileDate);
+                        }}
+                        className={`p-3.5 rounded-xl border text-left flex flex-col gap-1.5 shadow-xs relative cursor-pointer hover:bg-[#FFFDFB] transition-all ${
+                          isBday ? "bg-rose-50/50 border-rose-200 text-rose-700" : "bg-[#FFFDFB]/80 border-[#EFEAE2]"
+                        }`}
+                      >
+                        <div className="flex items-center justify-between gap-2 overflow-hidden">
+                          <span className="font-extrabold text-xs text-[#3C332D] truncate block max-w-[85%]">
+                            {getEventTitleWithPrefix(evt, isBday, selectedMobileDate)}
+                          </span>
+                          
+                          {isUserAllowedToDelete(evt) && (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                triggerDeleteConfirm(evt, selectedMobileDate);
+                              }}
+                              className="text-gray-400 hover:text-red-500 p-1 rounded transition cursor-pointer"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </button>
+                          )}
+                        </div>
+
+                        {evt.time && (
+                          <span className="text-[10px] font-mono font-bold text-gray-500 flex items-center gap-1">
+                            🕐 {evt.time}
+                          </span>
+                        )}
+
+                        {isMultiDayEvent(evt) && evt.startDate && evt.endDate && (
+                          <span className="text-[9px] bg-sky-50 text-sky-850 border border-sky-100 rounded px-1.5 py-0.2 font-bold self-start font-mono">
+                            跨日行程 · 第 {getMultiDayLabel(evt.startDate, evt.endDate, selectedMobileDate).dayIndex} 天
+                          </span>
+                        )}
+
+                        {evt.dailyNotes?.[selectedMobileDate] && (
+                          <div className="text-[10px] text-[#004B8F] font-bold bg-[#E1F0FF]/55 border border-sky-150 rounded-lg px-2 py-1">
+                            📝 {evt.dailyNotes[selectedMobileDate]}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* ➕ Sticky Footer for Adding Event */}
+            <div 
+              className="shrink-0 border-t border-[#F2ECE5] bg-[#FFFDF8] px-5 py-4 z-30 shadow-sm relative rounded-b-[24px]"
+            >
               <button
                 onClick={() => {
-                  setIsDrawerOpen(false); // Close drawer first to reveal selection
-                  setShowAddTypeSelection({ show: true, dateStr: selectedMobileDate });
+                  setIsDrawerOpen(false);
+                  handleOpenAdd(selectedMobileDate);
                 }}
-                className="text-xs font-black bg-[#EAA59E] hover:bg-[#D98E85] text-white px-4 py-2 rounded-full transition shadow-xs flex items-center gap-1 cursor-pointer"
+                className="w-full py-3.5 bg-[#EAA59E] hover:bg-[#D98E85] text-white text-sm font-black rounded-2xl shadow-sm transition active:scale-97 flex items-center justify-center gap-2 cursor-pointer"
               >
                 <span>➕</span> 新增行程
               </button>
             </div>
-
-            {getEventsForDate(selectedMobileDate).length === 0 ? (
-              <div className="py-8 text-center border border-dashed border-[#EFEAE2] rounded-2xl bg-white/40">
-                <span className="text-2xl block mb-1">🍵</span>
-                <p className="text-xs text-gray-405 font-bold font-sans">當天沒有任何行程安排，好愜意！</p>
-              </div>
-            ) : (
-              <div className="space-y-2.5 font-sans">
-                {getEventsForDate(selectedMobileDate).map((evt) => {
-                  const isBday = (evt as any).isBirthday;
-                  return (
-                    <div
-                      key={evt.id}
-                      onClick={() => {
-                        setIsDrawerOpen(false); // Close first to prevent overlap
-                        handleOpenEdit(evt, selectedMobileDate);
-                      }}
-                      className={`p-3.5 rounded-xl border text-left flex flex-col gap-1.5 shadow-xs relative cursor-pointer hover:bg-[#FFFDFB] transition-all ${
-                        isBday ? "bg-rose-50/50 border-rose-200 text-rose-700" : "bg-[#FFFDFB]/80 border-[#EFEAE2]"
-                      }`}
-                    >
-                      <div className="flex items-center justify-between gap-2 overflow-hidden">
-                        <span className="font-extrabold text-xs text-[#3C332D] truncate block max-w-[85%]">
-                          {getEventTitleWithPrefix(evt, isBday, selectedMobileDate)}
-                        </span>
-                        
-                        {isUserAllowedToDelete(evt) && (
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              triggerDeleteConfirm(evt, selectedMobileDate);
-                            }}
-                            className="text-gray-400 hover:text-red-500 p-1 rounded transition cursor-pointer"
-                          >
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </button>
-                        )}
-                      </div>
-
-                      {evt.time && (
-                        <span className="text-[10px] font-mono font-bold text-gray-500 flex items-center gap-1">
-                          🕐 {evt.time}
-                        </span>
-                      )}
-
-                      {isMultiDayEvent(evt) && evt.startDate && evt.endDate && (
-                        <span className="text-[9px] bg-sky-50 text-sky-850 border border-sky-100 rounded px-1.5 py-0.2 font-bold self-start font-mono">
-                          跨日行程 · 第 {getMultiDayLabel(evt.startDate, evt.endDate, selectedMobileDate).dayIndex} 天
-                        </span>
-                      )}
-
-                      {evt.dailyNotes?.[selectedMobileDate] && (
-                        <div className="text-[10px] text-[#004B8F] font-bold bg-[#E1F0FF]/55 border border-sky-150 rounded-lg px-2 py-1">
-                          📝 {evt.dailyNotes[selectedMobileDate]}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            )}
           </div>
         </div>
       )}
 
       {/* Choice Modal for adding General Event vs. Travel Mode */}
       {showAddTypeSelection && (
-        <div className="fixed inset-0 bg-[#3C332D]/40 backdrop-blur-sm flex items-center justify-center p-4 z-[60] animate-in fade-in duration-150 font-sans">
+        <div className="fixed inset-0 bg-[#3C332D]/40 backdrop-blur-sm flex items-center justify-center p-4 z-[100] animate-in fade-in duration-150 font-sans">
           <div className="bg-white rounded-[24px] border border-[#EFEAE2] p-8 max-w-sm w-full soft-journal-shadow relative space-y-6 text-center">
             <button
               type="button"
@@ -3486,7 +3531,7 @@ export default function CalendarView({
 
       {/* ✈️ Custom Travel Mode Creator Modal */}
       {showCreateTravelModal && (
-        <div className="fixed inset-0 bg-[#3C332D]/40 backdrop-blur-sm flex items-center justify-center p-4 z-[60] animate-in fade-in duration-150 font-sans">
+        <div className="fixed inset-0 bg-[#3C332D]/40 backdrop-blur-sm flex items-center justify-center p-4 z-[100] animate-in fade-in duration-150 font-sans">
           <div className="bg-white rounded-[24px] border border-[#EFEAE2] max-w-md w-full soft-journal-shadow relative flex flex-col max-h-[90vh]">
             {/* Header */}
             <div className="p-6 pb-4 border-b border-[#EFEAE2] flex items-center justify-between bg-[#FFFDF8] rounded-t-[24px]">
