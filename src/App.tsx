@@ -53,6 +53,7 @@ import CalendarView from "./components/CalendarView";
 import TaskSystem from "./components/TaskSystem";
 import RewardCenter from "./components/RewardCenter";
 import FavoriteMgr from "./components/FavoriteMgr";
+import { canManageFamily } from "./utils/permissionUtils";
 import MembersCenter from "./components/MembersCenter";
 import { SpecialPeriodsConfig } from "./components/SpecialPeriodsConfig";
 import PerformanceDebugPanel from "./components/PerformanceDebugPanel";
@@ -73,6 +74,8 @@ import {
   X,
   MoreHorizontal,
   Menu,
+  Bell,
+  Settings,
 } from "lucide-react";
 
 export default function App() {
@@ -96,7 +99,7 @@ export default function App() {
   const [pendingRequests, setPendingRequests] = useState<any[]>([]);
 
   // Navigation page state
-  const [activePage, setActivePage] = useState<"home" | "calendar" | "tasks" | "rewards" | "favorites" | "members" | "special-periods" | "admin-center" | "admin">("home");
+  const [activePage, setActivePage] = useState<"home" | "calendar" | "tasks" | "rewards" | "favorites" | "members" | "special-periods" | "admin-center" | "admin" | "more">("home");
   const [calendarDeepLink, setCalendarDeepLink] = useState<{ eventId: string; date: string } | null>(null);
   const [showMobileMoreMenu, setShowMobileMoreMenu] = useState(false);
   const [activeMobileSection, setActiveMobileSection] = useState<string>("home");
@@ -161,6 +164,7 @@ export default function App() {
   const [favoriteActivities, setFavoriteActivities] = useState<CommonTemplate[]>([]);
   const [redemptions, setRedemptions] = useState<Redemption[]>([]);
   const [starTransactions, setStarTransactions] = useState<any[]>([]);
+  const [recentlyDeletedTransactions, setRecentlyDeletedTransactions] = useState<any[]>([]);
 
   // Performance Diagnostic Counters & Progress States
   const mountTime = React.useRef(performance.now());
@@ -1675,6 +1679,286 @@ export default function App() {
     }
   };
 
+  // 1. 撤銷兌換 (取消兌換 + 恢復星星)
+  const handleCancelRedemption = async (redemptionId: string) => {
+    try {
+      const redRef = doc(db, "redemptions", redemptionId);
+      const redSnap = await getDoc(redRef);
+      if (!redSnap.exists()) {
+        toast.error("❌ 找不到兌換請求記錄");
+        return;
+      }
+      const redData = redSnap.data() as Redemption;
+
+      // Restore child's stars if the redemption was approved
+      if (redData.status === "approved") {
+        const childProfileRef = doc(db, "users", redData.childUid);
+        const childSnap = await getDoc(childProfileRef);
+        if (childSnap.exists()) {
+          const currentStars = childSnap.data().stars || 0;
+          const newStars = currentStars + redData.starsRequired;
+
+          // Update user profile stars
+          await updateDoc(childProfileRef, { stars: newStars });
+
+          // Update companion family_member link stars
+          const memberId = `${currentUserProfile?.familyId}_${redData.childUid}`;
+          try {
+            await updateDoc(doc(db, "family_members", memberId), { stars: newStars });
+          } catch (memErr) {
+            console.warn("Family member synch skipped during cancellation:", memErr);
+          }
+
+          // Record star refund transaction
+          const transactionId = `trans_${Math.random().toString(36).substr(2, 9)}`;
+          const newTransaction = {
+            id: transactionId,
+            familyId: currentUserProfile?.familyId || "",
+            childUid: redData.childUid,
+            childName: redData.childName,
+            amount: redData.starsRequired,
+            type: "increase",
+            reason: `💥 撤銷兌換【${redData.rewardTitle}】退回星星`,
+            operatorUid: user?.uid || "",
+            operatorName: currentUserProfile?.displayName || "家長",
+            createdAt: serverTimestamp()
+          };
+          await setDoc(doc(db, "star_transactions", transactionId), newTransaction);
+        }
+      }
+
+      // Set state to canceled
+      await updateDoc(redRef, { status: "canceled" });
+      logFirestoreOp("update", `redemptions/${redemptionId}`, "success", `撤銷兌換並恢復星星`);
+      toast.success(`✅ 已成功撤銷該兌換，孩子星星已恢復！`);
+    } catch (err: any) {
+      logFirestoreOp("write", `redemptions/${redemptionId}`, "error", err.message);
+      toast.error(`❌ 撤銷兌換失敗: ${err.message}`);
+      handleFirestoreError(err, OperationType.WRITE, `redemptions/${redemptionId}`);
+    }
+  };
+
+  // 2. 刪除兌換紀錄
+  const handleDeleteRedemption = async (redemptionId: string) => {
+    try {
+      await deleteDoc(doc(db, "redemptions", redemptionId));
+      logFirestoreOp("delete", `redemptions/${redemptionId}`, "success", "直接刪除兌換紀錄");
+      toast.success("✅ 兌換歷史紀錄已刪除！");
+    } catch (err: any) {
+      logFirestoreOp("delete", `redemptions/${redemptionId}`, "error", err.message);
+      toast.error(`❌ 刪除兌換紀錄失敗: ${err.message}`);
+    }
+  };
+
+  // 3. 修改兌換紀錄內容
+  const handleUpdateRedemption = async (redemptionId: string, updates: Partial<Redemption>) => {
+    try {
+      await updateDoc(doc(db, "redemptions", redemptionId), updates);
+      logFirestoreOp("update", `redemptions/${redemptionId}`, "success", "修改兌換歷史紀錄");
+      toast.success("✅ 兌換紀錄修改成功！");
+    } catch (err: any) {
+      logFirestoreOp("update", `redemptions/${redemptionId}`, "error", err.message);
+      toast.error(`❌ 修改兌換紀錄失敗: ${err.message}`);
+    }
+  };
+
+  // Helper for human-friendly Firestore permission error messages
+  const getFriendlyErrorMessage = (err: any, fallbackStr: string = "操作失敗"): string => {
+    const msg = err?.message || String(err);
+    if (msg.includes("permission-denied") || msg.includes("permissions") || msg.includes("insufficient") || msg.includes("permission")) {
+      return "❌ 目前登入身份不是管理員，請聯絡家庭管理者";
+    }
+    return `❌ ${fallbackStr}: ${msg}`;
+  };
+
+  // 4. 刪除星星流水帳
+  const handleDeleteTransaction = async (transactionId: string, rollbackStars: boolean) => {
+    try {
+      const txRef = doc(db, "star_transactions", transactionId);
+      const txSnap = await getDoc(txRef);
+      if (!txSnap.exists()) {
+        toast.error("❌ 找不到該星星紀錄");
+        return;
+      }
+      const txData = txSnap.data();
+
+      // Store in trash bin state before actual deletion for easy restoration
+      setRecentlyDeletedTransactions((prev) => [
+        {
+          transaction: { id: transactionId, ...txData },
+          rollbackStars,
+          deletedAt: new Date(),
+        },
+        ...prev,
+      ].slice(0, 15)); // Keep last 15 items in history
+
+      if (rollbackStars && txData?.childUid) {
+        // Reverse the original transaction amount from the child's stars
+        const childProfileRef = doc(db, "users", txData.childUid);
+        const childSnap = await getDoc(childProfileRef);
+        if (childSnap.exists()) {
+          const currentStars = childSnap.data().stars || 0;
+          // subtract the original addition (if added, deduct it; if deducted, add it back)
+          const newStars = Math.max(0, currentStars - (txData.amount || 0));
+
+          await updateDoc(childProfileRef, { stars: newStars });
+
+          const memberId = `${currentUserProfile?.familyId}_${txData.childUid}`;
+          try {
+            await updateDoc(doc(db, "family_members", memberId), { stars: newStars });
+          } catch (memErr) {
+            console.warn("Family member sync skipped:", memErr);
+          }
+        }
+      }
+
+      await deleteDoc(txRef);
+      logFirestoreOp("delete", `star_transactions/${transactionId}`, "success", "刪除星星流水帳紀錄");
+      toast.success(rollbackStars ? "✅ 紀錄已刪除，且已同步還原小孩星星！" : "✅ 紀錄已刪除！（未變動小孩星星）");
+    } catch (err: any) {
+      logFirestoreOp("delete", `star_transactions/${transactionId}`, "error", err.message);
+      toast.error(getFriendlyErrorMessage(err, "刪除紀錄失敗"));
+      handleFirestoreError(err, OperationType.DELETE, `star_transactions/${transactionId}`);
+    }
+  };
+
+  // 5. 修改星星流水帳內容
+  const handleUpdateTransaction = async (transactionId: string, updates: any) => {
+    try {
+      await updateDoc(doc(db, "star_transactions", transactionId), updates);
+      logFirestoreOp("update", `star_transactions/${transactionId}`, "success", "修改星星流水帳內容");
+      toast.success("✅ 星星紀錄修改成功！");
+    } catch (err: any) {
+      logFirestoreOp("update", `star_transactions/${transactionId}`, "error", err.message);
+      toast.error(getFriendlyErrorMessage(err, "修改星星紀錄失敗"));
+      handleFirestoreError(err, OperationType.UPDATE, `star_transactions/${transactionId}`);
+    }
+  };
+
+  // 5b. 還原已刪除的星星對帳紀錄
+  const handleRestoreTransaction = async (deletedItem: any) => {
+    try {
+      const { transaction, rollbackStars } = deletedItem;
+      const txRef = doc(db, "star_transactions", transaction.id);
+
+      // Recreate document in firestore
+      await setDoc(txRef, {
+        id: transaction.id || "",
+        familyId: transaction.familyId || "",
+        childUid: transaction.childUid || "",
+        childName: transaction.childName || "",
+        amount: transaction.amount || 0,
+        type: transaction.type || "increase",
+        reason: transaction.reason || "",
+        operatorUid: transaction.operatorUid || "",
+        operatorName: transaction.operatorName || "",
+        createdAt: serverTimestamp() // Set fresh server timestamp
+      });
+
+      // If it was rolled back originally, reverse the rollback!
+      if (rollbackStars && transaction.childUid) {
+        const childProfileRef = doc(db, "users", transaction.childUid);
+        const childSnap = await getDoc(childProfileRef);
+        if (childSnap.exists()) {
+          const currentStars = childSnap.data().stars || 0;
+          // Reverse: if amount was originally deducted from child on delete, add it back now!
+          const newStars = Math.max(0, currentStars + (transaction.amount || 0));
+
+          await updateDoc(childProfileRef, { stars: newStars });
+
+          const memberId = `${currentUserProfile?.familyId}_${transaction.childUid}`;
+          try {
+            await updateDoc(doc(db, "family_members", memberId), { stars: newStars });
+          } catch (memErr) {
+            console.warn("Family member sync skipped:", memErr);
+          }
+        }
+      }
+
+      // Remove from recentlyDeletedTransactions list
+      setRecentlyDeletedTransactions(prev => prev.filter(item => item.transaction.id !== transaction.id));
+
+      logFirestoreOp("create", `star_transactions/${transaction.id}`, "success", "還原誤刪的星星流水帳");
+      toast.success("✅ 成功還原該筆星星紀錄，星星點數已同步恢復！");
+    } catch (err: any) {
+      logFirestoreOp("create", `star_transactions/${deletedItem.transaction.id}`, "error", err.message);
+      toast.error(getFriendlyErrorMessage(err, "還原失敗"));
+      handleFirestoreError(err, OperationType.CREATE, `star_transactions/${deletedItem.transaction.id}`);
+    }
+  };
+
+  // 5c. 批次刪除多筆星星對帳紀錄
+  const handleBatchDeleteTransactions = async (transactionIds: string[]) => {
+    try {
+      let deleteCount = 0;
+      for (const id of transactionIds) {
+        const txRef = doc(db, "star_transactions", id);
+        const txSnap = await getDoc(txRef);
+        if (txSnap.exists()) {
+          const txData = txSnap.data();
+          // Save in trash bin
+          setRecentlyDeletedTransactions((prev) => [
+            {
+              transaction: { id, ...txData },
+              rollbackStars: false,
+              deletedAt: new Date(),
+            },
+            ...prev,
+          ].slice(0, 15));
+
+          await deleteDoc(txRef);
+          deleteCount++;
+          logFirestoreOp("delete", `star_transactions/${id}`, "success", "批次刪除對帳紀錄");
+        }
+      }
+      toast.success(`✅ 已成功批次完成刪除寶貝的 ${deleteCount} 筆對帳明細！`);
+    } catch (err: any) {
+      toast.error(getFriendlyErrorMessage(err, "批次刪除失敗"));
+      handleFirestoreError(err, OperationType.DELETE, `star_transactions/batch`);
+    }
+  };
+
+  // 6. 重新設定 / 歸零小孩星星
+  const handleResetUserStars = async (targetUid: string, targetStars: number) => {
+    try {
+      const childProfileRef = doc(db, "users", targetUid);
+      const childSnap = await getDoc(childProfileRef);
+      if (!childSnap.exists()) {
+        toast.error("❌ 找不到該小孩成員");
+        return;
+      }
+      const oldStars = childSnap.data().stars || 0;
+      await updateDoc(childProfileRef, { stars: targetStars });
+
+      const memberId = `${currentUserProfile?.familyId}_${targetUid}`;
+      try {
+        await updateDoc(doc(db, "family_members", memberId), { stars: targetStars });
+      } catch (memErr) {
+        console.warn("Family member sync skipped:", memErr);
+      }
+
+      const transactionId = `trans_${Math.random().toString(36).substr(2, 9)}`;
+      const newTransaction = {
+        id: transactionId,
+        familyId: currentUserProfile?.familyId || "",
+        childUid: targetUid,
+        childName: childSnap.data().displayName || "小孩",
+        amount: targetStars - oldStars,
+        type: targetStars >= oldStars ? "increase" : "decrease",
+        reason: `📦 媽媽強制重設星星 (原剩餘數: ${oldStars} ➡️ 已重設為: ${targetStars} 顆)`,
+        operatorUid: user?.uid || "",
+        operatorName: currentUserProfile?.displayName || "家長",
+        createdAt: serverTimestamp()
+      };
+      await setDoc(doc(db, "star_transactions", transactionId), newTransaction);
+
+      toast.success(`✅ 已完成重設！小孩的星星已強制設定為 ${targetStars} 顆！`);
+    } catch (err: any) {
+      logFirestoreOp("write", `reset_stars/${targetUid}`, "error", err.message);
+      toast.error(`❌ 重設星星失敗: ${err.message}`);
+    }
+  };
+
 // Helper function to calculate matching weekdays for recurring lessons
 function generateTemplateDates(startDateStr: string, weekdays: number[], count: number = 12): string[] {
   const dates: string[] = [];
@@ -2421,8 +2705,32 @@ function generateTemplateDates(startDateStr: string, weekdays: number[], count: 
         id="applet-top-header"
         className="sticky top-0 bg-white border-b border-[#E5E1DA] z-40 shadow-sm font-sans flex flex-col"
       >
+        {/* Mobile Header: 3 rows, high-density, native feel, respects mom-focused optimize */}
+        <div className="block md:hidden px-4 py-1.5 border-b border-[#EFEAE2] bg-white text-[#2D2926] z-45 shadow-xs">
+          {/* Row 1: App Title & Bell Alarm */}
+          <div className="flex items-center justify-between h-7">
+            <span className="font-extrabold text-[14.5px] tracking-tight text-[#2D2926]">🏡 小龜家生活大小事</span>
+            <button className="p-1 text-gray-500 hover:text-amber-500 cursor-pointer relative" title="通知訊息">
+              <Bell className="h-4.5 w-4.5 animate-pulse" />
+              <span className="absolute top-1 right-1 h-1 w-1 bg-rose-500 rounded-full" />
+            </button>
+          </div>
+          {/* Row 2: Clock Display */}
+          <div className="text-gray-650 text-xs font-mono font-bold leading-tight h-5 flex items-center">
+            <Clock isPlain={true} />
+          </div>
+          {/* Row 3: Simple identity status line */}
+          <div className="text-gray-400 text-[11px] font-semibold mt-0.5 leading-none h-4">
+            目前身份：{effectiveUserProfile ? (
+              effectiveUserProfile.role === UserRole.ADMIN ? "管理員" :
+              effectiveUserProfile.role === UserRole.PARENT ? "媽媽" :
+              effectiveUserProfile.role === UserRole.KID ? `小孩 🌟 ${effectiveUserProfile.stars || 0}` : "成員"
+            ) : "載入中"}
+          </div>
+        </div>
+
         {/* Upper Brand Row - Compressed height by 40%+ on mobile & desktop with direct horizontal layout */}
-        <div className="px-4 py-1.5 md:py-2.5 flex flex-row items-center justify-between gap-3 flex-wrap md:flex-nowrap border-b border-[#F5F2EB]/50 md:px-6">
+        <div className="hidden md:flex px-4 py-1.5 md:py-2.5 flex-row items-center justify-between gap-3 flex-wrap md:flex-nowrap border-b border-[#F5F2EB]/50 md:px-6">
           <div className="flex items-center gap-1.5 select-none shrink-0">
             <div className="h-7 w-7 bg-[#4A6076] text-white rounded-lg flex items-center justify-center shrink-0">
               <Heart className="h-3.5 w-3.5 fill-white" />
@@ -2614,114 +2922,6 @@ function generateTemplateDates(startDateStr: string, weekdays: number[], count: 
             </div>
           </div>
         </div>
-        {/* MOBILE HORIZONTAL TAB BAR - Smoothly scrollable under brand header */}
-        <div className="bg-[#FAF9F6] border-b border-[#EFEAE2] px-3 h-[60px] flex items-center md:hidden block shadow-sm overflow-hidden z-30">
-          <div id="mobile-tab-scroll-container" className="flex items-center gap-2 overflow-x-auto scrollbar-none py-1.5 whitespace-nowrap scroll-smooth w-full select-none">
-            <button
-              id="mobile-tab-btn-home"
-              onClick={() => handleScrollToSection("mobile-section-home", "home")}
-              className={`h-11 px-4 text-base font-semibold rounded-xl transition-all border shrink-0 cursor-pointer flex items-center justify-center ${
-                activeMobileSection === "home"
-                  ? "bg-[#7C6354] text-white border-[#7C6354] border-b-4 border-b-white underline decoration-white decoration-2 underline-offset-4 shadow-md font-extrabold"
-                  : "bg-white text-[#5B7283] border-[#EFEAE2] hover:bg-gray-50/50"
-              }`}
-            >
-              🏠 首頁
-            </button>
-            
-            <button
-              id="mobile-tab-btn-calendar"
-              onClick={() => handleScrollToSection("mobile-section-calendar", "calendar")}
-              className={`h-11 px-4 text-base font-semibold rounded-xl transition-all border shrink-0 cursor-pointer flex items-center justify-center ${
-                activeMobileSection === "calendar"
-                  ? "bg-[#7C6354] text-white border-[#7C6354] border-b-4 border-b-white underline decoration-white decoration-2 underline-offset-4 shadow-md font-extrabold"
-                  : "bg-white text-[#5B7283] border-[#EFEAE2] hover:bg-gray-50/50"
-              }`}
-            >
-              📅 家庭行事曆
-            </button>
-
-            <button
-              id="mobile-tab-btn-tasks"
-              onClick={() => handleScrollToSection("mobile-section-tasks", "tasks")}
-              className={`h-11 px-4 text-base font-semibold rounded-xl transition-all border shrink-0 cursor-pointer flex items-center justify-center ${
-                activeMobileSection === "tasks"
-                  ? "bg-[#7C6354] text-white border-[#7C6354] border-b-4 border-b-white underline decoration-white decoration-2 underline-offset-4 shadow-md font-extrabold"
-                  : "bg-white text-[#5B7283] border-[#EFEAE2] hover:bg-gray-50/50"
-              }`}
-            >
-              ✅ 任務中心
-            </button>
-
-            <button
-              id="mobile-tab-btn-rewards"
-              onClick={() => handleScrollToSection("mobile-section-rewards", "rewards")}
-              className={`h-11 px-4 text-base font-semibold rounded-xl transition-all border shrink-0 cursor-pointer flex items-center justify-center ${
-                activeMobileSection === "rewards"
-                  ? "bg-[#7C6354] text-white border-[#7C6354] border-b-4 border-b-white underline decoration-white decoration-2 underline-offset-4 shadow-md font-extrabold"
-                  : "bg-white text-[#5B7283] border-[#EFEAE2] hover:bg-gray-50/50"
-              }`}
-            >
-              🎁 禮物中心
-            </button>
-
-            {effectiveUserProfile && (effectiveUserProfile.role as string === "Owner" || effectiveUserProfile.role as string === "Parent") && (
-              <button
-                id="mobile-tab-btn-favorites"
-                onClick={() => handleScrollToSection("mobile-section-favorites", "favorites")}
-                className={`h-11 px-4 text-base font-semibold rounded-xl transition-all border shrink-0 cursor-pointer flex items-center justify-center ${
-                  activeMobileSection === "favorites"
-                    ? "bg-[#7C6354] text-white border-[#7C6354] border-b-4 border-b-white underline decoration-white decoration-2 underline-offset-4 shadow-md font-extrabold"
-                    : "bg-white text-[#5B7283] border-[#EFEAE2] hover:bg-gray-50/50"
-                }`}
-              >
-                ⚡ 常用事項
-              </button>
-            )}
-
-            <button
-              id="mobile-tab-btn-special-periods"
-              onClick={() => handleScrollToSection("mobile-section-special-periods", "special-periods")}
-              className={`h-11 px-4 text-base font-semibold rounded-xl transition-all border shrink-0 cursor-pointer flex items-center justify-center ${
-                activeMobileSection === "special-periods"
-                  ? "bg-[#7C6354] text-white border-[#7C6354] border-b-4 border-b-white underline decoration-white decoration-2 underline-offset-4 shadow-md font-extrabold"
-                  : "bg-white text-[#5B7283] border-[#EFEAE2] hover:bg-gray-50/50"
-              }`}
-            >
-              🏕️ 特別期間安排
-            </button>
-
-            {effectiveUserProfile && (effectiveUserProfile.role as string === "Owner" || effectiveUserProfile.role as string === "Parent") && (
-              <button
-                id="mobile-tab-btn-members"
-                onClick={() => handleScrollToSection("mobile-section-members", "members")}
-                className={`h-11 px-4 text-base font-semibold rounded-xl transition-all border shrink-0 cursor-pointer flex items-center justify-center ${
-                  activeMobileSection === "members"
-                    ? "bg-[#7C6354] text-white border-[#7C6354] border-b-4 border-b-white underline decoration-white decoration-2 underline-offset-4 shadow-md font-extrabold"
-                    : "bg-white text-[#5B7283] border-[#EFEAE2] hover:bg-gray-50/50"
-                }`}
-              >
-                👨‍👩‍👧‍👦 家庭成員
-              </button>
-            )}
-
-            {isSuperAdmin && (
-              <button
-                id="mobile-tab-btn-admin"
-                onClick={() => {
-                  setActivePage("admin");
-                }}
-                className={`h-11 px-4 text-base font-semibold rounded-xl transition-all border shrink-0 cursor-pointer flex items-center justify-center ${
-                  activePage === "admin"
-                    ? "bg-indigo-600 text-white border-indigo-650 border-b-4 border-b-white underline decoration-white decoration-2 underline-offset-4 shadow-md font-extrabold"
-                    : "bg-white text-indigo-600 border-[#EFEAE2] hover:bg-indigo-50/25"
-                }`}
-              >
-                🛡️ 系統管理中心
-              </button>
-            )}
-          </div>
-        </div>
       </header>
 
       {/* Main Content Layout */}
@@ -2741,6 +2941,7 @@ function generateTemplateDates(startDateStr: string, weekdays: number[], count: 
                   familyMembers={familyMembers}
                   systemMode={currentModeValue}
                   rewards={rewards}
+                  redemptions={redemptions}
                   onAddAnnouncement={handleAddAnnouncement}
                   onDeleteAnnouncement={handleDeleteAnnouncement}
                   onNavigateToEvent={handleNavigateToEvent}
@@ -2751,6 +2952,7 @@ function generateTemplateDates(startDateStr: string, weekdays: number[], count: 
                   onSetSimulatedTodayDate={setSimulatedTodayDate}
                   onSaveConfiguredMode={handleSaveConfiguredMode}
                   onDeleteConfiguredMode={handleDeleteConfiguredMode}
+                  onChangePage={setActivePage}
                   dataLoaded={dataLoaded}
                 />
               )}
@@ -2788,6 +2990,7 @@ function generateTemplateDates(startDateStr: string, weekdays: number[], count: 
                   onDeleteTask={handleDeleteTask}
                   onEditTask={handleEditTask}
                   simulatedTodayDate={simulatedTodayDate}
+                  redemptions={redemptions}
                 />
               )}
 
@@ -2799,6 +3002,7 @@ function generateTemplateDates(startDateStr: string, weekdays: number[], count: 
                   familyMembers={familyMembers}
                   starTransactions={starTransactions}
                   onAdjustStars={handleAdjustStars}
+                  activeFamily={activeFamily}
                   onAddReward={handleAddReward}
                   onApproveWish={handleApproveWish}
                   onRedeemReward={handleRedeemReward}
@@ -2806,6 +3010,16 @@ function generateTemplateDates(startDateStr: string, weekdays: number[], count: 
                   onRejectRedemption={handleRejectRedemption}
                   onDeleteReward={handleDeleteReward}
                   onUpdateReward={handleUpdateReward}
+                  onCancelRedemption={handleCancelRedemption}
+                  onDeleteRedemption={handleDeleteRedemption}
+                  onUpdateRedemption={handleUpdateRedemption}
+                  onDeleteTransaction={handleDeleteTransaction}
+                  onUpdateTransaction={handleUpdateTransaction}
+                  onResetUserStars={handleResetUserStars}
+                  recentlyDeletedTransactions={recentlyDeletedTransactions}
+                  onRestoreTransaction={handleRestoreTransaction}
+                  onBatchDeleteTransactions={handleBatchDeleteTransactions}
+                  onClearTrashBin={() => setRecentlyDeletedTransactions([])}
                 />
               )}
 
@@ -2857,6 +3071,7 @@ function generateTemplateDates(startDateStr: string, weekdays: number[], count: 
               {activePage === "admin" && isSuperAdmin && (
                 <AdminCenter 
                   currentUser={effectiveUserProfile}
+                  activeFamily={activeFamily}
                   developerModeActive={developerModeActive}
                   setDeveloperModeActive={setDeveloperModeActive}
                   setShowDevPanel={setShowDevPanel}
@@ -2872,46 +3087,13 @@ function generateTemplateDates(startDateStr: string, weekdays: number[], count: 
               )}
             </div>
 
-            {/* MOBILE MODE VIEW (single-page vertical nesting layout) */}
-            <div className="block md:hidden w-full space-y-12">
-              {activePage === "admin" && isSuperAdmin ? (
-                <div className="animate-in fade-in duration-300">
-                  <AdminCenter 
-                    currentUser={effectiveUserProfile}
-                    developerModeActive={developerModeActive}
-                    setDeveloperModeActive={setDeveloperModeActive}
-                    setShowDevPanel={setShowDevPanel}
-                    loadTimeMs={loadTimeMs}
-                    queryCount={queryCount}
-                    listenerCount={listenerCount}
-                    lagSimulated={lagSimulated}
-                    setLagSimulated={setLagSimulated}
-                    simulatedTodayDate={simulatedTodayDate}
-                    onSetSimulatedTodayDate={setSimulatedTodayDate}
-                    handleResetCounters={handleResetCounters}
-                  />
-                  <div className="pt-4 text-center">
-                    <button
-                      onClick={() => {
-                        setActivePage("home");
-                      }}
-                      className="px-6 py-2.5 bg-gray-150 hover:bg-gray-200 text-[#3C332D] text-xs font-black rounded-xl transition cursor-pointer"
-                    >
-                      返回家庭主頁
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                effectiveUserProfile && (
-                  <>
+            {/* MOBILE MODE VIEW (independent single-view Tab navigation layout) */}
+            <div className="block md:hidden w-full pb-8">
+              {effectiveUserProfile && (
+                <>
                   {/* 首頁 */}
-                  <section id="mobile-section-home" className="scroll-mt-16 animate-in fade-in duration-300">
-                    <div className="border border-[#EFEAE2] rounded-[24px] bg-[#FCFBF9] p-4 soft-journal-shadow">
-                      <div className="border-b border-rose-100 pb-2 mb-4">
-                        <h2 className="text-sm font-black text-[#C76A5A] flex items-center gap-1">
-                          <span>🏠</span> 家長小孩共享首頁
-                        </h2>
-                      </div>
+                  {activePage === "home" && (
+                    <div id="mobile-view-home" className="animate-in fade-in duration-200">
                       <HomeDashboard
                         currentUser={effectiveUserProfile}
                         events={events}
@@ -2920,9 +3102,13 @@ function generateTemplateDates(startDateStr: string, weekdays: number[], count: 
                         familyMembers={familyMembers}
                         systemMode={currentModeValue}
                         rewards={rewards}
+                        redemptions={redemptions}
                         onAddAnnouncement={handleAddAnnouncement}
                         onDeleteAnnouncement={handleDeleteAnnouncement}
-                        onNavigateToEvent={(eventId, date) => handleScrollToSection("mobile-section-calendar", "calendar")}
+                        onNavigateToEvent={(eventId, date) => {
+                          setCalendarDeepLink({ eventId, date });
+                          setActivePage("calendar");
+                        }}
                         onAddEvent={handleAddEvent}
                         activeModeConfig={activeModeConfig}
                         configuredModes={activeSetting?.configuredModes || []}
@@ -2930,19 +3116,15 @@ function generateTemplateDates(startDateStr: string, weekdays: number[], count: 
                         onSetSimulatedTodayDate={setSimulatedTodayDate}
                         onSaveConfiguredMode={handleSaveConfiguredMode}
                         onDeleteConfiguredMode={handleDeleteConfiguredMode}
+                        onChangePage={setActivePage}
                         dataLoaded={dataLoaded}
                       />
                     </div>
-                  </section>
+                  )}
 
                   {/* 家庭行事曆 */}
-                  <section id="mobile-section-calendar" className="scroll-mt-16 animate-in fade-in duration-300">
-                    <div className="border border-[#EFEAE2] rounded-[24px] bg-[#FCFBF9] p-4 soft-journal-shadow">
-                      <div className="border-b border-rose-100 pb-2 mb-4">
-                        <h2 className="text-sm font-black text-[#5B7283] flex items-center gap-1">
-                          <span>📅</span> 家庭行事曆
-                        </h2>
-                      </div>
+                  {activePage === "calendar" && (
+                    <div id="mobile-view-calendar" className="animate-in fade-in duration-200">
                       <CalendarView
                         currentUser={effectiveUserProfile}
                         events={events}
@@ -2960,16 +3142,11 @@ function generateTemplateDates(startDateStr: string, weekdays: number[], count: 
                         onChangePage={setActivePage}
                       />
                     </div>
-                  </section>
+                  )}
 
                   {/* 任務中心 */}
-                  <section id="mobile-section-tasks" className="scroll-mt-16 animate-in fade-in duration-300">
-                    <div className="border border-[#EFEAE2] rounded-[24px] bg-[#FCFBF9] p-4 soft-journal-shadow">
-                      <div className="border-b border-rose-100 pb-2 mb-4">
-                        <h2 className="text-sm font-black text-[#5D8064] flex items-center gap-1">
-                          <span>✅</span> 任務中心與回報通關
-                        </h2>
-                      </div>
+                  {activePage === "tasks" && (
+                    <div id="mobile-view-tasks" className="animate-in fade-in duration-200">
                       <TaskSystem
                         currentUser={effectiveUserProfile}
                         tasks={tasks}
@@ -2983,18 +3160,14 @@ function generateTemplateDates(startDateStr: string, weekdays: number[], count: 
                         onDeleteTask={handleDeleteTask}
                         onEditTask={handleEditTask}
                         simulatedTodayDate={simulatedTodayDate}
+                        redemptions={redemptions}
                       />
                     </div>
-                  </section>
+                  )}
 
                   {/* 禮物中心 */}
-                  <section id="mobile-section-rewards" className="scroll-mt-16 animate-in fade-in duration-300">
-                    <div className="border border-[#EFEAE2] rounded-[24px] bg-[#FCFBF9] p-4 soft-journal-shadow">
-                      <div className="border-b border-rose-100 pb-2 mb-4">
-                        <h2 className="text-sm font-black text-[#BB7E67] flex items-center gap-1">
-                          <span>🎁</span> 禮物中心與星星祈願
-                        </h2>
-                      </div>
+                  {activePage === "rewards" && (
+                    <div id="mobile-view-rewards" className="animate-in fade-in duration-200">
                       <RewardCenter
                         currentUser={effectiveUserProfile}
                         rewards={rewards}
@@ -3002,6 +3175,7 @@ function generateTemplateDates(startDateStr: string, weekdays: number[], count: 
                         familyMembers={familyMembers}
                         starTransactions={starTransactions}
                         onAdjustStars={handleAdjustStars}
+                        activeFamily={activeFamily}
                         onAddReward={handleAddReward}
                         onApproveWish={handleApproveWish}
                         onRedeemReward={handleRedeemReward}
@@ -3009,37 +3183,51 @@ function generateTemplateDates(startDateStr: string, weekdays: number[], count: 
                         onRejectRedemption={handleRejectRedemption}
                         onDeleteReward={handleDeleteReward}
                         onUpdateReward={handleUpdateReward}
+                        onCancelRedemption={handleCancelRedemption}
+                        onDeleteRedemption={handleDeleteRedemption}
+                        onUpdateRedemption={handleUpdateRedemption}
+                        onDeleteTransaction={handleDeleteTransaction}
+                        onUpdateTransaction={handleUpdateTransaction}
+                        onResetUserStars={handleResetUserStars}
+                        recentlyDeletedTransactions={recentlyDeletedTransactions}
+                        onRestoreTransaction={handleRestoreTransaction}
+                        onBatchDeleteTransactions={handleBatchDeleteTransactions}
+                        onClearTrashBin={() => setRecentlyDeletedTransactions([])}
                       />
                     </div>
-                  </section>
+                  )}
 
                   {/* 常用事項 */}
-                  {effectiveUserProfile && (effectiveUserProfile.role === UserRole.ADMIN || effectiveUserProfile.role === UserRole.PARENT) && (
-                    <section id="mobile-section-favorites" className="scroll-mt-16 animate-in fade-in duration-300">
-                      <div className="border border-[#EFEAE2] rounded-[24px] bg-[#FCFBF9] p-4 soft-journal-shadow">
-                        <div className="border-b border-rose-100 pb-2 mb-4">
-                          <h2 className="text-sm font-black text-[#577085] flex items-center gap-1">
-                            <span>⚡</span> 常用事項管理 (家長專屬)
-                          </h2>
-                        </div>
-                        <FavoriteMgr
-                          currentUser={effectiveUserProfile}
-                          favoriteActivities={favoriteActivities}
-                          onAddFavorite={handleAddFavorite}
-                          onDeleteFavorite={handleDeleteFavorite}
-                          onEditFavorite={handleEditFavorite}
-                        />
+                  {activePage === "favorites" && (
+                    <div id="mobile-view-favorites" className="animate-in fade-in duration-200 space-y-4">
+                      <div className="flex items-center gap-2 mb-1">
+                        <button
+                          onClick={() => setActivePage("more")}
+                          className="px-3 py-1.5 bg-white text-[#7C6354] border border-[#EFEAE2] rounded-full text-xs font-black cursor-pointer shadow-xs active:scale-95 transition"
+                        >
+                          ⬅ 返回更多功能
+                        </button>
                       </div>
-                    </section>
+                      <FavoriteMgr
+                        currentUser={effectiveUserProfile}
+                        favoriteActivities={favoriteActivities}
+                        onAddFavorite={handleAddFavorite}
+                        onDeleteFavorite={handleDeleteFavorite}
+                        onEditFavorite={handleEditFavorite}
+                      />
+                    </div>
                   )}
 
                   {/* 特別期間安排 */}
-                  <section id="mobile-section-special-periods" className="scroll-mt-16 animate-in fade-in duration-300">
-                    <div className="border border-[#EFEAE2] rounded-[24px] bg-[#FCFBF9] p-4 soft-journal-shadow">
-                      <div className="border-b border-rose-100 pb-2 mb-4">
-                        <h2 className="text-sm font-black text-[#7559AC] flex items-center gap-1">
-                          <span>🏕️</span> 特別期間與家庭模式安排
-                        </h2>
+                  {activePage === "special-periods" && (
+                    <div id="mobile-view-special-periods" className="animate-in fade-in duration-200 space-y-4">
+                      <div className="flex items-center gap-2 mb-1">
+                        <button
+                          onClick={() => setActivePage("more")}
+                          className="px-3 py-1.5 bg-white text-[#7C6354] border border-[#EFEAE2] rounded-full text-xs font-black cursor-pointer shadow-xs active:scale-95 transition"
+                        >
+                          ⬅ 返回更多功能
+                        </button>
                       </div>
                       <SpecialPeriodsConfig
                         currentUser={effectiveUserProfile}
@@ -3050,43 +3238,175 @@ function generateTemplateDates(startDateStr: string, weekdays: number[], count: 
                         simulatedTodayDate={simulatedTodayDate}
                       />
                     </div>
-                  </section>
+                  )}
 
                   {/* 家庭成員 */}
-                  {effectiveUserProfile && (effectiveUserProfile.role === UserRole.ADMIN || effectiveUserProfile.role === UserRole.PARENT) && (
-                    <section id="mobile-section-members" className="scroll-mt-16 animate-in fade-in duration-300">
-                      <div className="border border-[#EFEAE2] rounded-[24px] bg-[#FCFBF9] p-4 soft-journal-shadow">
-                        <div className="border-b border-rose-100 pb-2 mb-4">
-                          <h2 className="text-sm font-black text-[#3C332D] flex items-center gap-1">
-                            <span>👨‍👩‍👧‍👦</span> 家庭成員與系統狀態
-                          </h2>
-                        </div>
-                        <MembersCenter
-                          currentUser={effectiveUserProfile}
-                          familyMembers={familyMembers}
-                          systemMode={currentModeValue}
-                          familyId={effectiveUserProfile.familyId || ""}
-                          familyName={activeFamily?.name || "家庭名單"}
-                          tasks={tasks}
-                          redemptions={redemptions}
-                          onUpdateSystemMode={handleUpdateSystemMode}
-                          onAddMember={handleAddMember}
-                          onEditMember={handleEditMember}
-                          onDeleteMember={handleDeleteMember}
-                          configuredModes={activeSetting?.configuredModes || []}
-                          onSaveConfiguredMode={handleSaveConfiguredMode}
-                          onDeleteConfiguredMode={handleDeleteConfiguredMode}
-                          simulatedTodayDate={simulatedTodayDate}
-                          onSetSimulatedTodayDate={setSimulatedTodayDate}
-                          pendingRequests={pendingRequests}
-                          onApproveJoinRequest={handleApproveJoinRequest}
-                          onRejectJoinRequest={handleRejectJoinRequest}
-                        />
+                  {activePage === "members" && (
+                    <div id="mobile-view-members" className="animate-in fade-in duration-200 space-y-4">
+                      <div className="flex items-center gap-2 mb-1">
+                        <button
+                          onClick={() => setActivePage("more")}
+                          className="px-3 py-1.5 bg-white text-[#7C6354] border border-[#EFEAE2] rounded-full text-xs font-black cursor-pointer shadow-xs active:scale-95 transition"
+                        >
+                          ⬅ 返回更多功能
+                        </button>
                       </div>
-                    </section>
+                      <MembersCenter
+                        currentUser={effectiveUserProfile}
+                        familyMembers={familyMembers}
+                        systemMode={currentModeValue}
+                        familyId={effectiveUserProfile.familyId || ""}
+                        familyName={activeFamily?.name || "家庭名單"}
+                        tasks={tasks}
+                        redemptions={redemptions}
+                        onUpdateSystemMode={handleUpdateSystemMode}
+                        onAddMember={handleAddMember}
+                        onEditMember={handleEditMember}
+                        onDeleteMember={handleDeleteMember}
+                        configuredModes={activeSetting?.configuredModes || []}
+                        onSaveConfiguredMode={handleSaveConfiguredMode}
+                        onDeleteConfiguredMode={handleDeleteConfiguredMode}
+                        simulatedTodayDate={simulatedTodayDate}
+                        onSetSimulatedTodayDate={setSimulatedTodayDate}
+                        pendingRequests={pendingRequests}
+                        onApproveJoinRequest={handleApproveJoinRequest}
+                        onRejectJoinRequest={handleRejectJoinRequest}
+                      />
+                    </div>
                   )}
-                  </>
-                )
+
+                  {/* 系統管理 */}
+                  {activePage === "admin" && isSuperAdmin && (
+                    <div id="mobile-view-admin" className="animate-in fade-in duration-200 space-y-4">
+                      <div className="flex items-center gap-2 mb-1">
+                        <button
+                          onClick={() => setActivePage("more")}
+                          className="px-3 py-1.5 bg-white text-[#7C6354] border border-[#EFEAE2] rounded-full text-xs font-black cursor-pointer shadow-xs active:scale-95 transition"
+                        >
+                          ⬅ 返回更多功能
+                        </button>
+                      </div>
+                      <AdminCenter 
+                        currentUser={effectiveUserProfile}
+                        activeFamily={activeFamily}
+                        developerModeActive={developerModeActive}
+                        setDeveloperModeActive={setDeveloperModeActive}
+                        setShowDevPanel={setShowDevPanel}
+                        loadTimeMs={loadTimeMs}
+                        queryCount={queryCount}
+                        listenerCount={listenerCount}
+                        lagSimulated={lagSimulated}
+                        setLagSimulated={setLagSimulated}
+                        simulatedTodayDate={simulatedTodayDate}
+                        onSetSimulatedTodayDate={setSimulatedTodayDate}
+                        handleResetCounters={handleResetCounters}
+                      />
+                    </div>
+                  )}
+
+                  {/* 獨立更多功能頁面 (2x2 Grid) */}
+                  {activePage === "more" && (
+                    <div className="animate-in fade-in duration-200 space-y-4 text-[#3C332D]">
+                      <div className="border-b border-[#F5F2EB] pb-2">
+                        <h2 className="text-base font-black text-gray-700 flex items-center gap-1.5">
+                          <span>⚙️</span> 更多功能
+                        </h2>
+                        <p className="text-xs text-gray-400 mt-0.5">家庭管理與備事清單</p>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-3 pt-1">
+                        {/* 1. 常用事項 */}
+                        <button
+                          onClick={() => setActivePage("favorites")}
+                          className="p-3 bg-white border border-[#EFEAE2] rounded-2xl text-left flex flex-col justify-between min-h-[95px] shadow-xs active:scale-97 hover:border-amber-200 transition cursor-pointer"
+                        >
+                          <div className="h-7 w-7 bg-amber-50 rounded-lg flex items-center justify-center text-[#7C6354]">
+                            <Sparkles className="h-4 w-4 text-amber-500" />
+                          </div>
+                          <div>
+                            <h3 className="text-[12px] font-black mt-1.5">⚡ 常用事項</h3>
+                            <p className="text-[9px] text-gray-400 leading-tight mt-0.5">常用行程快速建檔</p>
+                          </div>
+                        </button>
+
+                        {/* 2. 特別期間安排 */}
+                        <button
+                          onClick={() => setActivePage("special-periods")}
+                          className="p-3 bg-white border border-[#EFEAE2] rounded-2xl text-left flex flex-col justify-between min-h-[95px] shadow-xs active:scale-97 hover:border-indigo-200 transition cursor-pointer"
+                        >
+                          <div className="h-7 w-7 bg-indigo-50 rounded-lg flex items-center justify-center text-indigo-650">
+                            <CalendarDays className="h-4 w-4 text-[#7559AC]" />
+                          </div>
+                          <div>
+                            <h3 className="text-[12px] font-black mt-1.5">🏕️ 特別安排</h3>
+                            <p className="text-[9px] text-gray-400 leading-tight mt-0.5">寒暑假與大假計畫</p>
+                          </div>
+                        </button>
+
+                        {/* 3. 家庭成員 */}
+                        <button
+                          onClick={() => setActivePage("members")}
+                          className="p-3 bg-white border border-[#EFEAE2] rounded-2xl text-left flex flex-col justify-between min-h-[95px] shadow-xs active:scale-97 hover:border-teal-200 transition cursor-pointer"
+                        >
+                          <div className="h-7 w-7 bg-[#EBF5EF] rounded-lg flex items-center justify-center text-[#4A6076]">
+                            <Users className="h-4 w-4 text-[#4A6076]" />
+                          </div>
+                          <div>
+                            <h3 className="text-[12px] font-black mt-1.5">👨‍👩‍👧‍👦 家庭成員</h3>
+                            <p className="text-[9px] text-gray-400 leading-tight mt-0.5">成員角色與權限</p>
+                          </div>
+                        </button>
+
+                        {/* 4. 系統管理 */}
+                        <button
+                          onClick={() => setActivePage("admin")}
+                          className="p-3 bg-white border border-[#EFEAE2] rounded-2xl text-left flex flex-col justify-between min-h-[95px] shadow-xs active:scale-97 hover:border-indigo-200 transition cursor-pointer"
+                        >
+                          <div className="h-7 w-7 bg-indigo-50 rounded-lg flex items-center justify-center">
+                            <Settings className="h-4 w-4 text-indigo-600" />
+                          </div>
+                          <div>
+                            <h3 className="text-[12px] font-black mt-1.5">🛡️ 系統管理</h3>
+                            <p className="text-[9px] text-gray-400 leading-tight mt-0.5">模擬測試與重置</p>
+                          </div>
+                        </button>
+                      </div>
+
+                      {/* Member Badge Summary card strictly within the view */}
+                      <div className="bg-[#FAF9F6] border border-[#EFEAE2] p-2.5 rounded-2xl flex items-center justify-between mt-2">
+                        <div className="flex items-center gap-2">
+                          <div
+                            style={{ backgroundColor: effectiveUserProfile?.color || "#B4C3B2" }}
+                            className="h-8 w-8 rounded-full flex items-center justify-center text-xs text-[#2D2926] border border-[#EFEAE2] select-none font-extrabold"
+                          >
+                            {(!effectiveUserProfile?.photoURL || effectiveUserProfile?.photoURL.startsWith("http")) 
+                              ? (effectiveUserProfile?.displayName ? effectiveUserProfile.displayName.charAt(0) : "✿") 
+                              : effectiveUserProfile?.photoURL}
+                          </div>
+                          <div>
+                            <div className="text-xs font-black text-[#2D2926]">{effectiveUserProfile?.displayName}</div>
+                            <div className="text-[10px] text-[#7C6354] font-bold mt-0.5">目前身份：{effectiveUserProfile?.role === UserRole.PARENT ? "媽媽" : "成員"}</div>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <button
+                            onClick={() => setShowIdentityModal(true)}
+                            className="bg-white border border-[#EFEAE2] hover:bg-gray-50 text-[#7C6354] font-semibold px-2 px-2.5 py-1 rounded-full text-[10px] cursor-pointer"
+                          >
+                            權限
+                          </button>
+                          <button
+                            onClick={handleLogout}
+                            className="bg-red-50 text-red-600 border border-red-100 px-2 px-2.5 py-1 rounded-full text-[10px] font-semibold cursor-pointer"
+                          >
+                            登出
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </>
               )}
             </div>
           </ErrorBoundary>
@@ -3097,221 +3417,74 @@ function generateTemplateDates(startDateStr: string, weekdays: number[], count: 
       <div id="mobile-bottom-quickbar" className="fixed bottom-0 left-0 right-0 h-14 bg-white border-t border-[#EFEAE2] shadow-[0_-4px_12px_rgba(0,0,0,0.03)] md:hidden flex items-center justify-around z-50 select-none pb-safe">
         <button
           onClick={() => {
-            setShowMobileMoreMenu(false);
-            handleScrollToSection("mobile-section-home", "home");
+            setActivePage("home");
           }}
           className={`flex flex-col items-center justify-center flex-1 h-full transition-all cursor-pointer ${
-            activeMobileSection === "home" && !showMobileMoreMenu
+            activePage === "home"
               ? "text-[#7C6354] font-extrabold"
               : "text-gray-400 font-medium hover:text-[#7C6354]"
           }`}
         >
-          <Home className={`h-5 w-5 ${activeMobileSection === "home" && !showMobileMoreMenu ? "stroke-[2.5px]" : "stroke-[1.8px]"}`} />
+          <Home className={`h-5 w-5 ${activePage === "home" ? "stroke-[2.5px]" : "stroke-[1.8px]"}`} />
           <span className="text-[10px] mt-1">首頁</span>
         </button>
 
         <button
           onClick={() => {
-            setShowMobileMoreMenu(false);
-            handleScrollToSection("mobile-section-calendar", "calendar");
+            setActivePage("calendar");
           }}
           className={`flex flex-col items-center justify-center flex-1 h-full transition-all cursor-pointer ${
-            activeMobileSection === "calendar" && !showMobileMoreMenu
+            activePage === "calendar"
               ? "text-[#7C6354] font-extrabold"
               : "text-gray-400 font-medium hover:text-[#7C6354]"
           }`}
         >
-          <CalendarDays className={`h-5 w-5 ${activeMobileSection === "calendar" && !showMobileMoreMenu ? "stroke-[2.5px]" : "stroke-[1.8px]"}`} />
+          <CalendarDays className={`h-5 w-5 ${activePage === "calendar" ? "stroke-[2.5px]" : "stroke-[1.8px]"}`} />
           <span className="text-[10px] mt-1">行事曆</span>
         </button>
 
         <button
           onClick={() => {
-            setShowMobileMoreMenu(false);
-            handleScrollToSection("mobile-section-tasks", "tasks");
+            setActivePage("tasks");
           }}
           className={`flex flex-col items-center justify-center flex-1 h-full transition-all cursor-pointer ${
-            activeMobileSection === "tasks" && !showMobileMoreMenu
+            activePage === "tasks"
               ? "text-[#7C6354] font-extrabold"
               : "text-gray-400 font-medium hover:text-[#7C6354]"
           }`}
         >
-          <ClipboardList className={`h-5 w-5 ${activeMobileSection === "tasks" && !showMobileMoreMenu ? "stroke-[2.5px]" : "stroke-[1.8px]"}`} />
+          <ClipboardList className={`h-5 w-5 ${activePage === "tasks" ? "stroke-[2.5px]" : "stroke-[1.8px]"}`} />
           <span className="text-[10px] mt-1">任務</span>
         </button>
 
         <button
           onClick={() => {
-            setShowMobileMoreMenu(false);
-            handleScrollToSection("mobile-section-rewards", "rewards");
+            setActivePage("rewards");
           }}
           className={`flex flex-col items-center justify-center flex-1 h-full transition-all cursor-pointer ${
-            activeMobileSection === "rewards" && !showMobileMoreMenu
+            activePage === "rewards"
               ? "text-[#7C6354] font-extrabold"
               : "text-gray-400 font-medium hover:text-[#7C6354]"
           }`}
         >
-          <Gift className={`h-5 w-5 ${activeMobileSection === "rewards" && !showMobileMoreMenu ? "stroke-[2.5px]" : "stroke-[1.8px]"}`} />
+          <Gift className={`h-5 w-5 ${activePage === "rewards" ? "stroke-[2.5px]" : "stroke-[1.8px]"}`} />
           <span className="text-[10px] mt-1">禮物</span>
         </button>
 
         <button
-          onClick={() => setShowMobileMoreMenu(!showMobileMoreMenu)}
+          onClick={() => {
+            setActivePage("more");
+          }}
           className={`flex flex-col items-center justify-center flex-1 h-full transition-all cursor-pointer ${
-            showMobileMoreMenu || ["favorites", "special-periods", "members"].includes(activeMobileSection)
+            ["more", "favorites", "special-periods", "members", "admin"].includes(activePage)
               ? "text-[#7C6354] font-extrabold"
               : "text-gray-400 font-medium hover:text-[#7C6354]"
           }`}
         >
-          <MoreHorizontal className={`h-5 w-5 ${(showMobileMoreMenu || ["favorites", "special-periods", "members"].includes(activeMobileSection)) ? "stroke-[2.5px]" : "stroke-[1.8px]"}`} />
+          <MoreHorizontal className={`h-5 w-5 ${["more", "favorites", "special-periods", "members", "admin"].includes(activePage) ? "stroke-[2.5px]" : "stroke-[1.8px]"}`} />
           <span className="text-[10px] mt-1">更多</span>
         </button>
       </div>
-
-      {/* MOBILE MORE MENU SHEET TRANSITION */}
-      {showMobileMoreMenu && (
-        <div 
-          onClick={() => setShowMobileMoreMenu(false)}
-          className="fixed inset-0 bg-[#3C332D]/40 backdrop-blur-xs z-45 md:hidden flex flex-col justify-end animate-in fade-in duration-200"
-        >
-          <div 
-            onClick={(e) => e.stopPropagation()}
-            className="bg-white rounded-t-[24px] border-t border-[#EFEAE2] p-5 pb-8 space-y-4 shadow-2xl animate-in slide-in-from-bottom duration-300 max-h-[80vh] overflow-y-auto"
-          >
-            <div className="flex items-center justify-between border-b border-[#F5F2EB] pb-3 mb-2">
-              <h3 className="text-xs font-black text-gray-400 tracking-wider">更多家庭工具</h3>
-              <button 
-                onClick={() => setShowMobileMoreMenu(false)}
-                className="p-1 rounded-full bg-gray-100 hover:bg-gray-200 text-gray-500 cursor-pointer"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              {effectiveUserProfile && (effectiveUserProfile.role === UserRole.ADMIN || effectiveUserProfile.role === UserRole.PARENT) && (
-                <button
-                  onClick={() => {
-                    setShowMobileMoreMenu(false);
-                    handleScrollToSection("mobile-section-favorites", "favorites");
-                  }}
-                  className={`p-4 rounded-2xl border text-left flex items-start gap-3 transition-all cursor-pointer ${
-                    activeMobileSection === "favorites"
-                      ? "bg-[#F5EBE6] border-[#E7DCD5] text-[#7C6354] font-bold"
-                      : "bg-[#FAF9F6] border-[#EFEAE2] text-[#5B7283] hover:bg-gray-50"
-                  }`}
-                >
-                  <Sparkles className="h-5 w-5 text-amber-500 shrink-0" />
-                  <div>
-                    <div className="text-sm font-semibold">⚡ 常用事項</div>
-                    <div className="text-[10px] text-gray-400 mt-0.5">常用活動快速建檔</div>
-                  </div>
-                </button>
-              )}
-
-              <button
-                onClick={() => {
-                  setShowMobileMoreMenu(false);
-                  handleScrollToSection("mobile-section-special-periods", "special-periods");
-                }}
-                className={`p-4 rounded-2xl border text-left flex items-start gap-3 transition-all cursor-pointer ${
-                  activeMobileSection === "special-periods"
-                    ? "bg-[#F5EBE6] border-[#E7DCD5] text-[#7C6354] font-bold"
-                    : "bg-[#FAF9F6] border-[#EFEAE2] text-[#5B7283] hover:bg-gray-50"
-                }`}
-              >
-                <CalendarDays className="h-5 w-5 text-[#7559AC] shrink-0" />
-                <div>
-                  <div className="text-sm font-semibold">🏕️ 特別安排</div>
-                  <div className="text-[10px] text-gray-400 mt-0.5">寒暑假與大假模式</div>
-                </div>
-              </button>
-
-              {effectiveUserProfile && (effectiveUserProfile.role === UserRole.ADMIN || effectiveUserProfile.role === UserRole.PARENT) && (
-                <button
-                  onClick={() => {
-                    setShowMobileMoreMenu(false);
-                    handleScrollToSection("mobile-section-members", "members");
-                  }}
-                  className={`p-4 rounded-2xl border text-left flex items-start gap-3 transition-all cursor-pointer ${
-                    activeMobileSection === "members"
-                      ? "bg-[#F5EBE6] border-[#E7DCD5] text-[#7C6354] font-bold"
-                      : "bg-[#FAF9F6] border-[#EFEAE2] text-[#5B7283] hover:bg-gray-50"
-                  }`}
-                >
-                  <Users className="h-5 w-5 text-[#4A6076] shrink-0" />
-                  <div>
-                    <div className="text-sm font-semibold">👨‍👩‍👧‍👦 家庭成員</div>
-                    <div className="text-[10px] text-gray-400 mt-0.5">審核加入與設定</div>
-                  </div>
-                </button>
-              )}
-
-              {isSuperAdmin && (
-                <button
-                  onClick={() => {
-                    setShowMobileMoreMenu(false);
-                    setActivePage("admin");
-                  }}
-                  className={`p-4 rounded-2xl border text-left flex items-start gap-3 transition-all cursor-pointer ${
-                    activePage === "admin"
-                      ? "bg-indigo-50 border-indigo-200 text-indigo-700 font-bold"
-                      : "bg-[#FAF9F6] border-[#EFEAE2] text-indigo-600 hover:bg-indigo-50/20"
-                  }`}
-                >
-                  <div className="text-base shrink-0 select-none">🛡️</div>
-                  <div>
-                    <div className="text-sm font-semibold">系統管理</div>
-                    <div className="text-[10px] text-gray-400 mt-0.5">白名單與系統覆核</div>
-                  </div>
-                </button>
-              )}
-            </div>
-
-            <div className="border-t border-[#F5F2EB] pt-4 flex flex-col gap-2.5">
-              <div className="flex items-center justify-between px-2">
-                <div className="flex items-center gap-2">
-                  <div
-                    style={{ backgroundColor: effectiveUserProfile?.color || "#B4C3B2" }}
-                    className="h-8 w-8 rounded-full flex items-center justify-center text-xs text-[#2D2926] border border-[#E5E1DA] select-none font-extrabold"
-                  >
-                    {(!effectiveUserProfile?.photoURL || effectiveUserProfile?.photoURL.startsWith("http")) 
-                      ? (effectiveUserProfile?.displayName ? effectiveUserProfile.displayName.charAt(0) : "✿") 
-                      : effectiveUserProfile?.photoURL}
-                  </div>
-                  <div>
-                    <div className="text-xs font-extrabold text-[#2D2926]">{effectiveUserProfile?.displayName}</div>
-                    <div className="text-[9px] text-[#7C6354] font-medium leading-none mt-1">目前身份：{getRoleLabel(effectiveUserProfile?.role || UserRole.MEMBER)}</div>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-1.5">
-                  <button
-                    onClick={() => {
-                      setShowMobileMoreMenu(false);
-                      setShowIdentityModal(true);
-                    }}
-                    className="px-2.5 py-1.5 text-[10px] bg-sky-50 text-sky-700 border border-sky-100 rounded-lg font-bold flex items-center gap-1 cursor-pointer"
-                  >
-                    身份資訊
-                  </button>
-
-                  <button
-                    onClick={() => {
-                      setShowMobileMoreMenu(false);
-                      handleLogout();
-                    }}
-                    className="px-2.5 py-1.5 text-[10px] bg-red-50 text-red-600 border border-red-100 rounded-lg font-bold flex items-center gap-1 cursor-pointer"
-                  >
-                    <LogOut className="h-3 w-3" />
-                    登出
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
 
       <footer className="bg-white border-t border-gray-100 py-4 text-center text-[10px] text-gray-400 select-none">
         <p>© 2026 家庭生活管理中心 Family Schedule V2 · 以愛為核心的極簡清新設計</p>
@@ -3765,17 +3938,17 @@ function generateTemplateDates(startDateStr: string, weekdays: number[], count: 
                       {
                         key: "canManageFamily",
                         label: "家庭設定/模式管理",
-                        allowed: effectiveUserProfile.role === UserRole.OWNER || isSuperAdmin
+                        allowed: canManageFamily(effectiveUserProfile, activeFamily) || isSuperAdmin
                       },
                       {
                         key: "canManageMembers",
                         label: "成員管理與邀請碼產出",
-                        allowed: effectiveUserProfile.role === UserRole.OWNER || isSuperAdmin
+                        allowed: canManageFamily(effectiveUserProfile, activeFamily) || isSuperAdmin
                       },
                       {
                         key: "canManageRoles",
                         label: "權限管理與角色指派",
-                        allowed: effectiveUserProfile.role === UserRole.OWNER || isSuperAdmin
+                        allowed: canManageFamily(effectiveUserProfile, activeFamily) || isSuperAdmin
                       },
                       {
                         key: "canManageEvents",

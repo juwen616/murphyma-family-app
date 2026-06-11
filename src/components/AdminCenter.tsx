@@ -34,9 +34,11 @@ import {
   TrendingUp,
 } from "lucide-react";
 import toast from "react-hot-toast";
+import { canManageFamily } from "../utils/permissionUtils";
 
 interface AdminCenterProps {
   currentUser: any;
+  activeFamily?: any;
   developerModeActive?: boolean;
   setDeveloperModeActive?: (active: boolean) => void;
   setShowDevPanel?: (show: boolean) => void;
@@ -52,6 +54,7 @@ interface AdminCenterProps {
 
 export default function AdminCenter({
   currentUser,
+  activeFamily,
   developerModeActive = false,
   setDeveloperModeActive,
   setShowDevPanel,
@@ -77,7 +80,7 @@ export default function AdminCenter({
   const [newWhitelistedEmail, setNewWhitelistedEmail] = useState("");
   
   // Tabs for sub-sections
-  const [activeTab, setActiveTab] = useState<"overview" | "whitelist" | "families" | "users" | "audit" | "logins" | "diagnostics">("overview");
+  const [activeTab, setActiveTab] = useState<"overview" | "whitelist" | "families" | "users" | "audit" | "logins" | "diagnostics" | "permissions">("overview");
   
   // Search state
   const [searchQuery, setSearchQuery] = useState("");
@@ -557,6 +560,16 @@ export default function AdminCenter({
             >
               ⚙️ 開發者工具
             </button>
+            <button
+              onClick={() => { setActiveTab("permissions"); setSearchQuery(""); }}
+              className={`px-4 py-2.5 text-xs font-black transition whitespace-nowrap cursor-pointer border-b-2 ${
+                activeTab === "permissions"
+                  ? "border-rose-600 text-rose-600 font-extrabold"
+                  : "border-transparent text-gray-500 hover:text-gray-800"
+              }`}
+            >
+              🛡️ 權限檢驗
+            </button>
           </div>
 
           {/* Search Bar - Hidden on Overview tab */}
@@ -938,7 +951,100 @@ export default function AdminCenter({
             </div>
           )}
 
-          {/* TAB 7: FIRESTORE DIAGNOSTICS & DEVELOPER TOOLS */}
+          {/* TAB 8: CURRENT USER PRIVILEGE DIAGNOSTICS & PERMISSION CHECKS */}
+          {activeTab === "permissions" && (
+            <div className="bg-white border border-[#E5E1DA] rounded-2xl p-6 shadow-sm space-y-6 animate-in fade-in duration-200">
+              <div className="border-b border-gray-100 pb-4">
+                <h3 className="text-sm font-black flex items-center gap-1.5 text-gray-800">
+                  <Shield className="h-4.5 w-4.5 text-rose-600" />
+                  <span>🛡️ 權限檢驗與除錯中心 (Privilege Checking Panel)</span>
+                </h3>
+                <p className="text-[11px] text-gray-400 mt-0.5">實時檢測當前登入者與活動家庭的關聯，排查管理、星星修改與刪除權限故障</p>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* Section A: Current Session Logged User */}
+                <div className="bg-[#FCFBF9] border border-[#E5E1DA] rounded-2xl p-4 space-y-3.5">
+                  <h4 className="text-xs font-black text-gray-800 border-b border-[#E5E1DA]/60 pb-1.5 flex items-center gap-1">
+                    👤 帳號身份基準數據 (Logged-In User Profile)
+                  </h4>
+                  <div className="space-y-2 text-xs leading-relaxed text-gray-650 font-mono">
+                    <div className="flex justify-between items-center bg-white p-2 rounded border border-gray-100">
+                      <span className="text-[10px] text-gray-400 font-bold uppercase">電子郵件 Email</span>
+                      <span className="font-extrabold text-indigo-950 text-right">{currentUser?.email || "未知/未登錄"}</span>
+                    </div>
+                    <div className="flex justify-between items-center bg-white p-2 rounded border border-gray-100">
+                      <span className="text-[10px] text-gray-400 font-bold uppercase">顯示名稱 Name</span>
+                      <span className="font-extrabold text-gray-800 text-right">{currentUser?.displayName || currentUser?.name || "匿名"}</span>
+                    </div>
+                    <div className="flex justify-between items-center bg-white p-2 rounded border border-gray-100">
+                      <span className="text-[10px] text-gray-400 font-bold uppercase">使用者 ID (UID)</span>
+                      <span className="text-[10px] font-bold text-gray-500 break-all text-right max-w-[180px]">{currentUser?.uid || "無 UID"}</span>
+                    </div>
+                    <div className="flex justify-between items-center bg-white p-2 rounded border border-gray-100">
+                      <span className="text-[10px] text-gray-400 font-bold uppercase">角色權限 Role</span>
+                      <span className="font-extrabold text-[#7C6354] text-right">{currentUser?.role || "無"}</span>
+                    </div>
+                    <div className="flex justify-between items-center bg-white p-2 rounded border border-gray-100">
+                      <span className="text-[10px] text-gray-400 font-bold uppercase">關聯家庭 ID FamilyId</span>
+                      <span className="font-bold text-gray-600 text-right">{currentUser?.familyId || "無家族"}</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Section B: Current Active Family and Privilege Assertions */}
+                <div className="bg-[#FCFBF9] border border-[#E5E1DA] rounded-2xl p-4 space-y-3.5">
+                  <h4 className="text-xs font-black text-gray-800 border-b border-[#E5E1DA]/60 pb-1.5 flex items-center gap-1">
+                    🏠 開發與家庭關係檢閱 (Family Context & Permissions)
+                  </h4>
+                  <div className="space-y-2 text-xs leading-relaxed text-gray-650 font-mono">
+                    <div className="flex justify-between items-center bg-white p-2 rounded border border-gray-100">
+                      <span className="text-[10px] text-gray-400 font-bold uppercase">活動家庭名稱 Group</span>
+                      <span className="font-extrabold text-indigo-950 text-right">{activeFamily?.name || "無活動家族數據"}</span>
+                    </div>
+                    <div className="flex justify-between items-center bg-white p-2 rounded border border-gray-100">
+                      <span className="text-[10px] text-gray-400 font-bold uppercase">家庭主創管理員 UID</span>
+                      <span className="text-[9.5px] font-bold text-gray-500 break-all text-right max-w-[150px]">{activeFamily?.adminUid || activeFamily?.createdBy || "無"}</span>
+                    </div>
+                    <div className="flex justify-between items-center bg-white p-2 rounded border border-gray-100">
+                      <span className="text-[10px] text-gray-400 font-bold uppercase">管理者判定 IsOwner?</span>
+                      <span className={`font-black uppercase text-right ${currentUser?.isOwner || currentUser?.role === "Owner" || activeFamily?.adminUid === currentUser?.uid ? "text-emerald-600" : "text-gray-400"}`}>
+                        {currentUser?.isOwner || currentUser?.role === "Owner" || activeFamily?.adminUid === currentUser?.uid ? "YES (是)" : "NO (否)"}
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center bg-white p-2 rounded border border-gray-100">
+                      <span className="text-[10px] text-gray-400 font-bold uppercase">管理員判定 IsAdmin?</span>
+                      <span className={`font-black uppercase text-right ${currentUser?.isAdmin || currentUser?.role === "admin" || currentUser?.role === "Parent" ? "text-emerald-600" : "text-gray-400"}`}>
+                        {currentUser?.isAdmin || currentUser?.role === "admin" || currentUser?.role === "Parent" ? "YES (是)" : "NO (否)"}
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center bg-[#FEF2F2] p-2.5 rounded border border-[#FECACA] mt-1">
+                      <span className="text-[10px] text-rose-700 font-black uppercase">管理權限決策 CanManageFamily()</span>
+                      <span className={`font-black uppercase text-right px-2 py-0.5 rounded text-[11px] ${canManageFamily(currentUser, activeFamily) ? "bg-emerald-100 text-emerald-800 border border-emerald-200" : "bg-rose-150 text-rose-800 border border-rose-250"}`}>
+                        {canManageFamily(currentUser, activeFamily) ? "🟢 ALLOWED (已授權)" : "🔴 DENIED (拒絕)"}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Privilege diagnostics logic explanation helpful guidelines for Mother Role */}
+              <div className="p-4 bg-indigo-50 border border-indigo-150 rounded-xl space-y-2">
+                <span className="font-extrabold text-indigo-950 text-xs flex items-center gap-1">
+                  💡 家庭管理權限系統架構指引
+                </span>
+                <p className="text-[11px] text-indigo-850 leading-relaxed font-semibold">
+                  依據最新統一安全架構規定：為了排除媽媽與其他共同管理者「因 Firestore 角色字串大小寫不一致、或非建群人而被誤判拒絕」的異常，只要您符合下列任一條件，系統即自動授予 <code className="bg-white/80 px-1 rounded text-rose-700 font-bold text-[10px]">canManageFamily</code> 完整管理特權：
+                </p>
+                <ol className="list-decimal pl-4.5 text-[10px] text-indigo-700 space-y-1 leading-relaxed font-mono">
+                  <li>是電子郵件為 <code className="font-bold">juwen616@gmail.com</code> 的超級系統擁有者。</li>
+                  <li>角色標記為 <code className="font-bold">Owner</code>, <code className="font-bold">Parent</code>, <code className="font-bold">admin</code>, 或 <code className="font-bold">parent</code>（支援各式大小寫格式兼容性）。</li>
+                  <li>是當前活動家庭群組的最初創立人（UID 完全相符）。</li>
+                  <li>本地處於模擬之 Parent、Owner、Admin 操作權限中。</li>
+                </ol>
+              </div>
+            </div>
+          )}
           {activeTab === "diagnostics" && (
             <div className="bg-white border border-[#E5E1DA] rounded-2xl p-6 shadow-sm space-y-6 animate-in fade-in duration-200">
               <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-gray-100 pb-4">

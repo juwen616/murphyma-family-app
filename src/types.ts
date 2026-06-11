@@ -39,6 +39,7 @@ export interface UserProfile {
   createdAt: any;
   color?: string;
   birthday?: string;
+  gender?: string;
 }
 
 export interface Family {

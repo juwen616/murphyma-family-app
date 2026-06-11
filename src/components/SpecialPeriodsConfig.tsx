@@ -35,6 +35,14 @@ const getLocalToday = () => {
   return `${yyyy}-${mm}-${dd}`;
 };
 
+const getDaysInMonth = (year: number, month: number) => {
+  return new Date(year, month + 1, 0).getDate();
+};
+
+const getFirstDayOfMonth = (year: number, month: number) => {
+  return new Date(year, month, 1).getDay();
+};
+
 export const SpecialPeriodsConfig: React.FC<SpecialPeriodsConfigProps> = ({
   configuredModes,
   systemMode,
@@ -53,11 +61,18 @@ export const SpecialPeriodsConfig: React.FC<SpecialPeriodsConfigProps> = ({
   const [showModeModal, setShowModeModal] = useState(false);
   const [editingModeConfig, setEditingModeConfig] = useState<ConfiguredMode | null>(null);
   
+  // Date Range Picker State
+  const [showRangeCalendar, setShowRangeCalendar] = useState(false);
+  const [rangeSelectStep, setRangeSelectStep] = useState<"start" | "end">("start");
+  const [pickerYear, setPickerYear] = useState(2100);
+  const [pickerMonth, setPickerMonth] = useState(0);
+  const [validationError, setValidationError] = useState("");
+
   // Form values
   const [modeFormType, setModeFormType] = useState<SystemMode>(SystemMode.TRAVEL);
   const [modeFormName, setModeFormName] = useState("");
-  const [modeFormStartDate, setModeFormStartDate] = useState("2026-07-18");
-  const [modeFormEndDate, setModeFormEndDate] = useState("2026-07-25");
+  const [modeFormStartDate, setModeFormStartDate] = useState("");
+  const [modeFormEndDate, setModeFormEndDate] = useState("");
   const [modeFormIcon, setModeFormIcon] = useState("✈");
   const [modeFormColor, setModeFormColor] = useState("orange");
 
@@ -76,24 +91,13 @@ export const SpecialPeriodsConfig: React.FC<SpecialPeriodsConfigProps> = ({
   const [customTransportation, setCustomTransportation] = useState("");
 
   // Mode Specific - Exam
-  const [examSubjects, setExamSubjects] = useState<Array<{ name: string; target: string }>>([
-    { name: "國語", target: "" },
-    { name: "數學", target: "" },
-    { name: "英文", target: "" },
-  ]);
+  const [examSubjects, setExamSubjects] = useState<Array<{ name: string; target: string }>>([]);
   const [newSubjectInput, setNewSubjectInput] = useState("");
-  const [examDailyPlans, setExamDailyPlans] = useState<Array<{ id: string; startTime: string; endTime: string; subjectName: string }>>([
-    { id: "1", startTime: "18:00", endTime: "18:30", subjectName: "數學" },
-    { id: "2", startTime: "18:30", endTime: "19:00", subjectName: "英文" },
-  ]);
+  const [examDailyPlans, setExamDailyPlans] = useState<Array<{ id: string; startTime: string; endTime: string; subjectName: string }>>([]);
 
   // Mode Specific - Vacation
   const [vacationType, setVacationType] = useState("暑假");
-  const [vacationDailyTasks, setVacationDailyTasks] = useState<Array<{ id: string; text: string }>>([
-    { id: "1", text: "閱讀30分鐘" },
-    { id: "2", text: "練鋼琴" },
-    { id: "3", text: "寫作業" },
-  ]);
+  const [vacationDailyTasks, setVacationDailyTasks] = useState<Array<{ id: string; text: string }>>([]);
   const [newVacationTask, setNewVacationTask] = useState("");
 
   // Mode Specific - Custom
@@ -113,54 +117,47 @@ export const SpecialPeriodsConfig: React.FC<SpecialPeriodsConfigProps> = ({
     setModeFormType(typeState);
 
     const today = simulatedTodayDate || getLocalToday();
-    // End date defaults to +7 days
-    const nextWeek = new Date(new Date(today).getTime() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+    const tYear = parseInt(today.split("-")[0]) || 2026;
+    const tMonth = (parseInt(today.split("-")[1]) - 1) || 5;
 
-    setModeFormStartDate(today);
-    setModeFormEndDate(nextWeek);
+    setPickerYear(tYear);
+    setPickerMonth(tMonth);
 
-    if (typeState === SystemMode.TRAVEL) {
-      setModeFormName("峇里島渡假之旅");
-      setModeFormIcon("✈");
-      setModeFormColor("orange");
-      setTravelType("international");
-      setAirLine("星宇航空");
-      setFlightNumber("JX721");
-      setDepartureTime("09:50");
-      setReturnTime("16:45");
-      setDepartureTerminal("T2");
-      setReturnTerminal("T1");
-      setPassportReminder(true);
-      setVisaReminder(true);
-      setNotes("記得帶防曬、泳裝與泳帽");
-    } else if (typeState === SystemMode.EXAM) {
-      setModeFormName("期末考衝刺週");
-      setModeFormIcon("📚");
-      setModeFormColor("purple");
-      setExamSubjects([
-        { name: "國語", target: "複習生字與課文" },
-        { name: "數學", target: "加強練習單元八九" },
-        { name: "英文", target: "熟背第三單元單字" },
-      ]);
-    } else if (typeState === SystemMode.VACATION) {
-      setModeFormName("暑假自主學堂");
-      setModeFormIcon("🏡");
-      setModeFormColor("emerald");
-      setVacationType("暑假");
-      setVacationDailyTasks([
-        { id: "1", text: "閱讀30分鐘" },
-        { id: "2", text: "練鋼琴打卡" },
-        { id: "3", text: "做假期作業一頁" },
-      ]);
-    } else {
-      setModeFormName("家庭特別安排計畫");
-      setModeFormIcon("🎨");
-      setModeFormColor("indigo");
-      setCustomTasks([
-        { id: "1", text: "收拾自己的小房間" },
-        { id: "2", text: "每天喝水量達 1200cc" },
-      ]);
-    }
+    // ALL created periods must start ENTIRELY BLANK
+    setModeFormStartDate("");
+    setModeFormEndDate("");
+    setModeFormName("");
+    setModeFormIcon(typeState === SystemMode.TRAVEL ? "✈" : typeState === SystemMode.EXAM ? "📚" : typeState === SystemMode.VACATION ? "🏡" : "🎨");
+    setModeFormColor(typeState === SystemMode.TRAVEL ? "orange" : typeState === SystemMode.EXAM ? "purple" : typeState === SystemMode.VACATION ? "emerald" : "indigo");
+
+    // Clear all mode-specific variables completely
+    setAirLine("");
+    setFlightNumber("");
+    setDepartureTime("");
+    setReturnTime("");
+    setDepartureTerminal("");
+    setReturnTerminal("");
+    setPassportReminder(false);
+    setVisaReminder(false);
+    setNotes("");
+    setTransportation("drive");
+    setCustomTransportation("");
+
+    setExamSubjects([]);
+    setExamDailyPlans([]);
+
+    setVacationType("暑假");
+    setVacationDailyTasks([]);
+
+    setCustomTasks([]);
+
+    setNewSubjectInput("");
+    setNewVacationTask("");
+    setNewCustomTaskInput("");
+
+    setValidationError("");
+    setRangeSelectStep("start");
+    setShowRangeCalendar(false);
 
     setShowModeModal(true);
   };
@@ -175,6 +172,16 @@ export const SpecialPeriodsConfig: React.FC<SpecialPeriodsConfigProps> = ({
     setModeFormEndDate(mode.endDate);
     setModeFormIcon(mode.icon || "⭐");
     setModeFormColor(mode.color || "orange");
+
+    const today = mode.startDate || simulatedTodayDate || getLocalToday();
+    const tYear = parseInt(today.split("-")[0]) || 2026;
+    const tMonth = (parseInt(today.split("-")[1]) - 1) || 5;
+    setPickerYear(tYear);
+    setPickerMonth(tMonth);
+
+    setValidationError("");
+    setRangeSelectStep("start");
+    setShowRangeCalendar(false);
 
     if (mode.type === SystemMode.TRAVEL) {
       setTravelType(mode.travelType || "international");
@@ -204,6 +211,7 @@ export const SpecialPeriodsConfig: React.FC<SpecialPeriodsConfigProps> = ({
       setVacationDailyTasks((mode.dailyTasks || []).map(t => ({ id: t.id, text: t.text })));
     } else if (mode.type === SystemMode.CUSTOM) {
       setCustomTasks((mode.customTasks || []).map(t => ({ id: t.id, text: t.text })));
+      setNotes(mode.notes || "");
     }
 
     setShowModeModal(true);
@@ -212,7 +220,14 @@ export const SpecialPeriodsConfig: React.FC<SpecialPeriodsConfigProps> = ({
   // Save changes submit
   const handleSaveModeSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    if (!modeFormStartDate || !modeFormEndDate) {
+      setValidationError("請先點選並設定活動的『開始』與『結束』日期區間喔！📅");
+      return;
+    }
+
     setIsUpdating(true);
+    setValidationError("");
 
     const modeId = editingModeConfig?.id || `mode_v_${Math.random().toString(36).substr(2, 9)}`;
 
@@ -220,14 +235,14 @@ export const SpecialPeriodsConfig: React.FC<SpecialPeriodsConfigProps> = ({
       id: modeId,
       type: modeFormType,
       name: modeFormName || (
-        modeFormType === SystemMode.TRAVEL ? "峇里島旅行" :
-        modeFormType === SystemMode.EXAM ? "期中考" :
-        modeFormType === SystemMode.VACATION ? "暑假規劃" : "自訂計畫"
+        modeFormType === SystemMode.TRAVEL ? "家庭旅行" :
+        modeFormType === SystemMode.EXAM ? "考試衝刺" :
+        modeFormType === SystemMode.VACATION ? "假期規劃" : "自訂計畫"
       ),
       icon: modeFormIcon,
       color: modeFormColor,
-      startDate: modeFormStartDate || getLocalToday(),
-      endDate: modeFormEndDate || "2026-06-30",
+      startDate: modeFormStartDate,
+      endDate: modeFormEndDate,
       createdAt: editingModeConfig?.createdAt || new Date(),
     };
 
@@ -243,51 +258,6 @@ export const SpecialPeriodsConfig: React.FC<SpecialPeriodsConfigProps> = ({
       payload.visaReminder = visaReminder;
       payload.notes = notes;
       payload.transportation = transportation === "custom" ? (customTransportation || "自訂交通") : transportation;
-
-      if (editingModeConfig?.itinerary) {
-        payload.itinerary = editingModeConfig.itinerary;
-      } else {
-        const genItinerary: any = {};
-        const start = new Date(payload.startDate);
-        const end = new Date(payload.endDate);
-        const current = new Date(start);
-        let idx = 1;
-        while (current <= end) {
-          const dStr = current.toISOString().split("T")[0];
-          if (idx === 1) {
-            genItinerary[dStr] = {
-              breakfast: "別墅附贈活力朝食",
-              morning: "機場辦理登機通關 ✈",
-              lunch: "飛機美味輕食餐盒",
-              afternoon: "飛抵浪漫度假島、專車接送飯店",
-              dinner: "在地南洋沙爹風味串燒饗宴",
-              night: "海濱沙灘散步吹海風、沉澱身心",
-              lodging: "海景景觀豪華大飯店",
-              transport: "貼心包車接引",
-              customNotes: "第一天早點安歇，調適行李時差唷！",
-              todayTheme: "移動日",
-              todayRemarks: "記得隨身準備護照，第一天調適時差早點休息！",
-            };
-          } else {
-            genItinerary[dStr] = {
-              breakfast: "飯店美式自助早餐",
-              morning: "走訪藝術市集與精緻手作",
-              lunch: "印尼皇家香烤髒鴨風味餐",
-              afternoon: "放鬆舒壓的精油 SPA 按摩體驗",
-              dinner: "金色夕陽海灘精緻海鮮熱烈 BBQ",
-              night: "大廳現場樂隊演奏、品味鮮椰子汁",
-              lodging: "海灘五星度假別墅",
-              transport: "專業導遊包車",
-              customNotes: "買手工藝品要用點心技巧殺價喔！",
-              todayTheme: "文化探索日",
-              todayRemarks: "14:00 SPA預約\n17:30 看金色夕陽\n傍晚海灘可能風大，帶件薄外套唷！",
-            };
-          }
-          current.setDate(current.getDate() + 1);
-          idx++;
-        }
-        payload.itinerary = genItinerary;
-      }
     } else if (modeFormType === SystemMode.EXAM) {
       payload.subjects = examSubjects.filter(s => s.name.trim() !== "");
       payload.dailyPlan = examDailyPlans;
@@ -295,7 +265,42 @@ export const SpecialPeriodsConfig: React.FC<SpecialPeriodsConfigProps> = ({
       payload.vacationType = vacationType;
       payload.dailyTasks = vacationDailyTasks.map(t => ({ id: t.id, text: t.text, completed: false }));
     } else if (modeFormType === SystemMode.CUSTOM) {
-      payload.customTasks = customTasks.map(t => ({ id: t.id, text: t.text, completed: false }));
+      payload.notes = notes;
+      payload.customTasks = [];
+    }
+
+    // Initialize/Maintain clean daily itinerary structure - ALL modes are initialized completely block & empty
+    if (editingModeConfig?.itinerary) {
+      payload.itinerary = editingModeConfig.itinerary;
+    } else {
+      const genItinerary: any = {};
+      const start = new Date(payload.startDate);
+      const end = new Date(payload.endDate);
+      const current = new Date(start);
+      while (current <= end) {
+        const dStr = current.toISOString().split("T")[0];
+        genItinerary[dStr] = {
+          morning: "",
+          afternoon: "",
+          evening: "",
+          breakfast: "",
+          lunch: "",
+          dinner: "",
+          note: "",
+          theme: "",
+          morningTask: "",
+          afternoonTask: "",
+          eveningTask: "",
+          night: "",
+          lodging: "",
+          transport: "",
+          customNotes: "",
+          todayTheme: "",
+          todayRemarks: "",
+        };
+        current.setDate(current.getDate() + 1);
+      }
+      payload.itinerary = genItinerary;
     }
 
     try {
@@ -377,106 +382,105 @@ export const SpecialPeriodsConfig: React.FC<SpecialPeriodsConfigProps> = ({
   };
 
   return (
-    <div className="space-y-6">
-      {/* 🚀 Header Brand Description */}
-      <div className="bg-gradient-to-r from-[#9DC2C9]/20 to-[#FAF8F4] border border-[#E8E2D8] rounded-3xl p-6 shadow-xs font-sans">
-        <div className="flex items-start gap-4">
-          <div className="h-12 w-12 bg-white rounded-2xl flex items-center justify-center border border-[#9DC2C9] text-2xl shadow-sm shrink-0">
-            🗓️
-          </div>
+    <div className="space-y-4">
+      {/* 🚀 Thin Brand Header Description (strictly < 90px in height) */}
+      <div className="bg-gradient-to-r from-[#9DC2C9]/15 to-[#FAF8F4] border border-[#E8E2D8] rounded-2xl p-3 shadow-xs font-sans">
+        <div className="flex items-center gap-3">
+          <span className="text-xl shrink-0">🗓️</span>
           <div>
-            <h2 className="text-sm font-black text-[#3C332D]">🗓️ 特別期間安排</h2>
-            <p className="text-xs text-gray-500 mt-1 leading-relaxed">
-              家庭專屬的行事曆規劃站！在這裡可以集中安排孩子們的【旅遊計畫】、家督【考試計畫】或愉悅的【寒暑假計畫】。
-              生效期間，月曆網格與每日作息小幫手將同步換裝，讓孩子一目了然接下來的精彩時間。
+            <h2 className="text-xs font-black text-[#3C332D]">特別期間計畫看板</h2>
+            <p className="text-[10px] text-gray-400 font-bold mt-0.5 leading-tight">
+              集中排定旅遊計畫、考試衝刺或寒暑假作息。網格網頁與作息同步換裝，儀式滿滿。
             </p>
           </div>
         </div>
       </div>
 
-      {/* 🧩 Step 1: Four Large Preset Creator Cards (Parents Only) */}
+      {/* 🧩 Step 1: Compact Creator List (Parents Only) */}
       {isParent ? (
-        <div className="space-y-3.5">
+        <div className="space-y-2.5 font-sans">
           <h3 className="text-xs font-black text-[#5C3A21] tracking-wider uppercase">✨ 建立新的家庭特別期間：</h3>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+            
             {/* 1. Travel Plane Card */}
-            <div className="bg-[#EAF6FF]/60 border border-[#BFDFFF] rounded-2xl p-5 shadow-xs transition hover:-translate-y-1 hover:shadow-md flex flex-col justify-between h-[180px]">
-              <div className="space-y-1.5">
-                <div className="text-3xl">✈️</div>
-                <h4 className="font-extrabold text-xs text-blue-900">我們要去旅遊了！</h4>
-                <p className="text-[10px] text-blue-700/80 leading-snug">
-                  自由設定國內外班機或自駕行程序，自動啟用碧藍假期卡片提示
-                </p>
+            <div className="bg-[#EAF6FF]/60 border border-[#BFDFFF] rounded-xl px-3 py-2 flex items-center justify-between gap-3 min-h-[60px] transition hover:shadow-xs">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <div className="text-2xl shrink-0">✈️</div>
+                <div className="min-w-0">
+                  <h4 className="font-extrabold text-xs text-blue-900 leading-tight">出遊計畫</h4>
+                  <p className="text-[10px] text-blue-700/80 leading-none mt-0.5 truncate">自訂機票、行李提醒與通知</p>
+                </div>
               </div>
               <button
                 type="button"
                 onClick={() => handleOpenAddMode(SystemMode.TRAVEL)}
-                className="w-full py-2 text-center text-[10px] font-black bg-[#478ECC] hover:bg-[#3476B0] text-white rounded-xl shadow-xs cursor-pointer transition uppercase"
+                className="py-1.5 px-3 shrink-0 text-[10px] font-black bg-[#478ECC] hover:bg-[#3476B0] text-white rounded-lg shadow-xs cursor-pointer transition uppercase"
               >
-                + 建立旅行計畫
+                + 建立
               </button>
             </div>
 
             {/* 2. Exam Study Card */}
-            <div className="bg-[#FFF5D9]/60 border border-[#FFE6A3] rounded-2xl p-5 shadow-xs transition hover:-translate-y-1 hover:shadow-md flex flex-col justify-between h-[180px]">
-              <div className="space-y-1.5">
-                <div className="text-3xl">📚</div>
-                <h4 className="font-extrabold text-xs text-yellow-905">孩子要準備考試了！</h4>
-                <p className="text-[10px] text-amber-805/80 leading-snug">
-                  預先提醒學科重點、複習項目，家長提振士氣的最佳督導
-                </p>
+            <div className="bg-[#FFF5D9]/60 border border-[#FFE6A3] rounded-xl px-3 py-2 flex items-center justify-between gap-3 min-h-[60px] transition hover:shadow-xs">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <div className="text-2xl shrink-0">📚</div>
+                <div className="min-w-0">
+                  <h4 className="font-extrabold text-xs text-yellow-950 leading-tight">考試特別衝刺</h4>
+                  <p className="text-[10px] text-amber-805/85 leading-none mt-0.5 truncate">設定學科、目標、家長叮嚀</p>
+                </div>
               </div>
               <button
                 type="button"
                 onClick={() => handleOpenAddMode(SystemMode.EXAM)}
-                className="w-full py-2 text-center text-[10px] font-black bg-[#DCA21D] hover:bg-[#C28E14] text-white rounded-xl shadow-xs cursor-pointer transition uppercase"
+                className="py-1.5 px-3 shrink-0 text-[10px] font-black bg-[#DCA21D] hover:bg-[#C28E14] text-white rounded-lg shadow-xs cursor-pointer transition uppercase"
               >
-                + 建立考試計畫
+                + 建立
               </button>
             </div>
 
             {/* 3. Vacation Camps Card */}
-            <div className="bg-[#F2FFF0]/60 border border-[#D8F3D1] rounded-2xl p-5 shadow-xs transition hover:-translate-y-1 hover:shadow-md flex flex-col justify-between h-[180px]">
-              <div className="space-y-1.5">
-                <div className="text-3xl">🏕️</div>
-                <h4 className="font-extrabold text-xs text-emerald-900">要放寒暑假囉！</h4>
-                <p className="text-[10px] text-emerald-800/80 leading-snug">
-                  制訂夏令營、生活作息規律打卡清單，與日常星星獎勵聯動
-                </p>
+            <div className="bg-[#F2FFF0]/60 border border-[#D8F3D1] rounded-xl px-3 py-2 flex items-center justify-between gap-3 min-h-[60px] transition hover:shadow-xs">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <div className="text-2xl shrink-0">🏕️</div>
+                <div className="min-w-0">
+                  <h4 className="font-extrabold text-xs text-emerald-950 leading-tight">寒暑假安排</h4>
+                  <p className="text-[10px] text-emerald-800/85 leading-none mt-0.5 truncate">假期打卡作息與學習打卡</p>
+                </div>
               </div>
               <button
                 type="button"
                 onClick={() => handleOpenAddMode(SystemMode.VACATION)}
-                className="w-full py-2 text-center text-[10px] font-black bg-[#2E7D32] hover:bg-[#206023] text-white rounded-xl shadow-xs cursor-pointer transition uppercase"
+                className="py-1.5 px-3 shrink-0 text-[10px] font-black bg-[#2E7D32] hover:bg-[#206023] text-white rounded-lg shadow-xs cursor-pointer transition uppercase"
               >
-                + 建立假期計畫
+                + 建立
               </button>
             </div>
 
             {/* 4. Custom arrangements Theme Card */}
-            <div className="bg-[#EEF2FF]/65 border border-[#CCD6FF] rounded-2xl p-5 shadow-xs transition hover:-translate-y-1 hover:shadow-md flex flex-col justify-between h-[180px]">
-              <div className="space-y-1.5">
-                <div className="text-3xl">🎨</div>
-                <h4 className="font-extrabold text-xs text-indigo-900">其他家庭特別安排！</h4>
-                <p className="text-[10px] text-indigo-700/80 leading-snug">
-                  如搬家打掃、體能拉練，任意創造自己獨一無二的日常儀式
-                </p>
+            <div className="bg-[#EEF2FF]/65 border border-[#CCD6FF] rounded-xl px-3 py-2 flex items-center justify-between gap-3 min-h-[60px] transition hover:shadow-xs">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <div className="text-2xl shrink-0">🎨</div>
+                <div className="min-w-0">
+                  <h4 className="font-extrabold text-xs text-indigo-950 leading-tight">自訂主題計畫</h4>
+                  <p className="text-[10px] text-indigo-700/85 leading-none mt-0.5 truncate">打掃拉練或家庭主題打卡儀式</p>
+                </div>
               </div>
               <button
                 type="button"
                 onClick={() => handleOpenAddMode(SystemMode.CUSTOM)}
-                className="w-full py-2 text-center text-[10px] font-black bg-[#5865F2] hover:bg-[#4752C4] text-white rounded-xl shadow-xs cursor-pointer transition uppercase"
+                className="py-1.5 px-3 shrink-0 text-[10px] font-black bg-[#5865F2] hover:bg-[#4752C4] text-white rounded-lg shadow-xs cursor-pointer transition uppercase"
               >
-                + 建立自訂計畫
+                + 建立
               </button>
             </div>
+
           </div>
         </div>
       ) : (
-        <div className="bg-[#FFFDF9] border border-[#E8E2D8] rounded-2xl p-4 flex items-center gap-3 text-xs text-amber-800 shadow-xs">
+        <div className="bg-[#FFFDF9] border border-[#E8E2D8] rounded-2xl p-3 flex items-center gap-2.5 text-xs text-amber-800 shadow-xs">
           <Info className="h-4 w-4 shrink-0 text-amber-500" />
-          <p className="font-bold">
-            📢 爸爸和媽媽細心打理了我們全家的特別安排！點擊下方的計畫清單，能一起查看完整的每日安排唷。
+          <p className="font-bold text-[10.5px]">
+            📢 爸媽細心安排了此階段的特別計畫，在下方可展開完整日程和清單！
           </p>
         </div>
       )}
@@ -746,14 +750,14 @@ export const SpecialPeriodsConfig: React.FC<SpecialPeriodsConfigProps> = ({
                                           )}
                                         </div>
                                       )}
-                                      <p className="font-medium">
-                                        🌅 <b>清晨：</b>{item.breakfast || "經典精緻朝食"} ｜ <b>朝：</b>{item.morning || "自在逛街放鬆"}
+                                      <p className="font-medium text-[11px]">
+                                        🌅 <b>早餐：</b>{item.breakfast || "（未設定）"} ｜ <b>上午：</b>{item.morning || "（未設定）"}
                                       </p>
-                                      <p className="font-medium">
-                                        🍜 <b>午餐：</b>{item.lunch || "自選美味體驗"} ｜ <b>午後：</b>{item.afternoon || "景區名所自由行"}
+                                      <p className="font-medium text-[11px]">
+                                        🍜 <b>午餐：</b>{item.lunch || "（未設定）"} ｜ <b>下午：</b>{item.afternoon || "（未設定）"}
                                       </p>
-                                      <p className="font-medium">
-                                        🍖 <b>晩餐：</b>{item.dinner || "地方特色好料美食"} ｜ <b>夜：</b>{item.night || "夜遊散步度假"}
+                                      <p className="font-medium text-[11px]">
+                                        🍖 <b>晚餐：</b>{item.dinner || "（未設定）"} ｜ <b>晚上：</b>{item.night || "（未設定）"}
                                       </p>
                                     </div>
                                   )}
@@ -784,7 +788,7 @@ export const SpecialPeriodsConfig: React.FC<SpecialPeriodsConfigProps> = ({
                               ))}
                             </div>
                           ) : (
-                            <p className="text-gray-400 italic text-[11px]">尚未添加科目規劃</p>
+                            <p className="text-gray-400 italic text-[11px]">尚未新增考科規劃</p>
                           )}
                         </div>
                       )}
@@ -817,7 +821,7 @@ export const SpecialPeriodsConfig: React.FC<SpecialPeriodsConfigProps> = ({
                               ))}
                             </div>
                           ) : (
-                            <p className="text-gray-400 italic text-[11px]">尚未添加每日生活打卡清單</p>
+                            <p className="text-gray-400 italic text-[11px]">尚未新增每日生活打卡清單</p>
                           )}
                         </div>
                       )}
@@ -850,7 +854,7 @@ export const SpecialPeriodsConfig: React.FC<SpecialPeriodsConfigProps> = ({
                               ))}
                             </div>
                           ) : (
-                            <p className="text-gray-400 italic text-[11px]">尚未添加自訂生活打卡清單</p>
+                            <p className="text-gray-400 italic text-[11px]">尚未新增自訂生活打卡清單</p>
                           )}
                         </div>
                       )}
@@ -939,39 +943,174 @@ export const SpecialPeriodsConfig: React.FC<SpecialPeriodsConfigProps> = ({
                 <input
                   type="text"
                   required
-                  placeholder="例如：日本東京旅行、期末考、暑假規劃..."
+                  placeholder={
+                    modeFormType === SystemMode.TRAVEL
+                      ? "例如：峇里島親子旅行"
+                      : modeFormType === SystemMode.EXAM
+                      ? "例如：期末考衝刺週"
+                      : modeFormType === SystemMode.VACATION
+                      ? "例如：暑假自主學堂"
+                      : "例如：家庭自訂計畫..."
+                  }
                   value={modeFormName}
                   onChange={(e) => setModeFormName(e.target.value)}
                   className="w-full bg-gray-50/50 rounded-xl px-3 py-2 border border-gray-200 focus:border-indigo-400 focus:bg-white focus:outline-none text-xs font-bold"
                 />
               </div>
 
-              {/* Date interval */}
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1">
-                  <label className="block font-black text-gray-755">📅 開始生效日期：</label>
-                  <input
-                    type="date"
-                    required
-                    value={modeFormStartDate}
-                    onChange={(e) => setModeFormStartDate(e.target.value)}
-                    className="w-full bg-gray-50/50 rounded-xl px-3 py-2 border border-gray-200 focus:border-indigo-400 focus:bg-white focus:outline-none font-bold"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <label className="block font-black text-gray-755">📅 結束失效日期：</label>
-                  <input
-                    type="date"
-                    required
-                    value={modeFormEndDate}
-                    onChange={(e) => setModeFormEndDate(e.target.value)}
-                    className="w-full bg-gray-50/50 rounded-xl px-3 py-2 border border-gray-200 focus:border-indigo-400 focus:bg-white focus:outline-none font-bold"
-                  />
-                </div>
+              {/* Date interval (Single Date Range Picker) */}
+              <div className="space-y-1.5 relative font-sans">
+                <label className="block text-xs font-black text-gray-700">3. 📅 選擇活動日期區間：</label>
+                <button
+                  type="button"
+                  onClick={() => setShowRangeCalendar(!showRangeCalendar)}
+                  className="w-full bg-gray-50/50 hover:bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 flex items-center justify-between transition text-xs font-bold text-gray-800 cursor-pointer"
+                >
+                  <span className="flex items-center gap-1.5">
+                    📅 {modeFormStartDate ? modeFormStartDate.replace(/-/g, "/") : "尚未選擇開始日"} ～ {modeFormEndDate ? modeFormEndDate.replace(/-/g, "/") : "尚未選擇結束日"}
+                  </span>
+                  <span className="text-[10px] text-indigo-600 font-extrabold hover:underline">
+                    {showRangeCalendar ? "▲ 收起日曆" : "▼ 展開日曆"}
+                  </span>
+                </button>
+
+                {showRangeCalendar && (
+                  <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-2xl p-3 shadow-xl z-55 space-y-2 animate-in fade-in slide-in-from-top-1 duration-150">
+                    <div className="flex items-center justify-between border-b pb-1.5">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (pickerMonth === 0) {
+                            setPickerMonth(11);
+                            setPickerYear(pickerYear - 1);
+                          } else {
+                            setPickerMonth(pickerMonth - 1);
+                          }
+                        }}
+                        className="p-1 hover:bg-gray-100 rounded text-gray-600 font-bold"
+                      >
+                        ◀
+                      </button>
+                      <span className="font-extrabold text-gray-800 text-xs">
+                        {pickerYear} 年 {pickerMonth + 1} 月
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (pickerMonth === 11) {
+                            setPickerMonth(0);
+                            setPickerYear(pickerYear + 1);
+                          } else {
+                            setPickerMonth(pickerMonth + 1);
+                          }
+                        }}
+                        className="p-1 hover:bg-gray-100 rounded text-gray-600 font-bold"
+                      >
+                        ▶
+                      </button>
+                    </div>
+
+                    <div className="grid grid-cols-7 gap-1 text-center font-bold text-[10px] text-gray-400">
+                      {["日", "一", "二", "三", "四", "五", "六"].map((w) => (
+                        <div key={w} className="py-0.5">{w}</div>
+                      ))}
+                    </div>
+
+                    <div className="grid grid-cols-7 gap-1">
+                      {/* Empty cells representing days of previous month */}
+                      {Array.from({ length: getFirstDayOfMonth(pickerYear, pickerMonth) }).map((_, i) => (
+                        <div key={`empty-${i}`} />
+                      ))}
+
+                      {/* Actual days of active picker month */}
+                      {Array.from({ length: getDaysInMonth(pickerYear, pickerMonth) }).map((_, i) => {
+                        const dayNum = i + 1;
+                        const dateStr = `${pickerYear}-${String(pickerMonth + 1).padStart(2, "0")}-${String(dayNum).padStart(2, "0")}`;
+                        
+                        const isStart = dateStr === modeFormStartDate;
+                        const isEnd = dateStr === modeFormEndDate;
+                        const inBetween = modeFormStartDate && modeFormEndDate && dateStr > modeFormStartDate && dateStr < modeFormEndDate;
+                        const isToday = dateStr === (simulatedTodayDate || getLocalToday());
+
+                        let cellClass = "p-1.5 rounded-lg text-center cursor-pointer text-xs font-bold transition hover:bg-indigo-50 ";
+                        if (isStart || isEnd) {
+                          cellClass += "bg-indigo-600 text-white font-black hover:bg-indigo-700";
+                        } else if (inBetween) {
+                          cellClass += "bg-indigo-50 text-indigo-905 border border-dashed border-indigo-200";
+                        } else if (isToday) {
+                          cellClass += "bg-amber-50 text-amber-900 border border-amber-300 font-black";
+                        } else {
+                          cellClass += "text-gray-700 bg-white hover:bg-gray-50";
+                        }
+
+                        return (
+                          <button
+                            type="button"
+                            key={dayNum}
+                            onClick={() => {
+                              if (rangeSelectStep === "start") {
+                                setModeFormStartDate(dateStr);
+                                setModeFormEndDate(""); // clear past end upon picking new start
+                                setRangeSelectStep("end");
+                              } else {
+                                if (dateStr < modeFormStartDate) {
+                                  // Clicked date is earlier than start, make it start instead
+                                  setModeFormStartDate(dateStr);
+                                  setRangeSelectStep("end");
+                                } else {
+                                  setModeFormEndDate(dateStr);
+                                  setRangeSelectStep("start");
+                                  setShowRangeCalendar(false); // Done selector, auto close
+                                }
+                              }
+                            }}
+                            className={cellClass}
+                          >
+                            {dayNum}
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    <div className="pt-2 text-[10px] text-gray-400 font-normal leading-normal flex items-center justify-between border-t">
+                      <span>💡 點選第一個日期設定起始、第二個日期設定結束</span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setModeFormStartDate("");
+                          setModeFormEndDate("");
+                          setRangeSelectStep("start");
+                        }}
+                        className="text-indigo-605 hover:underline font-bold"
+                      >
+                        清空
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
 
+              {/* Validation error display */}
+              {validationError && (
+                <div className="bg-red-50 text-red-650 border border-red-200 text-xs rounded-xl px-3 py-2 font-bold leading-normal">
+                  ⚠️ {validationError}
+                </div>
+              )}
+
               {/* Dynamic form payload options */}
-              <div className="bg-gray-50 p-3.5 rounded-xl border border-gray-200 max-h-[220px] overflow-y-auto space-y-3 font-sans">
+              {modeFormType === SystemMode.CUSTOM ? (
+                <div className="space-y-1.5 font-sans">
+                  <label className="block text-xs font-black text-gray-700">4. 📝 自訂備註與備忘內容：</label>
+                  <textarea
+                    rows={4}
+                    value={notes}
+                    onChange={(e) => setNotes(e.target.value)}
+                    placeholder="例如：自訂計畫描述、每日任務、隨行提醒等..."
+                    className="w-full bg-gray-50/50 rounded-xl px-3 py-2 border border-[#E8E2D8] focus:border-indigo-400 focus:bg-white focus:outline-none text-xs font-bold leading-normal"
+                  />
+                </div>
+              ) : (
+                <div className="bg-gray-50 p-3.5 rounded-xl border border-gray-200 max-h-[220px] overflow-y-auto space-y-3 font-sans">
                 
                 {/* 1. Travel Config Options */}
                 {modeFormType === SystemMode.TRAVEL && (
@@ -1006,22 +1145,22 @@ export const SpecialPeriodsConfig: React.FC<SpecialPeriodsConfigProps> = ({
                       <div className="space-y-2.5">
                         <div className="grid grid-cols-2 gap-2">
                           <div>
-                            <label className="text-[10px] text-gray-450 font-bold">航空公司：</label>
+                            <label className="text-[10px] text-gray-450 font-bold">✈️ 航空公司：</label>
                             <input
                               type="text"
                               value={airLine}
                               onChange={(e) => setAirLine(e.target.value)}
-                              placeholder="星宇航空、長榮"
+                              placeholder="例如：星宇航空"
                               className="w-full bg-white rounded-lg p-1.5 border border-gray-200 focus:outline-none text-[11px] font-bold"
                             />
                           </div>
                           <div>
-                            <label className="text-[10px] text-gray-455 font-bold">去程班號：</label>
+                            <label className="text-[10px] text-gray-455 font-bold">🛫 去程班號：</label>
                             <input
                               type="text"
                               value={flightNumber}
                               onChange={(e) => setFlightNumber(e.target.value)}
-                              placeholder="JX721 or BR255"
+                              placeholder="例如：JX721"
                               className="w-full bg-white rounded-lg p-1.5 border border-gray-200 focus:outline-none text-[11px] font-bold"
                             />
                           </div>
@@ -1033,7 +1172,7 @@ export const SpecialPeriodsConfig: React.FC<SpecialPeriodsConfigProps> = ({
                             <input
                               type="text"
                               value={departureTime}
-                              placeholder="09:50"
+                              placeholder="例如：09:50"
                               onChange={(e) => setDepartureTime(e.target.value)}
                               className="w-full bg-white rounded-lg p-1.5 border border-gray-200 focus:outline-none text-[11px] font-bold"
                             />
@@ -1043,7 +1182,7 @@ export const SpecialPeriodsConfig: React.FC<SpecialPeriodsConfigProps> = ({
                             <input
                               type="text"
                               value={returnTime}
-                              placeholder="16:15"
+                              placeholder="例如：16:45"
                               onChange={(e) => setReturnTime(e.target.value)}
                               className="w-full bg-white rounded-lg p-1.5 border border-gray-200 focus:outline-none text-[11px] font-bold"
                             />
@@ -1056,7 +1195,7 @@ export const SpecialPeriodsConfig: React.FC<SpecialPeriodsConfigProps> = ({
                             <input
                               type="text"
                               value={departureTerminal}
-                              placeholder="T2"
+                              placeholder="例如：第一航廈"
                               onChange={(e) => setDepartureTerminal(e.target.value)}
                               className="w-full bg-white rounded-lg p-1.5 border border-gray-200 focus:outline-none text-[11px] font-bold"
                             />
@@ -1066,7 +1205,7 @@ export const SpecialPeriodsConfig: React.FC<SpecialPeriodsConfigProps> = ({
                             <input
                               type="text"
                               value={returnTerminal}
-                              placeholder="T1"
+                              placeholder="例如：Terminal 2"
                               onChange={(e) => setReturnTerminal(e.target.value)}
                               className="w-full bg-white rounded-lg p-1.5 border border-gray-200 focus:outline-none text-[11px] font-bold"
                             />
@@ -1247,69 +1386,8 @@ export const SpecialPeriodsConfig: React.FC<SpecialPeriodsConfigProps> = ({
                     </div>
                   </div>
                 )}
-
-                {/* 4. Custom Config Options */}
-                {modeFormType === SystemMode.CUSTOM && (
-                  <div className="space-y-3">
-                    <h4 className="font-extrabold text-[#3F3D56] border-b pb-1">🎨 其它家庭特殊活動時光</h4>
-                    <div className="space-y-2.5">
-                      <div className="flex gap-2 items-center text-xs">
-                        <label className="font-bold w-16 text-gray-500 shrink-0">主題圖示：</label>
-                        <select
-                          value={modeFormIcon}
-                          onChange={(e) => setModeFormIcon(e.target.value)}
-                          className="bg-white rounded-lg p-1.5 border border-gray-200 font-sans font-bold"
-                        >
-                          <option value="🚼">🍼 新生兒育嬰時光</option>
-                          <option value="🏕">🏕 戶外野營挑戰</option>
-                          <option value="📦">📦 搬家整理包裝</option>
-                          <option value="🏃">🏃 體能核心拉練</option>
-                          <option value="🧹">🧹 年終大掃除打掃</option>
-                        </select>
-                      </div>
-
-                      <div className="space-y-1.5">
-                        <label className="block font-bold">自訂每日作息提示項目：</label>
-                        <div className="space-y-1 text-xs">
-                          {customTasks.map((t) => (
-                            <div key={t.id} className="flex justify-between items-center bg-white p-1.5 rounded-lg border border-gray-100 font-medium">
-                              <span>{t.text}</span>
-                              <button
-                                type="button"
-                                onClick={() => setCustomTasks(customTasks.filter(item => item.id !== t.id))}
-                                className="text-red-500 hover:text-red-700 font-black text-[9px] cursor-pointer"
-                              >
-                                移除
-                              </button>
-                            </div>
-                          ))}
-                        </div>
-
-                        <div className="flex gap-2 pt-1 font-sans">
-                          <input
-                            type="text"
-                            value={newCustomTaskInput}
-                            placeholder="打包自訂特殊任務項目..."
-                            onChange={(e) => setNewCustomTaskInput(e.target.value)}
-                            className="flex-grow bg-white rounded-lg p-1.5 border border-[#E8E2D8] text-xs"
-                          />
-                          <button
-                            type="button"
-                            onClick={() => {
-                              if (!newCustomTaskInput.trim()) return;
-                              setCustomTasks([...customTasks, { id: `${Date.now()}`, text: newCustomTaskInput.trim() }]);
-                              setNewCustomTaskInput("");
-                            }}
-                            className="bg-indigo-600 text-white rounded-lg font-bold px-3 text-xs"
-                          >
-                            加入
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                )}
               </div>
+            )}
 
               {/* Submit Button Row */}
               <div className="pt-3.5 border-t border-gray-100 flex justify-end gap-2.5 font-sans">
@@ -1351,7 +1429,7 @@ export const SpecialPeriodsConfig: React.FC<SpecialPeriodsConfigProps> = ({
                 type="button"
                 onClick={() => handleConfirmDeleteSubmit(true)}
                 disabled={isDeleting}
-                className="w-full py-2.5 text-xs font-black text-white bg-red-650 hover:bg-red-700 rounded-xl shadow-md transition hover:scale-[1.01] cursor-pointer text-center"
+                className="w-full py-2.5 text-xs font-black text-white bg-red-600 hover:bg-red-700 rounded-xl shadow-md transition hover:scale-[1.01] cursor-pointer text-center"
               >
                 {isDeleting ? "處理中..." : "💥 全部刪除 (連同月曆行程)"}
               </button>

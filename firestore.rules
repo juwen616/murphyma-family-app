@@ -186,7 +186,7 @@ service cloud.firestore {
     match /star_transactions/{transactionId} {
       allow read: if isSignedIn() && (isMemberOfFamily(resource.data.get('familyId', null)) || isSuperAdmin(request.auth.uid));
       allow create: if isSignedIn() && isMemberOfFamily(request.resource.data.get('familyId', null)) && isUserParentOrAdmin(request.auth.uid);
-      allow update, delete: if false;
+      allow update, delete: if isSignedIn() && isMemberOfFamily(resource.data.get('familyId', null)) && isUserParentOrAdmin(request.auth.uid);
     }
 
     // 12. Allowed Family Creators Collection (Whitelist)

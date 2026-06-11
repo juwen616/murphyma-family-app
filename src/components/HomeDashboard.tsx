@@ -12,6 +12,7 @@ import {
   RewardStatus,
   getLocalToday,
   ConfiguredMode,
+  Redemption,
 } from "../types";
 import { getHolidayForDate } from "../utils/holidayService";
 import {
@@ -31,6 +32,7 @@ import {
   ArrowRight,
   ChevronUp,
   ChevronDown,
+  ChevronRight,
   Sparkle,
   Edit3,
   X
@@ -44,6 +46,7 @@ interface HomeDashboardProps {
   familyMembers: UserProfile[];
   systemMode: SystemMode;
   rewards?: Reward[];
+  redemptions?: Redemption[];
   onAddAnnouncement: (title: string, content: string) => Promise<void>;
   onDeleteAnnouncement: (id: string) => Promise<void>;
   onNavigateToEvent?: (eventId: string, date: string) => void;
@@ -54,6 +57,7 @@ interface HomeDashboardProps {
   onSetSimulatedTodayDate?: (date: string) => void;
   onSaveConfiguredMode?: (payload: ConfiguredMode) => Promise<void>;
   onDeleteConfiguredMode?: (id: string, deleteRelatedEvents?: boolean) => Promise<void>;
+  onChangePage?: (page: any) => void;
   dataLoaded?: {
     family: boolean;
     settings: boolean;
@@ -208,6 +212,7 @@ export default function HomeDashboard({
   familyMembers,
   systemMode,
   rewards = [],
+  redemptions = [],
   onAddAnnouncement,
   onDeleteAnnouncement,
   onNavigateToEvent,
@@ -218,6 +223,7 @@ export default function HomeDashboard({
   onSetSimulatedTodayDate,
   onSaveConfiguredMode,
   onDeleteConfiguredMode,
+  onChangePage,
   dataLoaded,
 }: HomeDashboardProps) {
   const [newAnnTitle, setNewAnnTitle] = useState("");
@@ -276,6 +282,12 @@ export default function HomeDashboard({
   const [isRecentlyCompletedExpanded, setIsRecentlyCompletedExpanded] = useState(false);
 
   const isParent = currentUser.role === UserRole.ADMIN || currentUser.role === UserRole.PARENT;
+
+  // Mobile Dashboard specific states
+  const [mobileSelectedDate, setMobileSelectedDate] = useState<string>("");
+  const [selectedAnnouncement, setSelectedAnnouncement] = useState<Announcement | null>(null);
+  const [showAllAnnouncements, setShowAllAnnouncements] = useState<boolean>(false);
+  const [selectedReward, setSelectedReward] = useState<Reward | null>(null);
 
   // Expanded Mode detail viewing
   const [expandedModeId, setExpandedModeId] = useState<string | null>(null);
@@ -1111,7 +1123,9 @@ export default function HomeDashboard({
 
   return (
     <div id="home-dashboard" className="space-y-6 select-none font-sans">
-      {/* 🏡 SATELLITE SYSTEM HEADER BANNER */}
+      {/* 💻 DESKTOP-ONLY INTERFACE CONTEXT */}
+      <div className="hidden md:block space-y-6">
+        {/* 🏡 SATELLITE SYSTEM HEADER BANNER */}
       <div
         id="mode-hero-banner"
         style={{
@@ -2933,7 +2947,7 @@ export default function HomeDashboard({
                 type="button"
                 onClick={() => handleConfirmDeleteMode(true)}
                 disabled={isDeleting}
-                className="w-full py-2.5 text-xs font-black text-white bg-red-650 hover:bg-red-700 rounded-xl shadow-md transition hover:scale-[1.01] cursor-pointer text-center"
+                className="w-full py-2.5 text-xs font-black text-white bg-red-600 hover:bg-red-700 rounded-xl shadow-md transition hover:scale-[1.01] cursor-pointer text-center"
               >
                 {isDeleting ? "處理中..." : "💥 全部刪除 (連同月曆行程)"}
               </button>
@@ -2957,6 +2971,656 @@ export default function HomeDashboard({
           </div>
         </div>
       )}
+      </div>
+
+      {/* 📱 MOBILE MOTHER PORTAL HOME VIEW (block md:hidden) */}
+      <div className="block md:hidden space-y-4 pt-1 text-[#3C332D]">
+        
+        {/* Special Active Period banner (if any) */}
+        {activeModeConfig && (() => {
+          const remainingDays = Math.round((new Date(activeModeConfig.endDate).getTime() - new Date(todayDateStr).getTime()) / (1000 * 60 * 60 * 24)) + 1;
+          const emoji = activeModeConfig.type === SystemMode.TRAVEL ? "✈️"
+            : activeModeConfig.type === SystemMode.EXAM ? "📚"
+            : activeModeConfig.type === SystemMode.VACATION ? "🏕️" : "✨";
+          return (
+            <div 
+              onClick={() => onChangePage?.("special-periods")}
+              className="bg-[#FFF8F6] border border-[#F5D8D0] rounded-xl px-3 py-2 flex items-center justify-between text-xs font-black text-[#6B4B3E] cursor-pointer"
+            >
+              <span className="flex items-center gap-1.5 truncate">
+                <span>{emoji}</span>
+                <span className="truncate">特別設定：{activeModeConfig.name}</span>
+              </span>
+              <span className="text-rose-600 shrink-0 font-mono text-[10.5px] font-bold flex items-center gap-1">
+                剩餘 {remainingDays} 天 <ChevronRight className="h-3 w-3 stroke-[2.5]" />
+              </span>
+            </div>
+          );
+        })()}
+
+        {/* ① 今日重點事項 */}
+        <div className="bg-white border border-[#EFEAE2] rounded-2xl p-3.5 space-y-2.5 shadow-xs">
+          <div className="flex items-center justify-between">
+            <h3 className="text-xs font-black flex items-center gap-1">
+              <span>📌</span> 今日重點
+            </h3>
+            <button 
+              onClick={() => {
+                if (onNavigateToEvent) {
+                  onNavigateToEvent("", todayDateStr);
+                } else {
+                  onChangePage?.("calendar");
+                }
+              }}
+              className="text-[10.5px] font-bold text-[#7C6354] bg-[#F5EBE6] px-2 py-0.5 rounded-lg flex items-center gap-0.5 cursor-pointer"
+            >
+              查看全部 <ChevronRight className="h-3 w-3 stroke-[2]" />
+            </button>
+          </div>
+
+          {todayEvents.length === 0 ? (
+            <div className="text-center py-4 bg-[#FCFBF9] border border-dashed border-[#EFEAE2] rounded-xl">
+              <span className="text-lg">🌞</span>
+              <p className="text-[10.5px] text-gray-400 font-bold mt-1">今天暫無行程安排，放鬆一下吧！</p>
+            </div>
+          ) : (
+            <div className="space-y-1.5">
+              {todayEvents.slice(0, 3).map((evt) => {
+                const isBday = (evt as any).isBirthday;
+                return (
+                  <div
+                    key={evt.id}
+                    onClick={() => onNavigateToEvent?.(evt.id, todayDateStr)}
+                    className={`p-2.5 rounded-xl border flex items-center justify-between gap-3 transition-colors cursor-pointer ${
+                      isBday 
+                        ? "bg-rose-50/50 border-rose-150 hover:bg-rose-50" 
+                        : "bg-[#FCFBF9] border-[#F2ECE0] hover:bg-[#F5EBE6]/30"
+                    }`}
+                  >
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span className="text-sm shrink-0">{isBday ? "🎂" : getEventEmoji(evt.title)}</span>
+                      <div className="min-w-0">
+                        <p className={`text-xs font-bold truncate ${isBday ? "text-rose-800" : "text-[#3C332D]"}`}>
+                          {evt.title}
+                        </p>
+                        <p className="text-[9.5px] text-gray-400 font-mono mt-0.5 font-bold">
+                          {isBday ? "全天生日慶祝" : (evt.time || "全天")}
+                        </p>
+                      </div>
+                    </div>
+                    <ChevronRight className={`h-3.5 w-3.5 shrink-0 ${isBday ? "text-rose-400" : "text-gray-400"}`} />
+                  </div>
+                );
+              })}
+
+              {todayEvents.length > 3 && (
+                <div 
+                  onClick={() => onChangePage?.("calendar")}
+                  className="pt-1.5 text-center"
+                >
+                  <button className="text-[10.5px] text-sky-600 font-black cursor-pointer hover:underline">
+                    還有 {todayEvents.length - 3} 項，點擊查看全部 ➔
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* ② 未來5天行程 */}
+        <div className="bg-white border border-[#EFEAE2] rounded-2xl p-3.5 space-y-3 shadow-xs">
+          <div className="flex items-center justify-between">
+            <h3 className="text-xs font-black flex items-center gap-1">
+              <span>📅</span> 未來 5 天行程
+            </h3>
+            <span className="text-[9.5px] text-gray-400 font-black tracking-wider uppercase bg-[#F2EDE4] px-1.5 py-0.2 rounded font-sans scale-95">
+              五日預覽
+            </span>
+          </div>
+
+          {/* horizontal calendar weekday selection circles */}
+          <div className="grid grid-cols-5 gap-1 pt-0.5">
+            {nextSevenDays.slice(0, 5).map((day, idx) => {
+              const dStr = day.dateStr;
+              const dateObj = new Date(dStr);
+              const isSelected = (mobileSelectedDate || todayDateStr) === dStr;
+              
+              const dayLabel = idx === 0 ? "今天" : idx === 1 ? "明天" : idx === 2 ? "後天" : 
+                ["日", "一", "二", "三", "四", "五", "六"][dateObj.getDay()];
+              const shortDate = `${dateObj.getMonth() + 1}/${dateObj.getDate()}`;
+              const count = day.events.length;
+
+              return (
+                <button
+                  key={dStr}
+                  onClick={() => setMobileSelectedDate(dStr)}
+                  className={`py-2 px-1 rounded-xl flex flex-col items-center justify-between transition-all cursor-pointer relative min-h-[58px] ${
+                    isSelected 
+                      ? "bg-[#7C6354] text-white border border-[#7C6354] shadow-xs" 
+                      : "bg-[#FAFAF7] text-gray-650 border border-[#EFEAE2] hover:bg-gray-50"
+                  }`}
+                >
+                  <span className="text-[10px] font-black leading-none">{dayLabel}</span>
+                  <span className="text-[9px] font-mono opacity-85 leading-none mt-1">{shortDate}</span>
+                  
+                  {/* event badge */}
+                  {count > 0 ? (
+                    <span className={`h-4 min-w-[16px] text-[8.5px] font-black rounded-full flex items-center justify-center font-mono mt-1 px-1 scale-95 ${
+                      isSelected ? "bg-white text-[#7C6354]" : "bg-rose-500 text-white"
+                    }`}>
+                      {count}
+                    </span>
+                  ) : (
+                    <span className="text-[8px] font-normal opacity-40 font-mono mt-1 select-none">0</span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+
+          {/* detailed listings below for selected day */}
+          <div className="border-t border-[#F5F2EB] pt-2.5">
+            {(() => {
+              const activeDStr = mobileSelectedDate || todayDateStr;
+              const dayData = nextSevenDays.slice(0, 5).find(day => day.dateStr === activeDStr);
+              const selectedDayEvents = dayData ? dayData.events : [];
+
+              return (
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between text-[10px] text-gray-400 font-bold px-0.5">
+                    <span>📋 當日安排行程 ({selectedDayEvents.length})</span>
+                    <span className="font-mono text-[9px]">日期：{activeDStr}</span>
+                  </div>
+
+                  {selectedDayEvents.length === 0 ? (
+                    <div className="text-center py-4 bg-[#FCFBF9] border border-dashed border-[#EFEAE2] rounded-xl">
+                      <p className="text-[10.5px] text-gray-400 font-medium">✨ 此日暫無安排行程</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-1.5">
+                      {selectedDayEvents.slice(0, 3).map(evt => (
+                        <div
+                          key={evt.id}
+                          onClick={() => onNavigateToEvent?.(evt.id, activeDStr)}
+                          className="p-2.5 bg-[#FAF9F6] hover:bg-[#F5EBE6]/30 border border-[#EFEAE2] rounded-xl flex items-center justify-between gap-3 cursor-pointer transition-colors"
+                        >
+                          <div className="flex items-center gap-2 min-w-0">
+                            <span className="text-sm shrink-0">{getEventEmoji(evt.title)}</span>
+                            <span className="text-xs font-semibold text-[#3C332D] truncate">{evt.title}</span>
+                          </div>
+                          <div className="flex items-center gap-1.5 shrink-0 text-gray-400">
+                            <span className="text-[9.5px] font-mono leading-none font-bold">{evt.time || "全天"}</span>
+                            <ChevronRight className="h-3 w-3" />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
+          </div>
+
+          <button
+            onClick={() => onChangePage?.("calendar")}
+            className="w-full py-2 bg-[#FAFAF7] hover:bg-[#F2ECE0] text-[#7C6354] border border-[#EFEAE2] rounded-xl text-[10.5px] font-black text-center transition cursor-pointer flex items-center justify-center gap-1"
+          >
+            觀看完整家庭行事曆 <ChevronRight className="h-3 w-3 stroke-[2]" />
+          </button>
+        </div>
+
+        {/* ③ 家庭公布欄 */}
+        <div className="bg-white border border-[#EFEAE2] rounded-2xl p-3.5 space-y-2.5 shadow-xs">
+          <div className="flex items-center justify-between">
+            <h3 className="text-xs font-black flex items-center gap-1">
+              <span>📢</span> 家庭公布欄
+            </h3>
+            <button 
+              onClick={() => setShowAllAnnouncements(true)}
+              className="text-[10.5px] font-bold text-[#7C6354] bg-[#F5EBE6] px-2 py-0.5 rounded-lg flex items-center gap-0.5 cursor-pointer"
+            >
+              所有公告 <ChevronRight className="h-3 w-3 stroke-[2]" />
+            </button>
+          </div>
+
+          {announcements.length === 0 ? (
+            <div className="text-center py-4 bg-[#FCFBF9] border border-dashed border-[#EFEAE2] rounded-xl">
+              <p className="text-[10.5px] text-gray-400 font-bold">目前無公佈事項</p>
+            </div>
+          ) : (
+            <div className="space-y-1.5">
+              {announcements.slice(0, 3).map((ann) => {
+                const dateStr = ann.createdAt?.seconds
+                  ? new Date(ann.createdAt.seconds * 1000).toLocaleDateString("zh-TW", { month: "numeric", day: "numeric" })
+                  : "剛剛";
+                return (
+                  <div
+                    key={ann.id}
+                    onClick={() => setSelectedAnnouncement(ann)}
+                    className="p-2.5 bg-[#FCFBF9] hover:bg-[#F5EBE6]/30 border border-[#F2ECE0] rounded-xl flex items-center justify-between gap-3 transition-colors cursor-pointer"
+                  >
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="text-[9.5px] font-black bg-[#EAA59E]/10 border border-[#EAA59E]/30 text-rose-700 px-1 py-0.2 rounded-md">
+                          {ann.creatorName}
+                        </span>
+                        <span className="text-[8.5px] font-mono text-gray-400 font-bold">{dateStr}</span>
+                      </div>
+                      <h4 className="text-xs font-bold text-[#3C332D] truncate mt-1">
+                        📢 {ann.title}
+                      </h4>
+                      <p className="text-[10px] text-gray-450 truncate whitespace-pre-wrap mt-0.5">
+                        {ann.content}
+                      </p>
+                    </div>
+                    <ChevronRight className="h-3.5 w-3.5 text-gray-400 shrink-0" />
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* ④ 小孩星星與禮物進度 */}
+        <div className="bg-white border border-[#EFEAE2] rounded-2xl p-3.5 space-y-2.5 shadow-xs">
+          <div className="flex items-center justify-between pb-1 boundary font-sans">
+            <h3 className="text-xs font-black flex items-center gap-1">
+              <span>⭐</span> 小孩星星與禮物進度
+            </h3>
+            <button
+              onClick={() => onChangePage?.("rewards")}
+              className="text-[10.5px] font-bold text-[#7C6354] bg-[#F5EBE6] px-2 py-0.5 rounded-lg flex items-center gap-0.5 cursor-pointer"
+            >
+              前往禮物中心 <ChevronRight className="h-3 w-3 stroke-[2]" />
+            </button>
+          </div>
+
+          {/* Kids Accumulated Stars Area */}
+          {(() => {
+            const kidsList = familyMembers.filter(m => m.role === UserRole.KID);
+            if (kidsList.length === 0 && currentUser?.role === UserRole.KID) {
+              kidsList.push(currentUser);
+            }
+            if (kidsList.length === 0) {
+              return (
+                <div className="bg-[#FFFDF9] border border-[#F5EBE6] rounded-xl p-2.5 text-center text-[10px] text-gray-450 font-bold">
+                  目前暫無設定小孩成員帳號喔
+                </div>
+              );
+            }
+            return (
+              <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-none snap-x flex-nowrap w-full">
+                {kidsList.map((kid) => {
+                  const avatarTxt = kid.displayName ? kid.displayName.charAt(0) : "✿";
+                  const bgCol = kid.color || "#F5EBE6";
+                  
+                  // Calculate dynamic parent pending deduction cost
+                  const kidPendingCost = (redemptions || [])
+                    .filter(r => r.childUid === kid.uid && r.status === "pending")
+                    .reduce((sum, item) => sum + (item.starsRequired || 0), 0);
+                  const availableStars = Math.max(0, (kid.stars || 0) - kidPendingCost);
+
+                  return (
+                    <div
+                      key={kid.uid}
+                      className="snap-start shrink-0 w-[145px] bg-[#FCFBF9] border border-[#EFEAE2] rounded-xl p-2 flex flex-col justify-between h-[96px] select-none shadow-3xs font-sans"
+                    >
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        {/* Avatar */}
+                        <div
+                          style={{ backgroundColor: bgCol }}
+                          className="h-7 w-7 rounded-full border border-gray-100 flex items-center justify-center text-[10.5px] font-black text-gray-700 relative shrink-0"
+                        >
+                          {kid.gender === "female" ? "👧" : "👦"}
+                        </div>
+                        <div className="min-w-0 flex-1 leading-tight">
+                          <h4 className="font-black text-[10.5px] text-[#3C332D] truncate">
+                            ⭐ {kid.displayName}
+                          </h4>
+                          <span className="text-[7.5px] text-gray-400 font-bold">目前星星</span>
+                        </div>
+                      </div>
+
+                      <div className="border-t border-[#F5F2EB] pt-1 mt-1 flex flex-col gap-0.5">
+                        <div className="flex items-center justify-between text-[9px] text-[#7C6354] font-black leading-none">
+                          <span>目前星星：</span>
+                          <span className="font-mono text-amber-500 font-black">{kid.stars || 0} 顆</span>
+                        </div>
+                        <div className="flex items-center justify-between text-[9px] text-gray-400 font-bold leading-none">
+                          <span>可用餘額：</span>
+                          <span className="font-mono text-[#5C6E58] font-bold">{availableStars} 顆</span>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          })()}
+
+          {/* Horizontal scroll rewards progress */}
+          {(() => {
+            const availableGifts = (rewards || []).filter(r => r.status === RewardStatus.AVAILABLE);
+            const kidsOfFamily = familyMembers.filter(m => m.role === UserRole.KID);
+            const primaryKid = kidsOfFamily[0] || currentUser;
+            const currentKidStars = primaryKid?.stars || 0;
+
+            if (availableGifts.length === 0) {
+              return (
+                <div className="text-center py-4 bg-[#FCFBF9] border border-dashed border-[#EFEAE2] rounded-xl">
+                  <p className="text-[10.5px] text-gray-400 font-bold">目前暫無上架中的願望禮物喔</p>
+                </div>
+              );
+            }
+
+            return (
+              <div className="flex gap-2.5 overflow-x-auto pb-1.5 scrollbar-none snap-x flex-nowrap">
+                {availableGifts.map((gift) => {
+                  const pct = Math.min(100, Math.round((currentKidStars / gift.starsCost) * 100));
+                  const diff = Math.max(0, gift.starsCost - currentKidStars);
+
+                  return (
+                    <div
+                      key={gift.id}
+                      onClick={() => setSelectedReward(gift)}
+                      className="snap-start shrink-0 w-[210px] bg-[#FCFBF9] hover:bg-[#F2ECE0]/20 border border-[#EFEAE2] rounded-xl p-2.5 flex items-start gap-2 cursor-pointer transition-transform relative select-none"
+                    >
+                      {/* Left: 55x55 compact image block */}
+                      <div className="h-11 w-11 rounded-lg bg-gradient-to-br from-rose-50 to-amber-50 border border-rose-100 flex items-center justify-center text-xl shrink-0">
+                        {gift.imageUrl ? (
+                          <img src={gift.imageUrl} alt={gift.title} className="h-full w-full object-cover rounded-lg" referrerPolicy="no-referrer" />
+                        ) : "🎁"}
+                      </div>
+
+                      {/* Right details */}
+                      <div className="min-w-0 flex-1 flex flex-col justify-between h-[44px]">
+                        <p className="text-[11px] font-black text-[#3C332D] truncate leading-tight pr-3">
+                          {gift.title}
+                        </p>
+                        
+                        {/* bottom progress indicator */}
+                        <div className="space-y-0.5 font-sans">
+                          <div className="flex justify-between items-center text-[9px] font-bold">
+                            <span className="text-gray-400 font-mono scale-95 origin-left">
+                              {currentKidStars} / {gift.starsCost} ⭐️
+                            </span>
+                            <span className={diff === 0 ? "text-emerald-600 font-black" : "text-rose-500 font-black"}>
+                              {diff === 0 ? "可兌換" : `差${diff}`}
+                            </span>
+                          </div>
+                          <div className="w-full bg-gray-150 rounded-full h-1 relative overflow-hidden">
+                            <div className={`h-full rounded-full ${diff === 0 ? "bg-emerald-500" : "bg-rose-450"}`} style={{ width: `${pct}%` }} />
+                          </div>
+                        </div>
+                      </div>
+
+                      <ChevronRight className="h-3 w-3 text-gray-400 absolute right-1.5 top-3.5" />
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          })()}
+        </div>
+
+        {/* 🔀 快速功能排定入口 */}
+        <div className="bg-white border border-[#EFEAE2] rounded-2xl p-3.5 space-y-2 shadow-xs">
+          <div className="border-b border-rose-50/20 pb-1 flex items-center justify-between">
+            <h3 className="text-xs font-black flex items-center gap-1 text-gray-650">
+              ⚡ 快速功能入口
+            </h3>
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              onClick={() => {
+                if (onNavigateToEvent) {
+                  onNavigateToEvent("", todayDateStr);
+                } else {
+                  onChangePage?.("calendar");
+                }
+              }}
+              className="p-2.5 bg-[#FDFBF7] hover:bg-[#F7F3EB]/60 border border-[#EFEAE2] rounded-xl flex items-center gap-2 cursor-pointer transition text-left"
+            >
+              <div className="h-7 w-7 bg-[#FFF2F0] rounded-lg flex items-center justify-center text-sm">📅</div>
+              <div>
+                <p className="text-[11px] font-bold text-[#3C332D]">一鍵日曆</p>
+                <p className="text-[8.5px] text-gray-400 font-bold">今日行程直達</p>
+              </div>
+            </button>
+
+            <button
+              onClick={() => onChangePage?.("special-periods")}
+              className="p-2.5 bg-[#FDFBF7] hover:bg-[#F7F3EB]/60 border border-[#EFEAE2] rounded-xl flex items-center gap-2 cursor-pointer transition text-left"
+            >
+              <div className="h-7 w-7 bg-[#EDF8FF] rounded-lg flex items-center justify-center text-sm">🏔️</div>
+              <div>
+                <p className="text-[11px] font-bold text-[#3C332D]">特別計畫</p>
+                <p className="text-[8.5px] text-gray-400 font-bold">寒暑假與大假</p>
+              </div>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* 🔮 1. ANNOUNCEMENT DETAILS POPUP MODAL */}
+      {selectedAnnouncement && (
+        <div className="fixed inset-0 bg-[#3C332D]/40 backdrop-blur-xs z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div className="bg-white rounded-[24px] border border-[#EFEAE2] p-5 w-full max-w-sm shadow-2xl relative space-y-4 font-sans text-xs">
+            <button
+              onClick={() => setSelectedAnnouncement(null)}
+              className="absolute right-3.5 top-3.5 p-1 rounded-full bg-gray-100 hover:bg-gray-200 text-gray-500 cursor-pointer"
+            >
+              <X className="h-4 w-4" />
+            </button>
+
+            <div className="space-y-1">
+              <span className="text-[10px] font-black bg-rose-50 border border-rose-200 text-rose-700 px-2 py-0.5 rounded-full select-none">
+                📢 官方公告
+              </span>
+              <p className="text-[9.5px] text-gray-400 font-mono mt-1 font-bold">
+                發布時間：
+                {selectedAnnouncement.createdAt?.seconds
+                  ? new Date(selectedAnnouncement.createdAt.seconds * 1000).toLocaleString("zh-TW")
+                  : "剛剛"}
+              </p>
+            </div>
+
+            <div className="space-y-2 border-b border-[#F7F3EB] pb-3">
+              <h3 className="text-sm font-black text-[#3C332D] leading-tight">
+                📌 {selectedAnnouncement.title}
+              </h3>
+              <p className="text-xs text-gray-650 leading-relaxed font-semibold whitespace-pre-wrap">
+                {selectedAnnouncement.content}
+              </p>
+            </div>
+
+            <div className="flex justify-between items-center text-[10.5px] text-gray-400 font-bold">
+              <span>發布人: {selectedAnnouncement.creatorName}</span>
+              <button
+                onClick={() => setSelectedAnnouncement(null)}
+                className="px-4 py-1.5 bg-[#7C6354] hover:bg-[#685245] text-white font-extrabold rounded-lg cursor-pointer"
+              >
+                我知道了
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 🔮 2. ALL ANNOUNCEMENTS MANAGER POPUP MODAL */}
+      {showAllAnnouncements && (
+        <div className="fixed inset-0 bg-[#3C332D]/40 backdrop-blur-xs z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div className="bg-white rounded-[24px] border border-[#EFEAE2] p-5 w-full max-w-sm shadow-2xl relative space-y-4 font-sans text-xs flex flex-col max-h-[85vh]">
+            <div className="flex items-center justify-between border-b border-[#F5F2EB] pb-3 shrink-0">
+              <h3 className="text-xs font-black text-[#3C332D] tracking-wide flex items-center gap-1.5">
+                📢 所有公告記錄 ({announcements.length})
+              </h3>
+              <button
+                onClick={() => setShowAllAnnouncements(false)}
+                className="p-1 rounded-full bg-gray-100 hover:bg-gray-200 text-gray-500 cursor-pointer"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto space-y-2.5 pr-0.5 py-1">
+              {announcements.length === 0 ? (
+                <div className="text-center py-8 text-gray-400 font-bold">
+                  目前尚無任何家庭公告記錄。
+                </div>
+              ) : (
+                announcements.map((ann) => {
+                  const dateStr = ann.createdAt?.seconds
+                    ? new Date(ann.createdAt.seconds * 1000).toLocaleString("zh-TW", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" })
+                    : "剛剛";
+
+                  return (
+                    <div
+                      key={ann.id}
+                      className="p-3 bg-[#FCFBF9] border border-[#EFEAE2] rounded-xl relative space-y-1"
+                    >
+                      {isParent && (
+                        <button
+                          onClick={() => {
+                            if (confirm("您確認要刪除此公告項目嗎？")) {
+                              onDeleteAnnouncement(ann.id);
+                            }
+                          }}
+                          className="absolute right-2 top-2 p-1 text-gray-400 hover:text-rose-500 hover:bg-rose-50 rounded-lg cursor-pointer transition"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      )}
+                      
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="text-[9px] font-black bg-[#EAA59E] text-white px-1.5 py-0.2 rounded">
+                          {ann.creatorName}
+                        </span>
+                        <span className="text-[8.5px] font-mono text-gray-400">{dateStr}</span>
+                      </div>
+
+                      <h4 className="font-extrabold text-[#3C332D] text-xs pt-1">
+                        📌 {ann.title}
+                      </h4>
+                      <p className="text-[11px] text-gray-650 leading-relaxed font-medium whitespace-pre-wrap">
+                        {ann.content}
+                      </p>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+
+            <div className="pt-3 border-t border-[#F5F2EB] flex justify-end shrink-0">
+              <button
+                onClick={() => setShowAllAnnouncements(false)}
+                className="px-4 py-2 bg-[#7C6354] hover:bg-[#685245] text-white font-extrabold rounded-xl cursor-pointer"
+              >
+                關閉列表
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 🔮 3. REWARD DETAIL POPUP MODAL */}
+      {selectedReward && (() => {
+        const kidsOfFamily = familyMembers.filter(m => m.role === UserRole.KID);
+        const primaryKid = kidsOfFamily[0] || currentUser;
+        const currentKidStars = primaryKid?.stars || 0;
+        const pct = Math.min(100, Math.round((currentKidStars / selectedReward.starsCost) * 100));
+        const diff = Math.max(0, selectedReward.starsCost - currentKidStars);
+
+        return (
+          <div className="fixed inset-0 bg-[#3C332D]/40 backdrop-blur-xs z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
+            <div className="bg-white rounded-[24px] border border-[#EFEAE2] p-5 w-full max-w-sm shadow-2xl relative space-y-4 font-sans text-xs">
+              <button
+                onClick={() => setSelectedReward(null)}
+                className="absolute right-3.5 top-3.5 p-1 rounded-full bg-gray-100 hover:bg-gray-200 text-gray-500 cursor-pointer"
+              >
+                <X className="h-4 w-4" />
+              </button>
+
+              <div className="flex items-center gap-3 border-b border-[#F7F3EB] pb-3 mb-1">
+                <div className="h-14 w-14 rounded-xl bg-gradient-to-br from-rose-50 to-amber-50 border border-rose-100 flex items-center justify-center text-3xl">
+                  {selectedReward.imageUrl ? (
+                    <img src={selectedReward.imageUrl} alt={selectedReward.title} className="h-full w-full object-cover rounded-xl" referrerPolicy="no-referrer" />
+                  ) : "🎁"}
+                </div>
+                <div>
+                  <h3 className="text-sm font-black text-[#3C332D] leading-tight pr-5">
+                    {selectedReward.title}
+                  </h3>
+                  <p className="text-[10px] text-gray-400 mt-1 font-bold">
+                    建立者: {selectedReward.creatorName || "全家管理員"}
+                  </p>
+                </div>
+              </div>
+
+              {/* description */}
+              {selectedReward.description && (
+                <div className="space-y-1 bg-[#FAFAF8] border border-[#EFEAE2] p-2.5 rounded-xl">
+                  <span className="text-[9px] font-black text-[#7C6354] uppercase tracking-wider block">大禮說明 ☕：</span>
+                  <p className="text-[11px] text-gray-650 leading-relaxed font-semibold">
+                    {selectedReward.description}
+                  </p>
+                </div>
+              )}
+
+              {/* parent custom note */}
+              {selectedReward.note && (
+                <div className="space-y-1 bg-amber-50/40 border-l-2 border-amber-400/80 p-2 text-[10px] rounded-r-lg font-bold">
+                  <span className="text-amber-800 block text-[9px] uppercase font-black">爸媽備註 / 悄悄話：</span>
+                  <p className="italic font-semibold text-gray-650">{selectedReward.note}</p>
+                </div>
+              )}
+
+              {/* progress details */}
+              <div className="space-y-2 pt-1 font-sans">
+                <div className="flex justify-between items-center text-[10.5px] font-black text-[#3C332D]">
+                  <span className="bg-[#FFF8E8] border border-[#F4E2A8] px-2 py-0.5 rounded-lg flex items-center gap-0.5">
+                    需要: {selectedReward.starsCost} 星
+                  </span>
+                  <span>
+                    {diff === 0 ? (
+                      <span className="text-emerald-600">🎉 小龜已達標可兌換！</span>
+                    ) : (
+                      <span className="text-gray-430">進度: {pct}% | 還差 <span className="text-rose-500">{diff}</span> 顆星</span>
+                    )}
+                  </span>
+                </div>
+                <div className="w-full bg-gray-150 rounded-full h-1.5 relative overflow-hidden">
+                  <div className={`h-full rounded-full ${diff === 0 ? "bg-emerald-500" : "bg-rose-450"}`} style={{ width: `${pct}%` }} />
+                </div>
+              </div>
+
+              <div className="pt-2 flex justify-between items-center gap-2">
+                <span className="text-[8.5px] text-gray-400 font-bold">
+                  點數詳情請前往「禮物願望中心」查看
+                </span>
+                
+                <div className="flex gap-1.5 shrink-0">
+                  <button
+                    onClick={() => {
+                      setSelectedReward(null);
+                      onChangePage?.("rewards");
+                    }}
+                    className="px-3.5 py-1.5 text-[10.5px] text-[#7C6354] bg-[#F5EBE6] hover:bg-[#E7DCD5] font-black rounded-xl transition"
+                  >
+                    前往禮物中心
+                  </button>
+                  <button
+                    onClick={() => setSelectedReward(null)}
+                    className="px-3.5 py-1.5 text-[10.5px] bg-[#7C6354] hover:bg-[#685245] text-white font-black rounded-xl transition"
+                  >
+                    關閉
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }

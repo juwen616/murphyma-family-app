@@ -41,6 +41,7 @@ interface TaskSystemProps {
   onDeleteTask: (taskId: string, recycleStars?: boolean) => Promise<void>;
   onEditTask?: (taskId: string, updatedData: Partial<Task>) => Promise<void>;
   simulatedTodayDate?: string;
+  redemptions?: any[];
 }
 
 export default function TaskSystem({
@@ -56,6 +57,7 @@ export default function TaskSystem({
   onDeleteTask,
   onEditTask,
   simulatedTodayDate,
+  redemptions = [],
 }: TaskSystemProps) {
   const todayStr = simulatedTodayDate || getLocalToday();
 
@@ -64,6 +66,7 @@ export default function TaskSystem({
   const [deletingTaskId, setDeletingTaskId] = useState<string | null>(null);
   const [showSubmitForm, setShowSubmitForm] = useState(false);
   const [activeTab, setActiveTab] = useState<"available" | "submitted" | "history">("available");
+  const [expandedTasks, setExpandedTasks] = useState<Record<string, boolean>>({});
 
   // Form states
   const [taskTitle, setTaskTitle] = useState("");
@@ -366,6 +369,67 @@ export default function TaskSystem({
           </button>
         )}
       </div>
+      
+      {/* 📱 MOBILE STARS SECTION (block md:hidden, high density) */}
+      {(() => {
+        const kidsList = familyMembers.filter(m => m.role === UserRole.KID);
+        if (kidsList.length === 0 && currentUser?.role === UserRole.KID) {
+          kidsList.push(currentUser);
+        }
+        if (kidsList.length === 0) return null;
+        return (
+          <div className="block md:hidden space-y-1.5 bg-white border border-[#E8F5EE] rounded-2xl p-2.5">
+            <h4 className="text-[10.5px] font-black text-[#32453A] flex items-center gap-1 font-sans">
+              <span>⭐</span> 孩子星星狀態
+            </h4>
+            <div className="flex gap-2 overflow-x-auto pb-0.5 scrollbar-none snap-x flex-nowrap w-full">
+              {kidsList.map((kid) => {
+                const avatarTxt = kid.displayName ? kid.displayName.charAt(0) : "✿";
+                const bgCol = kid.color || "#EEF9F3";
+                
+                // Calculate dynamic pending deduction cost
+                const kidPendingCost = (redemptions || [])
+                  .filter(r => r.childUid === kid.uid && r.status === "pending")
+                  .reduce((sum, item) => sum + (item.starsRequired || 0), 0);
+                const availableStars = Math.max(0, (kid.stars || 0) - kidPendingCost);
+
+                return (
+                  <div
+                    key={kid.uid}
+                    className="snap-start shrink-0 w-[140px] bg-[#EEF9F3]/20 border border-[#D0EDE0]/60 rounded-xl p-2 flex flex-col justify-between h-[96px] select-none font-sans"
+                  >
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      <div
+                        style={{ backgroundColor: bgCol }}
+                        className="h-7 w-7 rounded-full border border-gray-100 flex items-center justify-center text-[10.5px] font-black text-gray-700 relative shrink-0"
+                      >
+                        {kid.gender === "female" ? "👧" : "👦"}
+                      </div>
+                      <div className="min-w-0 flex-1 leading-tight">
+                        <h4 className="font-black text-[10.5px] text-[#32453A] truncate">
+                          ⭐ {kid.displayName}
+                        </h4>
+                        <span className="text-[7.5px] text-gray-400 font-bold">目前星星</span>
+                      </div>
+                    </div>
+
+                    <div className="border-t border-[#D0EDE0]/40 pt-1 mt-1 flex flex-col gap-0.5">
+                      <div className="flex items-center justify-between text-[9px] text-[#32453A] font-black leading-none">
+                        <span>目前星星：</span>
+                        <span className="font-mono text-amber-600 font-black">{kid.stars || 0} 顆</span>
+                      </div>
+                      <div className="flex items-center justify-between text-[9px] text-gray-400 font-bold leading-none">
+                        <span>可用餘額：</span>
+                        <span className="font-mono text-[#3D9265] font-bold">{availableStars} 顆</span>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Navigation tabs */}
       <div className="flex border-b border-[#E8F5EE] gap-1 select-none font-sans text-xs md:text-sm">
@@ -419,150 +483,274 @@ export default function TaskSystem({
                 const statusInfo = getTaskStatusInfo(task);
 
                 return (
-                  <div
-                    key={task.id}
-                    className={`p-3.5 md:p-5 relative flex flex-col justify-between min-h-[160px] md:min-h-[220px] transition duration-200 hover:-translate-y-0.5 bg-white border border-[#E9E2DB] rounded-2xl shadow-xs ${
-                      isRejected ? "border-rose-100 bg-rose-50/5 animate-fade-in" : ""
-                    }`}
-                  >
-                    <div>
-                      {/* Status and Type Badges Row */}
-                      <div className="flex flex-wrap items-center justify-between gap-2 mb-2 md:mb-3.5 pr-20">
-                        <div className="flex items-center gap-1.5 flex-wrap">
-                          <span className={`inline-flex items-center gap-1 px-2 py-0.5 text-[9.5px] font-extrabold rounded-full border ${statusInfo.colorBg}`}>
-                            <span>{statusInfo.dot}</span>
-                            <span>{statusInfo.label}</span>
-                          </span>
-                          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[8.5px] font-bold text-gray-500 bg-gray-50 rounded border border-gray-200/50 font-sans">
-                            {getTaskTypeLabel(task.taskType)}
-                          </span>
-                        </div>
-                      </div>
-
-                      {/* Upper right action buttons - always visible on all task cards for parent */}
-                      {isParent && (
-                        <div className="absolute top-3 right-3 flex items-center gap-1 select-none z-10 text-[10px] font-sans">
-                          <button
-                            onClick={() => handleOpenEditForm(task)}
-                            className="p-1 px-1.5 text-[10px] font-bold text-[#5B7283]"
-                            title="編輯任務"
-                          >
-                            <Edit2 className="h-3 w-3" />
-                          </button>
-                          <button
-                            onClick={() => {
-                              setDeletingTaskId(task.id);
-                            }}
-                            className="p-1 px-1.5 text-[10px] font-bold text-rose-500"
-                            title="刪除任務"
-                          >
-                            <Trash2 className="h-3 w-3" />
-                          </button>
-                        </div>
-                      )}
-
-                      {/* Header block with stars */}
-                      <div className="flex justify-between items-start gap-4">
-                        <div className="space-y-1 font-sans">
+                  <React.Fragment key={task.id}>
+                    {/* MOBILE LIST CARD (max height 100~120px when collapsed, collapsible requirement) */}
+                    <div
+                      className={`flex md:hidden flex-col justify-between p-3.5 bg-white border ${
+                        isRejected ? "border-rose-250 bg-rose-50/5" : "border-[#E9E2DB]"
+                      } rounded-2xl shadow-xs min-h-[105px] h-auto text-left relative font-sans space-y-1`}
+                    >
+                      <div className="flex justify-between items-start gap-2 pr-14">
+                        <div>
                           {isRejected && (
-                            <span className="inline-block text-[10px] font-sans font-black bg-rose-100 text-rose-700 px-2 py-0.5 rounded-md mb-1 animate-pulse">
-                              🚨 人員請再努力：
+                            <span className="inline-block text-[9px] bg-rose-100 text-rose-700 px-1 py-0.2 rounded font-black mr-1 mb-0.5 align-middle">
+                              再努力
                             </span>
                           )}
-                          <h3 className="font-extrabold text-gray-800 text-base leading-snug">{task.title}</h3>
-                          
-                          <div className="text-xs text-gray-500 font-extrabold mt-1">
-                            對象：{task.assignedTo === "all" ? "全體孩子" : familyMembers.find(m => m.uid === task.assignedTo)?.displayName || "全體孩子"}
-                          </div>
-
-                          <p className="text-xs text-gray-500 mt-2.5 leading-relaxed whitespace-pre-wrap bg-[#FAF9F6] p-2.5 rounded-xl border border-[#FAF3E5] font-medium text-[#4C433D]">
-                            🎯 達成條件：{task.requirement}
-                          </p>
+                          <h3 className="font-extrabold text-[#3C332D] text-sm leading-snug truncate inline-block align-middle">
+                            {task.title}
+                          </h3>
                         </div>
-
-                        {/* Stars cost block */}
-                        <div className="text-right flex-shrink-0 font-sans">
-                          <span className="inline-flex items-center gap-1 text-amber-500 font-black text-xs bg-amber-50/55 border border-amber-150 rounded-xl px-2.5 py-1.5 shadow-sm">
-                            ★ {task.starsReward} 星
-                          </span>
-                          {systemMode === SystemMode.EXAM && (
-                            <div className="text-[10px] font-black text-rose-500 bg-rose-50 px-2 py-0.5 rounded-lg mt-1 border border-rose-100">
-                              加倍 2x
-                            </div>
-                          )}
-                        </div>
+                        <span className="text-amber-600 font-extrabold text-[11px] shrink-0 bg-amber-50 px-1.5 py-0.5 rounded-full border border-amber-100 flex items-center gap-0.5">
+                          ⭐ {task.starsReward}星
+                        </span>
                       </div>
 
-                      {/* Inline form or message for Kid Re-submission */}
-                      {isRejected && (
-                        <div className="mt-4 p-4 rounded-2xl bg-[#FFF5F5] border border-rose-100/50 space-y-3 font-sans">
-                          <div className="flex items-center gap-1.5 font-black text-xs text-rose-700">
-                            <span>🔴 再努力一次</span>
-                          </div>
-                          {task.rejectionNote && (
-                            <div className="text-xs text-gray-700 bg-white/80 p-2.5 rounded-xl border border-gray-150">
-                              <span className="font-extrabold text-[#7C6354] block mb-1">退回原因：</span>
-                              <span className="text-[#3C332D] font-bold">{task.rejectionNote}</span>
-                            </div>
-                          )}
-                          
-                          {currentUser.role === UserRole.KID && (
-                            <div className="space-y-2 mt-2">
-                              <label className="block text-[11px] font-black text-[#3C332D]">重新送出心得：</label>
-                              <div className="flex gap-2">
-                                <input
-                                  type="text"
-                                  placeholder="請寫下這次的努力心得..."
-                                  id={`re-submit-note-${task.id}`}
-                                  className="flex-grow text-xs border border-gray-200 rounded-xl px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-red-500"
-                                />
-                                <button
-                                  onClick={async () => {
-                                    const inputEl = document.getElementById(`re-submit-note-${task.id}`) as HTMLInputElement;
-                                    const note = inputEl?.value?.trim();
-                                    if (!note) return;
-                                    await onSubmitTask(task.id, note);
-                                  }}
-                                  className="shrink-0 bg-red-500 hover:bg-red-600 text-white text-[11px] font-extrabold px-3.5 py-2 rounded-xl shadow-sm transition cursor-pointer"
-                                >
-                                  再次送出
-                                </button>
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Timeline bottom bar */}
-                    <div className="mt-5 pt-3.5 border-t border-gray-100 flex flex-wrap items-center justify-between gap-3 text-xs font-sans">
-                      <div className="flex flex-col gap-0.5 text-gray-400 font-bold">
-                        {task.taskType === "regular" ? (
-                          <span className="flex items-center gap-1 text-[#47A875] font-extrabold text-[11px] mt-0.5">
-                            <Calendar className="h-3.5 w-3.5 text-[#47A875]/80" />
-                            <span>永久有效</span>
-                          </span>
-                        ) : (
-                          task.startDate && (
-                            <span className="flex items-center gap-1 text-gray-400 font-mono text-[11px] mt-0.5">
-                              <Calendar className="h-3.5 w-3.5 text-gray-300" />
-                              <span>{task.startDate.replace(/-/g, "/")} ~ {task.endDate?.replace(/-/g, "/")}</span>
-                            </span>
-                          )
+                      <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[10px] text-gray-500 font-bold font-sans">
+                        <span className="text-[#5B7283]">
+                          {task.assignedTo === "all"
+                            ? "全體孩子"
+                            : familyMembers.find((m) => m.uid === task.assignedTo)?.displayName || "全體孩子"}
+                        </span>
+                        <span className="text-gray-200 font-normal">|</span>
+                        <span className="text-gray-500">
+                          {task.taskType === "single" ? "單次任務" : "永久有效"}
+                        </span>
+                        {isParent && (
+                          <>
+                            <span className="text-gray-200 font-normal">|</span>
+                            <button
+                              onClick={() => handleOpenEditForm(task)}
+                              className="text-indigo-600 font-black hover:underline cursor-pointer"
+                            >
+                              [編輯]
+                            </button>
+                            <button
+                              onClick={() => setDeletingTaskId(task.id)}
+                              className="text-rose-500 font-bold hover:underline cursor-pointer ml-1"
+                            >
+                              [刪除]
+                            </button>
+                          </>
                         )}
                       </div>
 
-                      {/* Completion action for kids */}
+                      <div 
+                        onClick={() => setExpandedTasks(prev => ({ ...prev, [task.id]: !prev[task.id] }))}
+                        className="border-t border-[#F5F2EC] pt-1.5 mt-0.5 cursor-pointer text-[11px] break-all"
+                      >
+                        <div className="text-gray-400 font-bold flex flex-wrap items-center">
+                          <span>🎯 達成條件：</span>
+                          <span className={`text-gray-600 font-medium ${expandedTasks[task.id] ? "block whitespace-pre-wrap mt-0.5" : "truncate line-clamp-1 inline-block"}`}>
+                            {task.requirement}
+                          </span>
+                          {!expandedTasks[task.id] && task.requirement.length > 20 && (
+                            <span className="text-indigo-500 font-black text-[9px] ml-1">... [展開]</span>
+                          )}
+                        </div>
+                      </div>
+
                       {currentUser.role === UserRole.KID && !isRejected && (
-                        <button
-                          onClick={() => handleOpenSubmit(task.id)}
-                          className="bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-black px-4.5 py-2.5 rounded-full shadow-md hover:shadow-lg transition cursor-pointer transform hover:-translate-y-0.5 active:translate-y-0"
-                        >
-                          ✅ 我完成了！
-                        </button>
+                        <div className="absolute right-3 top-1/2 -translate-y-1/2 select-none z-10 animate-fade-in">
+                          <button
+                            onClick={() => {
+                              setSelectedTaskId(task.id);
+                              setSubNote("");
+                              setSelectedMood("😊 我完成了");
+                              setShowSubmitForm(true);
+                            }}
+                            className="bg-[#47A875] text-white font-black px-3 py-1.5 rounded-full text-[10px] shadow-xs cursor-pointer"
+                          >
+                            ✔️ 回報
+                          </button>
+                        </div>
+                      )}
+
+                      {isRejected && (
+                        <div className="p-2 bg-rose-50/60 rounded-xl border border-rose-100/50 text-[11px] font-sans space-y-1.5">
+                          {task.rejectionNote && (
+                            <div className="text-gray-600">
+                              <span className="font-extrabold text-rose-800">退回原因：</span>
+                              {task.rejectionNote}
+                            </div>
+                          )}
+                          {currentUser.role === UserRole.KID && (
+                            <div className="flex gap-1.5 items-center">
+                              <input
+                                type="text"
+                                placeholder="重新送出心得..."
+                                id={`re-submit-note-mobile-${task.id}`}
+                                className="flex-grow text-[10px] border border-gray-200 rounded-lg px-2 py-1 bg-white focus:outline-none"
+                              />
+                               <button
+                                 onClick={async () => {
+                                   const el = document.getElementById(`re-submit-note-mobile-${task.id}`) as HTMLInputElement;
+                                   const noteVal = el ? el.value.trim() : "";
+                                   if (!noteVal) return;
+                                   setIsSubmitting(true);
+                                   try {
+                                     await onSubmitTask(task.id, `😊 再接再厲重新回報：${noteVal}`, "😊 再接再厲");
+                                   } catch (err) {
+                                     console.error(err);
+                                   } finally {
+                                     setIsSubmitting(false);
+                                   }
+                                 }}
+                                 className="bg-emerald-500 text-white font-extrabold px-2 py-1 rounded text-[10px]"
+                               >
+                                 送出
+                               </button>
+                            </div>
+                          )}
+                        </div>
                       )}
                     </div>
-                  </div>
+
+                    {/* DESKTOP VIEW CARD */}
+                    <div
+                      className={`hidden md:flex p-3.5 md:p-5 relative flex-col justify-between min-h-[160px] md:min-h-[220px] transition duration-200 hover:-translate-y-0.5 bg-white border border-[#E9E2DB] rounded-2xl shadow-xs w-full ${
+                        isRejected ? "border-rose-100 bg-rose-50/5 animate-fade-in" : ""
+                      }`}
+                    >
+                      <div>
+                        {/* Status and Type Badges Row */}
+                        <div className="flex flex-wrap items-center justify-between gap-2 mb-2 md:mb-3.5 pr-20">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className={`inline-flex items-center gap-1 px-2 py-0.5 text-[9.5px] font-extrabold rounded-full border ${statusInfo.colorBg}`}>
+                              <span>{statusInfo.dot}</span>
+                              <span>{statusInfo.label}</span>
+                            </span>
+                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[8.5px] font-bold text-gray-500 bg-gray-50 rounded border border-gray-200/50 font-sans">
+                              {getTaskTypeLabel(task.taskType)}
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Upper right action buttons - always visible on all task cards for parent */}
+                        {isParent && (
+                          <div className="absolute top-3 right-3 flex items-center gap-1 select-none z-10 text-[10px] font-sans">
+                            <button
+                              onClick={() => handleOpenEditForm(task)}
+                              className="p-1 px-1.5 text-[10px] font-bold text-[#5B7283]"
+                              title="編輯任務"
+                            >
+                              <Edit2 className="h-3 w-3" />
+                            </button>
+                            <button
+                              onClick={() => {
+                                setDeletingTaskId(task.id);
+                              }}
+                              className="p-1 px-1.5 text-[10px] font-bold text-rose-500"
+                              title="刪除任務"
+                            >
+                              <Trash2 className="h-3 w-3" />
+                            </button>
+                          </div>
+                        )}
+
+                        {/* Header block with stars */}
+                        <div className="flex justify-between items-start gap-4">
+                          <div className="space-y-1 font-sans">
+                            {isRejected && (
+                              <span className="inline-block text-[10px] font-sans font-black bg-rose-100 text-rose-700 px-2 py-0.5 rounded-md mb-1 animate-pulse">
+                                🚨 人員請再努力：
+                              </span>
+                            )}
+                            <h3 className="font-extrabold text-gray-800 text-base leading-snug">{task.title}</h3>
+                            
+                            <div className="text-xs text-gray-500 font-extrabold mt-1">
+                              對象：{task.assignedTo === "all" ? "全體孩子" : familyMembers.find(m => m.uid === task.assignedTo)?.displayName || "全體孩子"}
+                            </div>
+
+                            <p className="text-xs text-gray-500 mt-2.5 leading-relaxed whitespace-pre-wrap bg-[#FAF9F6] p-2.5 rounded-xl border border-[#FAF3E5] font-medium text-[#4C433D]">
+                              🎯 達成條件：{task.requirement}
+                            </p>
+                          </div>
+
+                          {/* Stars cost block */}
+                          <div className="text-right flex-shrink-0 font-sans">
+                            <span className="inline-flex items-center gap-1 text-amber-500 font-black text-xs bg-amber-50/55 border border-amber-150 rounded-xl px-2.5 py-1.5 shadow-sm">
+                              ★ {task.starsReward} 星
+                            </span>
+                            {systemMode === SystemMode.EXAM && (
+                              <div className="text-[10px] font-black text-rose-500 bg-rose-50 px-2 py-0.5 rounded-lg mt-1 border border-rose-100">
+                                加倍 2x
+                              </div>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Inline form or message for Kid Re-submission */}
+                        {isRejected && (
+                          <div className="mt-4 p-4 rounded-2xl bg-[#FFF5F5] border border-rose-100/50 space-y-3 font-sans">
+                            <div className="flex items-center gap-1.5 font-black text-xs text-rose-700">
+                              <span>🔴 再努力一次</span>
+                            </div>
+                            {task.rejectionNote && (
+                              <div className="text-xs text-gray-700 bg-white/80 p-2.5 rounded-xl border border-gray-150">
+                                <span className="font-extrabold text-[#7C6354] block mb-1">退回原因：</span>
+                                <span className="text-[#3C332D] font-bold">{task.rejectionNote}</span>
+                              </div>
+                            )}
+                            
+                            {currentUser.role === UserRole.KID && (
+                              <div className="space-y-2 mt-2">
+                                <label className="block text-[11px] font-black text-[#3C332D]">重新送出心得：</label>
+                                <div className="flex gap-2">
+                                  <input
+                                    type="text"
+                                    placeholder="請寫下這次的努力心得..."
+                                    id={`re-submit-note-${task.id}`}
+                                    className="flex-grow text-xs border border-gray-200 rounded-xl px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-red-500"
+                                  />
+                                  <button
+                                    onClick={async () => {
+                                      const inputEl = document.getElementById(`re-submit-note-${task.id}`) as HTMLInputElement;
+                                      const note = inputEl?.value?.trim();
+                                      if (!note) return;
+                                      await onSubmitTask(task.id, note);
+                                    }}
+                                    className="shrink-0 bg-red-500 hover:bg-red-600 text-white text-[11px] font-extrabold px-3.5 py-2 rounded-xl shadow-sm transition cursor-pointer"
+                                  >
+                                    再次送出
+                                  </button>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Timeline bottom bar */}
+                      <div className="mt-5 pt-3.5 border-t border-gray-100 flex flex-wrap items-center justify-between gap-3 text-xs font-sans">
+                        <div className="flex flex-col gap-0.5 text-gray-400 font-bold">
+                          {task.taskType === "regular" ? (
+                            <span className="flex items-center gap-1 text-[#47A875] font-extrabold text-[11px] mt-0.5">
+                              <Calendar className="h-3.5 w-3.5 text-[#47A875]/80" />
+                              <span>永久有效</span>
+                            </span>
+                          ) : (
+                            task.startDate && (
+                              <span className="flex items-center gap-1 text-gray-400 font-mono text-[11px] mt-0.5">
+                                <Calendar className="h-3.5 w-3.5 text-gray-300" />
+                                <span>{task.startDate.replace(/-/g, "/")} ~ {task.endDate?.replace(/-/g, "/")}</span>
+                              </span>
+                            )
+                          )}
+                        </div>
+
+                        {/* Completion action for kids */}
+                        {currentUser.role === UserRole.KID && !isRejected && (
+                          <button
+                            onClick={() => handleOpenSubmit(task.id)}
+                            className="bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-black px-4.5 py-2.5 rounded-full shadow-md hover:shadow-lg transition cursor-pointer transform hover:-translate-y-0.5 active:translate-y-0"
+                          >
+                            ✅ 我完成了！
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  </React.Fragment>
                 );
               })}
             </div>

@@ -83,12 +83,29 @@ const getEventTitleWithPrefix = (evt: CalendarEvent, isBday: boolean, currentDat
   if (isBday) {
     return `🎂 ${(evt as any).birthdayMemberName} ${(evt as any).birthdayAge}歲生日`;
   }
+  
+  let timePrefix = "";
+  if (evt.time && evt.time !== "~") {
+    if (evt.time.includes("~")) {
+      const [start, end] = evt.time.split("~");
+      if (start && end) {
+        timePrefix = `🕑 ${start} - ${end} `;
+      } else if (start) {
+        timePrefix = `🕑 ${start} `;
+      } else if (end) {
+        timePrefix = `🕑 ${end} `;
+      }
+    } else {
+      timePrefix = `🕑 ${evt.time} `;
+    }
+  }
+
   const emoji = getEventEmoji(evt.title);
   if (isMultiDayEvent(evt) && currentDateStr && evt.startDate && evt.endDate) {
     const info = getMultiDayLabel(evt.startDate, evt.endDate, currentDateStr);
-    return `${emoji} ${evt.title} Day${info.dayIndex}`;
+    return `${timePrefix}${emoji} ${evt.title} Day${info.dayIndex}`;
   }
-  return `${emoji} ${evt.title}`;
+  return `${timePrefix}${emoji} ${evt.title}`;
 };
 
 const getAppletEventStyleClasses = (evt: CalendarEvent, isBday: boolean, dateStr?: string, viewType?: "month" | "week"): string => {
@@ -189,7 +206,7 @@ export default function CalendarView({
     }
   }, [simulatedTodayDate]);
 
-  const [viewType, setViewType] = useState<"list" | "month" | "week">("list");
+  const [viewType, setViewType] = useState<"list" | "month" | "week">("month");
   const [selectedMobileDate, setSelectedMobileDate] = useState<string>(todayDateStr);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
 
@@ -319,6 +336,16 @@ export default function CalendarView({
     todayRemarks: string;
   } | null>(null);
   const [isSavingTravel, setIsSavingTravel] = useState(false);
+
+  // User selected date to add / select event type
+  const [showAddTypeSelection, setShowAddTypeSelection] = useState<{ show: boolean; dateStr: string } | null>(null);
+
+  // Custom travel schedule creator direct popup
+  const [showCreateTravelModal, setShowCreateTravelModal] = useState<{ startDate: string; endDate: string } | null>(null);
+  const [newTravelName, setNewTravelName] = useState("");
+  const [newTravelStartDate, setNewTravelStartDate] = useState("");
+  const [newTravelEndDate, setNewTravelEndDate] = useState("");
+  const [newTravelType, setNewTravelType] = useState<"international" | "domestic">("international");
 
   useEffect(() => {
     if (selectedModeForDetail && selectedModeForDetail.mode.type === "travel") {
@@ -820,10 +847,15 @@ export default function CalendarView({
     setNote(evt.note || "");
     setIsPublic(evt.isPublic !== false);
     setSelectedFavId("");
-    if (evt.time && evt.time.includes("~") && evt.time !== "~") {
-      const [start, end] = evt.time.split("~");
-      setStartTime(start || "");
-      setEndTime(end || "");
+    if (evt.time && evt.time !== "~") {
+      if (evt.time.includes("~")) {
+        const [start, end] = evt.time.split("~");
+        setStartTime(start || "");
+        setEndTime(end || "");
+      } else {
+        setStartTime(evt.time);
+        setEndTime("");
+      }
     } else {
       setStartTime("");
       setEndTime("");
@@ -969,10 +1001,20 @@ export default function CalendarView({
     if (!title.trim()) return;
     if (!isFixed && !selectedDate) return;
 
+    const eventTimeStr = (startTime || endTime) ? `${startTime}~${endTime}` : "";
+    console.log("儲存行程資料", {
+      title: title.trim(),
+      date: isFixed ? "" : selectedDate,
+      startTime: startTime,
+      endTime: endTime,
+      time: eventTimeStr,
+      note: note.trim()
+    });
+
     const payload = {
       title: title.trim(),
       date: isFixed ? "" : selectedDate,
-      time: (startTime && endTime) ? `${startTime}~${endTime}` : "",
+      time: eventTimeStr,
       isFixed,
       weekdays: isFixed ? weekdays : [],
       note: note.trim(),
@@ -1017,7 +1059,7 @@ export default function CalendarView({
           familyId: currentUser.familyId || "",
           title: title.trim(),
           date: isFixed ? "" : selectedDate,
-          time: (startTime && endTime) ? `${startTime}~${endTime}` : "",
+          time: eventTimeStr,
           category: "",
           isFixed,
           weekdays: isFixed ? weekdays : [],
@@ -1143,7 +1185,7 @@ export default function CalendarView({
   };
 
   return (
-    <div id="calendar-module" onTouchStart={handleTouchStart} onTouchMove={handleTouchMove} onTouchEnd={handleTouchEnd} className="w-full max-w-full bg-transparent md:bg-white md:rounded-[24px] md:border md:border-[#EFEAE2] p-2 md:p-6 lg:p-8 md:soft-journal-shadow space-y-3 md:space-y-6">
+    <div id="calendar-module" onTouchStart={handleTouchStart} onTouchMove={handleTouchMove} onTouchEnd={handleTouchEnd} className="w-full max-w-full bg-transparent md:bg-white md:rounded-[24px] md:border md:border-[#EFEAE2] p-0 md:p-6 lg:p-8 md:soft-journal-shadow space-y-3 md:space-y-6">
       
       {/* Calendar header controls - Sticky top below primary app navigation bar */}
       <div className="sticky top-[48px] md:top-[74px] bg-white z-30 py-2.5 md:py-3 border-b border-[#EFEAE2]/60 flex flex-col md:flex-row justify-between items-center gap-3">
@@ -1165,29 +1207,37 @@ export default function CalendarView({
               <ChevronRight className="h-4.5 w-4.5 text-[#5B7283]" />
             </button>
           </div>
-          <button
-            onClick={() => {
-              const p = todayDateStr.split("-");
-              if (p.length === 3) {
-                setCurrentDate(new Date(parseInt(p[0], 10), parseInt(p[1], 10) - 1, parseInt(p[2], 10)));
-              } else {
-                setCurrentDate(new Date());
-              }
-              setSelectedMobileDate(todayDateStr);
-            }}
-            className="text-xs md:text-sm font-black px-3.5 py-2 bg-[#F7F3EB] text-[#5B7283] border border-[#EFEAE2] rounded-full hover:bg-white transition cursor-pointer"
-          >
-            📍 今天
-          </button>
+          <div className="flex items-center gap-1.5 select-none font-sans">
+            <button
+              onClick={() => {
+                const p = todayDateStr.split("-");
+                if (p.length === 3) {
+                  setCurrentDate(new Date(parseInt(p[0], 10), parseInt(p[1], 10) - 1, parseInt(p[2], 10)));
+                } else {
+                  setCurrentDate(new Date());
+                }
+                setSelectedMobileDate(todayDateStr);
+              }}
+              className="text-[11px] md:text-sm font-black px-3.5 py-1.5 bg-[#F7F3EB] text-[#5B7283] border border-[#EFEAE2] rounded-full hover:bg-white transition cursor-pointer"
+            >
+              📍 今天
+            </button>
+            <button
+              onClick={() => setViewType(viewType === "month" ? "week" : "month")}
+              className="block md:hidden text-[11px] font-black px-3 py-1.5 bg-amber-50 text-amber-850 border border-amber-250 rounded-full hover:bg-amber-100 transition cursor-pointer shrink-0"
+            >
+              {viewType === "month" ? "🔄 切換週曆" : "🔄 切換月曆"}
+            </button>
+          </div>
         </div>
 
-        {/* Calendar View Toggle switches - 3 Tabs for Mobile, beautifully horizontal & scrollable */}
-        <div className="flex items-center gap-1 p-1 bg-[#FFFDF8] border border-[#EFEAE2] rounded-full font-sans w-full md:w-auto justify-between md:justify-start overflow-x-auto scrollbar-none animate-in fade-in">
+        {/* Calendar View Toggle switches (Desktop only) */}
+        <div className="hidden md:flex items-center gap-1 p-1 bg-[#FFFDF8] border border-[#EFEAE2] rounded-full font-sans w-full md:w-auto justify-between md:justify-start overflow-x-auto scrollbar-none animate-in fade-in">
           <button
             onClick={() => setViewType("list")}
             className={`flex-1 md:flex-initial px-4 py-2 text-xs font-black transition rounded-full cursor-pointer whitespace-nowrap ${
               viewType === "list"
-                ? "bg-amber-100 text-amber-800 border border-amber-200 shadow-sm"
+                ? "bg-amber-100 text-[#3C332D] border border-amber-200 shadow-sm"
                 : "text-gray-500 hover:text-gray-700 hover:bg-[#F7F3EB]"
             }`}
           >
@@ -1197,7 +1247,7 @@ export default function CalendarView({
             onClick={() => setViewType("month")}
             className={`flex-1 md:flex-initial px-4 py-2 text-xs font-black transition rounded-full cursor-pointer whitespace-nowrap ${
               viewType === "month"
-                ? "bg-amber-100 text-amber-800 border border-amber-200 shadow-sm"
+                ? "bg-amber-100 text-[#3C332D] border border-amber-200 shadow-sm"
                 : "text-gray-500 hover:text-gray-700 hover:bg-[#F7F3EB]"
             }`}
           >
@@ -1207,7 +1257,7 @@ export default function CalendarView({
             onClick={() => setViewType("week")}
             className={`flex-1 md:flex-initial px-4 py-2 text-xs font-black transition rounded-full cursor-pointer whitespace-nowrap ${
               viewType === "week"
-                ? "bg-amber-100 text-amber-800 border border-amber-200 shadow-sm"
+                ? "bg-amber-100 text-[#3C332D] border border-amber-200 shadow-sm"
                 : "text-gray-500 hover:text-gray-700 hover:bg-[#F7F3EB]"
             }`}
           >
@@ -1224,7 +1274,7 @@ export default function CalendarView({
               {year}年{month + 1}月行程清單
             </h3>
             <button
-              onClick={() => handleOpenAdd(todayDateStr)}
+              onClick={() => setShowAddTypeSelection({ show: true, dateStr: todayDateStr })}
               className="text-xs font-black bg-[#EAA59E] hover:bg-[#D98E85] text-white px-4 py-2 rounded-full transition shadow-xs"
             >
               + 新增本日行程
@@ -1247,7 +1297,7 @@ export default function CalendarView({
                     <span className="text-3xl block mb-2">🍵</span>
                     <p className="text-xs text-gray-400 font-bold">這個月目前還沒有任何行程安排喔！</p>
                     <button
-                      onClick={() => handleOpenAdd(todayDateStr)}
+                      onClick={() => setShowAddTypeSelection({ show: true, dateStr: todayDateStr })}
                       className="mt-3 text-xs bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-200 px-4 py-2 rounded-full transition font-black"
                     >
                       ＋ 建立第一個行程
@@ -1421,17 +1471,21 @@ export default function CalendarView({
                   key={`${cell.dateStr}-${idx}`}
                   onClick={() => {
                     if (window.innerWidth < 768) {
-                      setSelectedMobileDate(cell.dateStr);
-                      setIsDrawerOpen(true);
+                      if (activeMode && activeMode.type === "travel") {
+                        setSelectedModeForDetail({ mode: activeMode, dateStr: cell.dateStr });
+                      } else {
+                        setSelectedMobileDate(cell.dateStr);
+                        setIsDrawerOpen(true);
+                      }
                     } else {
                       if (activeMode) {
                         setSelectedModeForDetail({ mode: activeMode, dateStr: cell.dateStr });
                       } else {
-                        handleOpenAdd(cell.dateStr);
+                        setShowAddTypeSelection({ show: true, dateStr: cell.dateStr });
                       }
                     }
                   }}
-                  className={`min-h-[80px] h-[80px] md:min-h-[160px] md:h-auto p-1 md:p-2.5 border-r border-b border-[#EFEAE2]/60 flex flex-col justify-between transition group hover:bg-[#FFFDF8]/90 cursor-pointer overflow-hidden ${cellBg}`}
+                  className={`min-h-[105px] h-[105px] md:min-h-[160px] md:h-auto p-1 md:p-2.5 border-r border-b border-[#EFEAE2]/60 flex flex-col justify-between transition group hover:bg-[#FFFDF8]/90 cursor-pointer overflow-hidden ${cellBg}`}
                 >
                   {/* MOBILE VIEW COMPACT CELL */}
                   <div className="block md:hidden text-left flex flex-col justify-between h-full w-full overflow-hidden">
@@ -1456,8 +1510,26 @@ export default function CalendarView({
                     
                     {/* Compact Events in date slot */}
                     <div className="flex-1 flex flex-col justify-end overflow-hidden space-y-0.5 mt-1 pb-0.5 select-none">
+                      {activeMode && (
+                        <div 
+                          className="font-black text-white px-1 py-[1.5px] rounded truncate text-[7.5px] leading-tight mb-0.5 animate-pulse select-none cursor-pointer"
+                          style={{
+                            backgroundColor:
+                              activeMode.type === "travel"
+                                ? "#0066CC"
+                                : activeMode.type === "exam"
+                                ? "#D97706"
+                                : activeMode.type === "vacation"
+                                ? "#16A34A"
+                                : "#4F46E5",
+                          }}
+                          title={activeMode.name}
+                        >
+                          🏕 {activeMode.name}
+                        </div>
+                      )}
                       {(() => {
-                        const limit = 2;
+                        const limit = 3;
                         const displayedEvents = sortedDayEvents.slice(0, limit);
                         const hiddenCount = sortedDayEvents.length - limit;
                         return (
@@ -1467,7 +1539,7 @@ export default function CalendarView({
                               return (
                                 <div
                                   key={evt.id}
-                                  className="text-[8px] leading-[9.5px] py-[1px] px-[2px] font-bold truncate rounded bg-white/70 border border-gray-150 text-[#3C332D] tracking-tight"
+                                  className="text-[8px] leading-[9.5px] py-[1px] px-[2px] font-bold truncate rounded bg-amber-50/70 border border-amber-150 text-[#3C332D] tracking-tight"
                                 >
                                   {cleanTitle}
                                 </div>
@@ -1628,104 +1700,6 @@ export default function CalendarView({
             })}
           </div>
 
-          {/* MOBILE DETAILED DATE AGENDA */}
-          <div className="block md:hidden border-t border-[#EFEAE2]/60 p-4 space-y-4 font-sans bg-[#FCFBF9]">
-            <div className="flex justify-between items-center bg-white border border-[#EFEAE2] p-3 rounded-2xl shadow-xs">
-              <div>
-                <h3 className="text-xs font-black text-[#3C332D] flex items-center gap-1.5">
-                  <span>📅</span> {selectedMobileMonthDayStr} 行程明細
-                </h3>
-                {(() => {
-                  const holiday = getHolidayForDate(selectedMobileDate);
-                  const activeMode = getActiveModeForDate(selectedMobileDate);
-                  return (
-                    <div className="flex flex-wrap gap-1 mt-1">
-                      {holiday && (
-                        <span className="inline-block text-[9px] bg-[#FFEBEB] text-[#E53935] border border-[#FFD5D4] px-1.5 py-0.5 rounded font-bold">
-                          {holiday.emoji} {holiday.name}
-                        </span>
-                      )}
-                      {activeMode && (
-                        <span className="inline-block text-[9px] bg-indigo-50 text-indigo-700 border border-indigo-150 px-1.5 py-0.5 rounded font-bold">
-                          ★ {activeMode.name}
-                        </span>
-                      )}
-                    </div>
-                  );
-                })()}
-              </div>
-              
-              <button
-                onClick={() => handleOpenAdd(selectedMobileDate)}
-                className="text-xs font-black bg-[#EAA59E] text-white px-3 py-1.5 rounded-full hover:bg-[#D98E85] transition"
-              >
-                + 新增行程
-              </button>
-            </div>
-
-            {getEventsForDate(selectedMobileDate).length === 0 ? (
-              <div className="py-8 text-center border border-dashed border-[#EFEAE2] rounded-2xl bg-white/40">
-                <span className="text-2xl block mb-1">🍵</span>
-                <p className="text-xs text-gray-400 font-semibold font-sans">當天沒有任何行程安排，好愜意！</p>
-              </div>
-            ) : (
-              <div className="space-y-3">
-                {getEventsForDate(selectedMobileDate).map((evt) => {
-                  const isBday = (evt as any).isBirthday;
-                  return (
-                    <div
-                      key={evt.id}
-                      onClick={() => handleOpenEdit(evt, selectedMobileDate)}
-                      className={`p-4 rounded-2xl border text-left flex flex-col gap-2 shadow-xs relative cursor-pointer hover:bg-gray-55 transition-all duration-250 ${
-                        isBday ? "bg-rose-50/50 border-rose-200 text-rose-700" : "bg-white border-[#EFEAE2]"
-                      }`}
-                    >
-                      <div className="flex items-center justify-between gap-2 overflow-hidden">
-                        <span className="font-extrabold text-sm text-[#3C332D] truncate block max-w-[85%]">
-                          {getEventTitleWithPrefix(evt, isBday, selectedMobileDate)}
-                        </span>
-                        
-                        {isUserAllowedToDelete(evt) && (
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              triggerDeleteConfirm(evt, selectedMobileDate);
-                            }}
-                            className="text-gray-400 hover:text-red-500 p-1 rounded transition"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </button>
-                        )}
-                      </div>
-
-                      {evt.time && (
-                        <span className="text-xs font-mono font-bold text-gray-500 flex items-center gap-1">
-                          🕐 {evt.time}
-                        </span>
-                      )}
-
-                      {isMultiDayEvent(evt) && evt.startDate && evt.endDate && (
-                        <span className="text-[10px] bg-sky-50 text-sky-850 border border-sky-100 rounded px-2 py-0.5 font-bold self-start mt-0.5 font-mono">
-                          📚 跨日行程 · 第 {getMultiDayLabel(evt.startDate, evt.endDate, selectedMobileDate).dayIndex} 天 / 共 {getMultiDayLabel(evt.startDate, evt.endDate, selectedMobileDate).totalDays} 天
-                        </span>
-                      )}
-
-                      {evt.dailyNotes?.[selectedMobileDate] && (
-                        <div className="text-xs text-[#004B8F] font-bold bg-[#E1F0FF]/55 border border-sky-150 rounded-xl px-2.5 py-1.5 font-sans mt-0.5 self-start">
-                          📝 {evt.dailyNotes[selectedMobileDate]}
-                        </div>
-                      )}
-
-                      <div className="text-[10px] text-gray-400 font-bold flex items-center justify-between mt-1">
-                        <span>{evt.isPublic ? "🔓 家庭公開" : "🔒 私人行程"}</span>
-                        {evt.creatorName && <span>由 {evt.creatorName} 建立</span>}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
         </div>
       )}
 
@@ -1853,10 +1827,19 @@ export default function CalendarView({
                   id={`calendar-day-${cell.dateStr}`}
                   key={cell.dateStr}
                   onClick={() => {
-                    if (activeMode) {
-                      setSelectedModeForDetail({ mode: activeMode, dateStr: cell.dateStr });
+                    if (window.innerWidth < 768) {
+                      if (activeMode && activeMode.type === "travel") {
+                        setSelectedModeForDetail({ mode: activeMode, dateStr: cell.dateStr });
+                      } else {
+                        setSelectedMobileDate(cell.dateStr);
+                        setIsDrawerOpen(true);
+                      }
                     } else {
-                      handleOpenAdd(cell.dateStr);
+                      if (activeMode) {
+                        setSelectedModeForDetail({ mode: activeMode, dateStr: cell.dateStr });
+                      } else {
+                        setShowAddTypeSelection({ show: true, dateStr: cell.dateStr });
+                      }
                     }
                   }}
                   className={`p-4 border-r border-[#EFEAE2] flex flex-col justify-between hover:bg-[#FFFDF8]/60 cursor-pointer min-h-[350px] transition ${cellBg}`}
@@ -1997,7 +1980,7 @@ export default function CalendarView({
                     </div>
 
                     <button
-                      onClick={() => handleOpenAdd(wd.dateStr)}
+                      onClick={() => setShowAddTypeSelection({ show: true, dateStr: wd.dateStr })}
                       className="text-[10px] font-bold text-[#5B7283] hover:text-[#3C332D] px-2.5 py-1 bg-gray-50 hover:bg-gray-100 rounded-lg border border-[#EFEAE2] transition"
                     >
                       + 新增行程
@@ -3298,11 +3281,11 @@ export default function CalendarView({
 
       {/* 🎉 Smooth Success Toast message overlay */}
       {successToast && (
-        <div id="success-toast" className="fixed bottom-6 right-6 z-50 bg-[#344] text-white p-4.5 rounded-2xl flex items-center gap-3.5 shadow-2xl border border-gray-100/15 animate-in slide-in-from-bottom-4 duration-200">
+        <div id="success-toast" className="fixed bottom-6 right-6 z-50 bg-[#344] text-white p-4.5 rounded-2xl flex items-center gap-3.5 shadow-2xl border border-gray-100/15 animate-in slide-in-from-bottom-4 duration-200 font-sans">
           <div className="h-9 w-9 bg-emerald-500 rounded-full flex items-center justify-center text-white text-lg shadow-sm font-black">
             ✓
           </div>
-          <div className="space-y-0.5 text-left font-sans">
+          <div className="space-y-0.5 text-left">
             <h4 className="text-xs font-black text-white">
               {(successToast as any).isDeleted ? "✅ 行程已刪除" : "日曆更新完成！"}
             </h4>
@@ -3316,6 +3299,338 @@ export default function CalendarView({
                 ✨ 並且也已自動配置對應的【特別期間安排】
               </p>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* 📱 MOBILE SLIDEOUT BOTTOM SHEET (DRILL-IN AGENDA DETAIL) */}
+      {isDrawerOpen && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center font-sans md:hidden">
+          {/* Backdrop */}
+          <div 
+            className="fixed inset-0 bg-[#2D2926]/40 backdrop-blur-xs transition-opacity duration-200"
+            onClick={() => setIsDrawerOpen(false)}
+          />
+          {/* Content (sliding bottom sheet) */}
+          <div className="relative w-full max-w-lg bg-white rounded-t-[28px] shadow-2xl border-t border-[#EFEAE2] p-5 pb-8 space-y-4 max-h-[75vh] overflow-y-auto animate-in slide-in-from-bottom duration-250 z-10 text-[#3C332D]">
+            {/* Grab handle/indicator bar */}
+            <div className="flex justify-center -mt-2 mb-2">
+              <div className="w-12 h-1 bg-gray-300 rounded-full" />
+            </div>
+            
+            <div className="flex justify-between items-center pb-2 border-b border-[#F2ECE5]">
+              <div>
+                <h3 className="text-sm font-black text-[#3C332D] flex items-center gap-1.5">
+                  <span>📅</span> {selectedMobileMonthDayStr} 行程明細
+                </h3>
+                {(() => {
+                  const holiday = getHolidayForDate(selectedMobileDate);
+                  const activeMode = getActiveModeForDate(selectedMobileDate);
+                  return (
+                    <div className="flex flex-wrap gap-1 mt-1">
+                      {holiday && (
+                        <span className="inline-block text-[9px] bg-[#FFEBEB] text-[#E53935] border border-[#FFD5D4] px-1.5 py-0.5 rounded font-bold">
+                          {holiday.emoji} {holiday.name}
+                        </span>
+                      )}
+                      {activeMode && (
+                        <span className="inline-block text-[9px] bg-indigo-55 text-indigo-700 border border-indigo-150 px-1.5 py-0.5 rounded font-bold">
+                          🏕 {activeMode.name}
+                        </span>
+                      )}
+                    </div>
+                  );
+                })()}
+              </div>
+              <button 
+                onClick={() => setIsDrawerOpen(false)}
+                className="text-gray-400 hover:text-gray-600 font-extrabold text-sm p-1 cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Quick Add button merged nicely inside sheet */}
+            <div className="flex justify-end">
+              <button
+                onClick={() => {
+                  setIsDrawerOpen(false); // Close drawer first to reveal selection
+                  setShowAddTypeSelection({ show: true, dateStr: selectedMobileDate });
+                }}
+                className="text-xs font-black bg-[#EAA59E] hover:bg-[#D98E85] text-white px-4 py-2 rounded-full transition shadow-xs flex items-center gap-1 cursor-pointer"
+              >
+                <span>➕</span> 新增行程
+              </button>
+            </div>
+
+            {getEventsForDate(selectedMobileDate).length === 0 ? (
+              <div className="py-8 text-center border border-dashed border-[#EFEAE2] rounded-2xl bg-white/40">
+                <span className="text-2xl block mb-1">🍵</span>
+                <p className="text-xs text-gray-405 font-bold font-sans">當天沒有任何行程安排，好愜意！</p>
+              </div>
+            ) : (
+              <div className="space-y-2.5 font-sans">
+                {getEventsForDate(selectedMobileDate).map((evt) => {
+                  const isBday = (evt as any).isBirthday;
+                  return (
+                    <div
+                      key={evt.id}
+                      onClick={() => {
+                        setIsDrawerOpen(false); // Close first to prevent overlap
+                        handleOpenEdit(evt, selectedMobileDate);
+                      }}
+                      className={`p-3.5 rounded-xl border text-left flex flex-col gap-1.5 shadow-xs relative cursor-pointer hover:bg-[#FFFDFB] transition-all ${
+                        isBday ? "bg-rose-50/50 border-rose-200 text-rose-700" : "bg-[#FFFDFB]/80 border-[#EFEAE2]"
+                      }`}
+                    >
+                      <div className="flex items-center justify-between gap-2 overflow-hidden">
+                        <span className="font-extrabold text-xs text-[#3C332D] truncate block max-w-[85%]">
+                          {getEventTitleWithPrefix(evt, isBday, selectedMobileDate)}
+                        </span>
+                        
+                        {isUserAllowedToDelete(evt) && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              triggerDeleteConfirm(evt, selectedMobileDate);
+                            }}
+                            className="text-gray-400 hover:text-red-500 p-1 rounded transition cursor-pointer"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        )}
+                      </div>
+
+                      {evt.time && (
+                        <span className="text-[10px] font-mono font-bold text-gray-500 flex items-center gap-1">
+                          🕐 {evt.time}
+                        </span>
+                      )}
+
+                      {isMultiDayEvent(evt) && evt.startDate && evt.endDate && (
+                        <span className="text-[9px] bg-sky-50 text-sky-850 border border-sky-100 rounded px-1.5 py-0.2 font-bold self-start font-mono">
+                          跨日行程 · 第 {getMultiDayLabel(evt.startDate, evt.endDate, selectedMobileDate).dayIndex} 天
+                        </span>
+                      )}
+
+                      {evt.dailyNotes?.[selectedMobileDate] && (
+                        <div className="text-[10px] text-[#004B8F] font-bold bg-[#E1F0FF]/55 border border-sky-150 rounded-lg px-2 py-1">
+                          📝 {evt.dailyNotes[selectedMobileDate]}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Choice Modal for adding General Event vs. Travel Mode */}
+      {showAddTypeSelection && (
+        <div className="fixed inset-0 bg-[#3C332D]/40 backdrop-blur-sm flex items-center justify-center p-4 z-[60] animate-in fade-in duration-150 font-sans">
+          <div className="bg-white rounded-[24px] border border-[#EFEAE2] p-8 max-w-sm w-full soft-journal-shadow relative space-y-6 text-center">
+            <button
+              type="button"
+              onClick={() => setShowAddTypeSelection(null)}
+              className="absolute top-4 right-4 text-gray-400 hover:text-gray-700 transition cursor-pointer p-1 rounded-full hover:bg-gray-100"
+            >
+              <X className="h-5 w-5" />
+            </button>
+
+            <div className="space-y-1.5 text-center">
+              <span className="text-[10px] font-black uppercase tracking-wider text-[#A67C52] block">
+                行程建立選項 / {showAddTypeSelection.dateStr}
+              </span>
+              <h3 className="text-base font-black text-[#3C332D]">
+                選擇要新增的類型
+              </h3>
+              <p className="text-xs text-gray-400 font-medium leading-relaxed">
+                您可以新增一般單日/跨日日曆事件，或直接安排家庭旅遊計畫：
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 gap-3 font-sans">
+              <button
+                type="button"
+                onClick={() => {
+                  const dateStr = showAddTypeSelection.dateStr;
+                  setShowAddTypeSelection(null);
+                  handleOpenAdd(dateStr);
+                }}
+                className="w-full py-4 bg-[#FFFDF8] hover:bg-[#FAF6FF] text-[#5B7283] border border-[#EFEAE2] font-black rounded-2xl shadow-sm transition hover:scale-[1.01] flex items-center justify-center gap-2 cursor-pointer text-sm"
+              >
+                <span>➕</span> 新增一般行程 / 事件
+              </button>
+
+              <button
+                type="button"
+                className="w-full py-4 bg-[#EAA59E] hover:bg-[#D98E85] text-white font-black rounded-2xl shadow-sm transition hover:scale-[1.01] flex items-center justify-center gap-2 cursor-pointer text-sm"
+                onClick={() => {
+                  const dateStr = showAddTypeSelection.dateStr;
+                  setShowAddTypeSelection(null);
+                  setNewTravelName("");
+                  setNewTravelStartDate(dateStr);
+                  setNewTravelEndDate(dateStr);
+                  setNewTravelType("international");
+                  setShowCreateTravelModal({ startDate: dateStr, endDate: dateStr });
+                }}
+              >
+                <span>✈️</span> 新增旅遊行程安排
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ✈️ Custom Travel Mode Creator Modal */}
+      {showCreateTravelModal && (
+        <div className="fixed inset-0 bg-[#3C332D]/40 backdrop-blur-sm flex items-center justify-center p-4 z-[60] animate-in fade-in duration-150 font-sans">
+          <div className="bg-white rounded-[24px] border border-[#EFEAE2] max-w-md w-full soft-journal-shadow relative flex flex-col max-h-[90vh]">
+            {/* Header */}
+            <div className="p-6 pb-4 border-b border-[#EFEAE2] flex items-center justify-between bg-[#FFFDF8] rounded-t-[24px]">
+              <h3 className="text-lg font-black text-[#3C332D] flex items-center gap-2">
+                <span>✈️</span> 建立家庭旅遊行程
+              </h3>
+              <button
+                type="button"
+                onClick={() => setShowCreateTravelModal(null)}
+                className="text-gray-400 hover:text-gray-700 transition cursor-pointer p-1 rounded-full hover:bg-gray-100"
+              >
+                <X className="h-6 w-6" />
+              </button>
+            </div>
+
+            {/* Scrollable Form */}
+            <div className="p-6 overflow-y-auto space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-[#5B7283] mb-1.5">旅遊活動名稱</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="請輸入旅遊活動名稱 (例如：沖繩暑假自駕五日遊)"
+                  value={newTravelName}
+                  onChange={(e) => setNewTravelName(e.target.value)}
+                  className="w-full text-sm border border-[#EFEAE2] rounded-xl px-3.5 py-2.5 bg-[#FFFDF8] focus:outline-none focus:ring-2 focus:ring-[#5B7283]"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3.5">
+                <div>
+                  <label className="block text-xs font-bold text-[#5B7283] mb-1.5">起始日期</label>
+                  <input
+                    type="date"
+                    required
+                    value={newTravelStartDate}
+                    onChange={(e) => setNewTravelStartDate(e.target.value)}
+                    className="w-full text-sm border border-[#EFEAE2] rounded-xl px-3.5 py-2.5 bg-[#FFFDF8] focus:outline-none focus:ring-2 focus:ring-[#5B7283] font-mono"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-[#5B7283] mb-1.5">結束日期</label>
+                  <input
+                    type="date"
+                    required
+                    value={newTravelEndDate}
+                    onChange={(e) => setNewTravelEndDate(e.target.value)}
+                    className="w-full text-sm border border-[#EFEAE2] rounded-xl px-3.5 py-2.5 bg-[#FFFDF8] focus:outline-none focus:ring-2 focus:ring-[#5B7283] font-mono"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-[#5B7283] mb-1.5">旅遊範圍</label>
+                <div className="grid grid-cols-2 gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setNewTravelType("international")}
+                    className={`py-2.5 rounded-xl border text-xs font-bold transition flex items-center justify-center gap-1.5 ${
+                      newTravelType === "international"
+                        ? "bg-[#DAEFFF] text-[#0066CC] border-[#0066CC]"
+                        : "bg-white text-gray-500 border-gray-200 hover:bg-gray-55"
+                    }`}
+                  >
+                    🌏 國外旅遊/出國
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setNewTravelType("domestic")}
+                    className={`py-2.5 rounded-xl border text-xs font-bold transition flex items-center justify-center gap-1.5 ${
+                      newTravelType === "domestic"
+                        ? "bg-[#FFF4E6] text-[#D97706] border-[#D97706]"
+                        : "bg-white text-gray-500 border-gray-200 hover:bg-gray-55"
+                    }`}
+                  >
+                    🚗 國內旅遊/近郊
+                  </button>
+                </div>
+              </div>
+
+              <div className="p-3.5 bg-amber-50 border border-amber-200 rounded-2xl">
+                <p className="text-[11px] leading-relaxed text-amber-900 font-bold">
+                  💡 貼心地建立後：您可以於各旅遊日期，直接點選行事曆以隨時編輯各天之【每日主題、餐食規劃、時段活動、機票交通與筆記】，享受全家人的旅遊手冊！
+                </p>
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="p-6 border-t border-[#EFEAE2] flex justify-end gap-3 bg-[#FFFDF8] rounded-b-[24px]">
+              <button
+                type="button"
+                onClick={() => setShowCreateTravelModal(null)}
+                className="bg-slate-100 hover:bg-slate-200 text-slate-700 font-extrabold px-5 py-2.5 rounded-full text-xs cursor-pointer transition"
+              >
+                取消
+              </button>
+              <button
+                type="button"
+                onClick={async () => {
+                  try {
+                    if (!newTravelName.trim()) {
+                      alert("請輸入旅遊目的地或名稱！");
+                      return;
+                    }
+                    if (!newTravelStartDate || !newTravelEndDate) {
+                      alert("請填寫旅遊日期！");
+                      return;
+                    }
+                    if (newTravelStartDate > newTravelEndDate) {
+                      alert("結束日期不可小於起始日期！");
+                      return;
+                    }
+                    if (!onSaveConfiguredMode) {
+                      alert("資料儲存器未就緒！");
+                      return;
+                    }
+
+                    const spId = `sp_${Math.random().toString(36).substr(2, 9)}`;
+                    const travelModeObj: ConfiguredMode = {
+                      id: spId,
+                      type: SystemMode.TRAVEL,
+                      name: newTravelName.trim(),
+                      icon: "✈️",
+                      color: "orange",
+                      startDate: newTravelStartDate,
+                      endDate: newTravelEndDate,
+                      travelType: newTravelType,
+                      createdAt: new Date(),
+                      itinerary: {},
+                    };
+
+                    await onSaveConfiguredMode(travelModeObj);
+                    setShowCreateTravelModal(null);
+                    // Open the travel detailed notebook immediately!
+                    setSelectedModeForDetail({ mode: travelModeObj, dateStr: newTravelStartDate });
+                  } catch (err: any) {
+                    alert("建立旅遊行程失敗: " + err.message);
+                  }
+                }}
+                className="bg-[#0066CC] hover:bg-[#0052A3] text-white font-extrabold px-6 py-2.5 rounded-full text-xs cursor-pointer transition shadow-xs"
+              >
+                💾 建立並編輯行程內容
+              </button>
+            </div>
           </div>
         </div>
       )}

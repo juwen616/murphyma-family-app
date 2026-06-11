@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 
-export default function Clock() {
+export default function Clock({ isPlain = false }: { isPlain?: boolean }) {
   const [time, setTime] = useState<Date>(new Date());
 
   useEffect(() => {
@@ -19,6 +19,14 @@ export default function Clock() {
     const minutes = String(d.getMinutes()).padStart(2, "0");
     return `${year}/${month}/${date}（${weekdayShort}）${hours}:${minutes}`;
   };
+
+  if (isPlain) {
+    return (
+      <span className="tabular-nums tracking-wide">
+        {formatSingleLine(time)}
+      </span>
+    );
+  }
 
   return (
     <div

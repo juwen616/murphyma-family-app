@@ -772,101 +772,64 @@ export default function MembersCenter({
             </div>
           )}
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="space-y-2">
             {familyMembers.map((member) => {
               const themeColor = member.color || "#B4C3B2";
               const canEdit = currentUser.role === UserRole.ADMIN || currentUser.role === UserRole.PARENT || member.uid === currentUser.uid;
+              const avatarTxt = member.displayName ? member.displayName.charAt(0) : "✿";
+              
               return (
                 <div
                   key={member.uid}
-                  style={{
-                    border: "1px solid #E9E2DB",
-                    borderRadius: "24px",
-                    background: "#FFFFFF",
-                    boxShadow: "0 2px 10px rgba(0,0,0,0.04)"
-                  }}
-                  className="p-5 hover:bg-[#FAF8F4]/30 flex flex-col justify-between min-h-[220px] transition duration-200 relative overflow-visible"
+                  onClick={() => handleOpenRecords(member)}
+                  style={{ border: "1px solid #E9E2DB" }}
+                  className="bg-white rounded-xl px-4 py-2 hover:bg-[#FAF8F4]/30 cursor-pointer flex items-center justify-between gap-3 h-[64px] transition duration-150 select-none"
                 >
-                  {/* Top-right edit button, available for permissions */}
-                  {canEdit && (
-                    <div className="absolute right-4 top-4 select-none z-10">
-                      <button
-                        onClick={() => handleOpenEdit(member)}
-                        className="flex items-center gap-1 text-xs font-bold text-[#4A6076] hover:text-[#3b4c5e] bg-slate-50 hover:bg-slate-100 border border-[#E5E1DA] px-2.5 py-1.5 rounded-xl transition cursor-pointer"
-                        title="編輯"
-                      >
-                        <Edit3 className="h-3.5 w-3.5" />
-                        <span>編輯</span>
-                      </button>
+                  {/* Left: Avatar & Details */}
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div
+                      style={{ backgroundColor: themeColor }}
+                      className="h-10 w-10 rounded-full flex items-center justify-center text-md text-[#2D2926] border border-[#E5E1DA] font-black shrink-0 relative animate-none"
+                    >
+                      {(!member.photoURL || member.photoURL.startsWith("http")) 
+                        ? avatarTxt 
+                        : member.photoURL}
+                      {member.role === UserRole.KID && (
+                        <span className="absolute -bottom-0.5 -right-0.5 bg-amber-400 text-white rounded-full h-3.5 w-3.5 flex items-center justify-center text-[7.5px] font-bold border border-white">
+                          ⭐
+                        </span>
+                      )}
                     </div>
-                  )}
-
-                  {/* Body Content */}
-                  <div className="space-y-4">
-                    <div className="flex items-center gap-4">
-                      {/* Minimal solid color circle Japanese lifestyle symbol */}
-                      <div
-                        style={{ backgroundColor: themeColor }}
-                        className="h-12 w-12 rounded-full flex items-center justify-center text-xl text-[#2D2926] border border-[#E5E1DA] select-none transition font-extrabold shadow-sm shrink-0"
-                      >
-                        {(!member.photoURL || member.photoURL.startsWith("http")) 
-                          ? (member.displayName ? member.displayName.charAt(0) : "✿") 
-                          : member.photoURL}
-                      </div>
-
-                      <div className="space-y-1">
-                        <div className="flex items-center gap-1.5 flex-wrap">
-                          <h4 className="font-extrabold text-[#2D2926] text-sm leading-tight">{member.displayName}</h4>
-                          {member.uid === currentUser.uid && (
-                            <span className="text-[9px] font-bold bg-[#4A6076] text-white px-1.5 py-0.5 rounded select-none scale-90">
-                              我
-                            </span>
-                          )}
-                        </div>
-                        <div>
-                          <span className={`inline-block text-[9px] font-extrabold rounded px-1.5 py-0.5 ${
-                            member.role === UserRole.ADMIN
-                              ? "bg-rose-50 text-rose-700 border border-rose-150/40"
-                              : member.role === UserRole.PARENT
-                              ? "bg-indigo-50 text-indigo-700 border border-indigo-150/40"
-                              : member.role === UserRole.KID
-                              ? "bg-amber-50 text-amber-700 border border-amber-150/40"
-                              : member.role === UserRole.PET
-                              ? "bg-emerald-50 text-emerald-700 border border-emerald-150/40"
-                              : "bg-gray-100 text-gray-700"
-                          }`}>
-                            {getRoleName(member.role)}
+                    
+                    <div className="min-w-0 leading-tight">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <h4 className="font-extrabold text-[#2D2926] text-xs truncate">
+                          {member.displayName}
+                        </h4>
+                        {member.uid === currentUser.uid && (
+                          <span className="text-[8px] font-bold bg-[#4A6076] text-white px-1.5 py-0.2 rounded select-none scale-90">
+                            我
                           </span>
-                        </div>
+                        )}
                       </div>
-                    </div>
-
-                    {member.birthday && (
-                      <p className="text-xs text-gray-500 font-semibold flex items-center gap-1">
-                        <Calendar className="h-3.5 w-3.5" />
-                        <span>生日：{member.birthday}</span>
+                      <p className="text-[10px] text-gray-400 font-bold mt-0.5">
+                        身份：{getRoleName(member.role)} {member.role === UserRole.KID ? `• ⭐ ${member.stars || 0} 顆` : ""}
                       </p>
-                    )}
+                    </div>
                   </div>
 
-                  {/* Lower Card Action Buttons */}
-                  <div className="mt-6 pt-4 border-t border-[#FAF8F4] flex flex-col gap-2">
-                    <button
-                      onClick={() => handleOpenRecords(member)}
-                      className="flex items-center justify-center gap-1.5 w-full text-xs font-black text-[#4A6076] bg-slate-50 hover:bg-slate-100 border border-[#E5E1DA] px-3 py-2 rounded-xl transition cursor-pointer"
-                    >
-                      <ClipboardList className="h-3.5 w-3.5" />
-                      <span>查看紀錄</span>
-                    </button>
-
-                    {/* Admin can remove other members */}
-                    {currentUser.role === UserRole.ADMIN && member.uid !== currentUser.uid && (
+                  {/* Right: edit icon or Chevron */}
+                  <div className="flex items-center gap-2 shrink-0">
+                    {canEdit && (
                       <button
-                        onClick={() => handleDeleteMember(member.uid, member.displayName)}
-                        className="flex items-center justify-center gap-1.5 w-full text-xs font-black text-[#E28F83] hover:text-red-700 bg-rose-50/20 hover:bg-rose-100/30 border border-[#E5E1DA] px-3 py-2 rounded-xl transition cursor-pointer"
+                        onClick={(e) => {
+                          e.stopPropagation(); // vital
+                          handleOpenEdit(member);
+                        }}
+                        className="text-gray-400 hover:text-[#4A6076] p-1.5 hover:bg-slate-50 border border-transparent hover:border-[#E5E1DA] rounded-lg transition cursor-pointer"
+                        title="編輯成員資料"
                       >
-                        <Trash2 className="h-3.5 w-3.5" />
-                        <span>移除成員</span>
+                        <Edit3 className="h-4 w-4" />
                       </button>
                     )}
                   </div>
@@ -1642,21 +1605,44 @@ export default function MembersCenter({
                 </div>
               </div>
 
-              <div className="flex justify-end gap-2 pt-4">
-                <button
-                  type="button"
-                  onClick={() => setShowFormModal(false)}
-                  className="px-4 py-2 text-xs font-bold text-[#666] hover:bg-[#F1F3F5] border border-[#E5E1DA] rounded-lg transition cursor-pointer"
-                >
-                  取消
-                </button>
-                <button
-                  type="submit"
-                  disabled={isSubmittingForm}
-                  className="px-4 py-2 text-xs font-black text-white bg-[#4A6076] hover:bg-[#3b4c5e] rounded-lg transition disabled:opacity-50 cursor-pointer"
-                >
-                  {isSubmittingForm ? "儲存中..." : editingMember ? "儲存修改" : "確認新增"}
-                </button>
+              <div className="flex justify-between items-center pt-4 border-t border-gray-100 mt-2">
+                <div>
+                  {editingMember && onDeleteMember && (currentUser.role === UserRole.ADMIN || currentUser.role === UserRole.PARENT) && editingMember.uid !== currentUser.uid ? (
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        if (confirm(`⚠ 確定要將「${editingMember.displayName}」從家庭中完全移除嗎？此對應所有雲端資料與紀錄都將連帶刪除，且無法原復！`)) {
+                          try {
+                            await onDeleteMember(editingMember.uid);
+                            setShowFormModal(false);
+                          } catch (err: any) {
+                            toast.error("刪除失敗：" + err.message);
+                          }
+                        }
+                      }}
+                      className="text-xs font-black text-rose-500 hover:text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 px-3 py-2 rounded-xl transition cursor-pointer"
+                    >
+                      移除成員
+                    </button>
+                  ) : <div />}
+                </div>
+
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowFormModal(false)}
+                    className="px-4 py-2 text-xs font-bold text-[#666] hover:bg-[#F1F3F5] border border-[#E5E1DA] rounded-lg transition cursor-pointer"
+                  >
+                    取消
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isSubmittingForm}
+                    className="px-4 py-2 text-xs font-black text-white bg-[#4A6076] hover:bg-[#3b4c5e] rounded-lg transition disabled:opacity-50 cursor-pointer"
+                  >
+                    {isSubmittingForm ? "儲存中..." : editingMember ? "儲存修改" : "確認新增"}
+                  </button>
+                </div>
               </div>
             </form>
           </div>
