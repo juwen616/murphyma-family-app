@@ -605,10 +605,10 @@ export default function RewardCenter({
           </div>
 
           {/* Goal Motivational Progress Grid (Right column, width = 8) */}
-          <div className="md:col-span-8 bg-white p-5 rounded-2xl border border-amber-100 flex flex-col justify-between shadow-3xs">
+          <div className="md:col-span-8 bg-amber-50/10 p-6 rounded-2xl border-2 border-amber-200 flex flex-col justify-between shadow-xs">
             <div>
-              <h4 className="text-xs font-black text-amber-900 mb-2 flex items-center gap-1">
-                <span>🎯</span> 距離距離最近禮物目標進度
+              <h4 className="text-sm md:text-base font-black text-amber-950 mb-3 flex items-center gap-1.5">
+                <span>🎯</span> 距離最近禮物目標進度
               </h4>
               
               {/* Calculate dynamic distances to next rewards */}
@@ -635,30 +635,30 @@ export default function RewardCenter({
                 const closestPct = Math.min(100, Math.round((currentStars / closest.starsCost) * 100));
                 
                 return (
-                  <div className="space-y-3">
+                  <div className="space-y-4">
                     {/* Nearest Gift Header Indicator */}
-                    <div className="bg-amber-50/20 border border-amber-100 p-2.5 rounded-lg flex items-center justify-between">
-                      <span className="text-[10px] font-black text-amber-950 truncate">近期目標：🎁 {closest.title}</span>
-                      <span className="text-xs font-black text-rose-600 shrink-0">
-                        還差 <span className="text-sm font-mono font-black">{closest.diff}</span> 顆星 ({closestPct}%)
+                    <div className="bg-amber-50/40 border border-amber-150 p-3 rounded-xl flex items-center justify-between">
+                      <span className="text-xs md:text-sm font-black text-amber-950 truncate">近期目標：🎁 {closest.title}</span>
+                      <span className="text-sm md:text-base font-black text-rose-600 shrink-0">
+                        還差 <span className="text-base md:text-lg font-mono font-black text-rose-600">{closest.diff}</span> 顆星 ({closestPct}%)
                       </span>
                     </div>
                     
                     {/* Progress slider bar mock */}
-                    <div className="w-full bg-gray-150 rounded-full h-1.5 overflow-hidden">
+                    <div className="w-full bg-gray-150 rounded-full h-3 overflow-hidden border border-gray-200">
                       <div className="bg-amber-500 h-full rounded-full transition-all" style={{ width: `${closestPct}%` }}></div>
                     </div>
                     
                     {/* Other Lock Target List */}
-                    <div className="space-y-1.5">
-                      <p className="text-[9px] text-gray-400 font-black uppercase tracking-wider">我的夢想願望里程碑：</p>
+                    <div className="space-y-2.5 pt-1">
+                      <p className="text-[11px] md:text-xs text-gray-400 font-extrabold uppercase tracking-wider">我的夢想願望里程碑：</p>
                       {lockedGifts.slice(0, 2).map((gift) => (
-                        <div key={gift.id} className="flex justify-between items-center text-[11px] font-bold py-1 border-b border-gray-100 last:border-0 last:pb-0">
-                          <span className="text-gray-700 flex items-center gap-1 truncate max-w-[70%]">
+                        <div key={gift.id} className="flex justify-between items-center text-xs md:text-sm font-extrabold py-2 border-b border-gray-100 last:border-0 last:pb-0">
+                          <span className="text-gray-750 flex items-center gap-1.5 truncate max-w-[70%]">
                             <span>🎁</span> {gift.title}
                           </span>
-                          <span className="text-gray-400 font-extrabold flex items-center gap-1 shrink-0 font-mono text-[10px]">
-                            需要: {gift.starsCost} ★ | 還差 <span className="text-rose-500 font-bold">{gift.diff}</span> 顆
+                          <span className="text-gray-400 font-extrabold flex items-center gap-1.5 shrink-0 font-mono text-[11px] md:text-xs">
+                            需要: {gift.starsCost} ★ | 還差 <span className="text-rose-500 font-black font-semibold text-xs md:text-sm">{gift.diff}</span> 顆
                           </span>
                         </div>
                       ))}

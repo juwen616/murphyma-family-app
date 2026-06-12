@@ -38,6 +38,12 @@ import {
   X
 } from "lucide-react";
 
+const isMom = (displayName?: string) => {
+  if (!displayName) return false;
+  const nameLower = displayName.toLowerCase();
+  return nameLower.includes("媽媽") || nameLower.includes("mama") || nameLower.includes("mom") || nameLower.includes("mami") || nameLower.includes("mother") || nameLower === "媽媽" || nameLower === "mom";
+};
+
 interface HomeDashboardProps {
   currentUser: UserProfile;
   events: CalendarEvent[];
@@ -234,6 +240,54 @@ export default function HomeDashboard({
   const [editingAnnouncement, setEditingAnnouncement] = useState<Announcement | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  // States for announcement deletion confirmation & debugging
+  const [announcementToDelete, setAnnouncementToDelete] = useState<Announcement | null>(null);
+  const [showDeleteAnnConfirm, setShowDeleteAnnConfirm] = useState(false);
+  const [isDeletingAnn, setIsDeletingAnn] = useState(false);
+  const [deleteAnnError, setDeleteAnnError] = useState<string | null>(null);
+
+  const handleConfirmDeleteAnnouncement = async () => {
+    if (!announcementToDelete) return;
+    const targetId = announcementToDelete.id;
+    
+    // Step 1
+    console.log("Delete Start");
+    
+    // Step 2
+    console.log("announcementId", targetId);
+    console.log("familyId", announcementToDelete.familyId);
+    console.log("currentUser.uid", currentUser.uid);
+    
+    // Step 3
+    console.log(`實際刪除路徑: announcements/${targetId}`);
+
+    try {
+      setIsDeletingAnn(true);
+      setDeleteAnnError(null);
+      
+      await onDeleteAnnouncement(targetId);
+      
+      setShowDeleteAnnConfirm(false);
+      setAnnouncementToDelete(null);
+    } catch (err: any) {
+      console.error("公告刪除失敗");
+      console.error("Firebase Error Code:", err?.code || "N/A");
+      console.error("Firebase Error Message:", err?.message || err?.toString());
+      console.error(err);
+      
+      const errorCode = err?.code || "UNKNOWN";
+      const errorMessage = err?.message || err?.toString() || "刪除發生未知錯誤";
+      
+      if (errorCode === "permission-denied" || errorMessage.includes("permission")) {
+        setDeleteAnnError("公告刪除失敗：\nFirebase 權限不足");
+      } else {
+        setDeleteAnnError(`刪除失敗\nError Code:\n${errorCode}\n\nError Message:\n${errorMessage}`);
+      }
+    } finally {
+      setIsDeletingAnn(false);
+    }
+  };
+
   // Quick add event states & handler (used by next 7 days mobile layout)
   const [quickAddDate, setQuickAddDate] = useState<string | null>(null);
   const [quickAddTitle, setQuickAddTitle] = useState("");
@@ -278,11 +332,21 @@ export default function HomeDashboard({
   // Collapsible sections
   const [isTodayPointsExpanded, setIsTodayPointsExpanded] = useState(true);
   const [isSevenDaysExpanded, setIsSevenDaysExpanded] = useState(true);
-  const [isAnnouncementExpanded, setIsAnnouncementExpanded] = useState(false);
-  const [isStarCenterExpanded, setIsStarCenterExpanded] = useState(false);
-  const [isUpcomingTasksExpanded, setIsUpcomingTasksExpanded] = useState(false);
-  const [isBirthdayHelperExpanded, setIsBirthdayHelperExpanded] = useState(false);
+  const [isAnnouncementExpanded, setIsAnnouncementExpanded] = useState(true);
+  const [isStarCenterExpanded, setIsStarCenterExpanded] = useState(true);
+  const [isUpcomingTasksExpanded, setIsUpcomingTasksExpanded] = useState(true);
+  const [isBirthdayHelperExpanded, setIsBirthdayHelperExpanded] = useState(true);
   const [isRecentlyCompletedExpanded, setIsRecentlyCompletedExpanded] = useState(false);
+
+  const [disableMomBirthdayAlert, setDisableMomBirthdayAlert] = useState<boolean>(() => {
+    return localStorage.getItem("disable_mom_birthday_alert") === "true";
+  });
+
+  const handleToggleMomBirthdayAlert = (val: boolean) => {
+    localStorage.setItem("disable_mom_birthday_alert", String(val));
+    setDisableMomBirthdayAlert(val);
+    toast.success(val ? "📴 已關閉媽媽生日放大提醒" : "🔔 已開啟媽媽生日放大提醒");
+  };
 
   const isParent = currentUser.role === UserRole.ADMIN || currentUser.role === UserRole.PARENT;
 
@@ -674,8 +738,12 @@ export default function HomeDashboard({
         birthdayStr: `${birthMonth}/${birthDay}`,
       };
 
+      const skipMomAlert = isMom(member.displayName) && disableMomBirthdayAlert;
+
       if (diffDays === 0) {
-        todayStars.push(item);
+        if (!skipMomAlert) {
+          todayStars.push(item);
+        }
       } else {
         // 14 days, 7 days, 3 days, 1 day checklists:
         if ([14, 7, 3, 1].includes(diffDays)) {
@@ -683,7 +751,9 @@ export default function HomeDashboard({
         }
         // 7 days countdown short banner warning:
         if (diffDays <= 7 && diffDays > 0) {
-          countdownList.push(item);
+          if (!skipMomAlert) {
+            countdownList.push(item);
+          }
         }
       }
 
@@ -694,7 +764,7 @@ export default function HomeDashboard({
     allUpcoming.sort((a, b) => a.diffDays - b.diffDays);
 
     return { todayStars, warningCards, countdownList, allUpcoming };
-  }, [familyMembers, todayDateStr]);
+  }, [familyMembers, todayDateStr, disableMomBirthdayAlert]);
 
   const getInvolvedMembers = (evt: CalendarEvent) => {
     const list: string[] = [];
@@ -746,10 +816,11 @@ export default function HomeDashboard({
       const age = genYear - birthYear;
       const eventDateStr = `${genYear}-${String(birthMonth).padStart(2, "0")}-${String(birthDay).padStart(2, "0")}`;
 
+      const showAge = member.showAgeInCalendar !== false;
       list.push({
         id: `birthday-${member.uid || Math.random()}-${genYear}`,
         familyId: member.familyId || "",
-        title: `🎂 ${member.displayName} ${age}歲生日`,
+        title: showAge ? `🎂 ${member.displayName} ${age}歲生日` : `🎂 ${member.displayName}生日`,
         date: eventDateStr,
         time: "", // All-day
         isFixed: false,
@@ -762,6 +833,7 @@ export default function HomeDashboard({
         birthdayMemberUid: member.uid,
         birthdayAge: age,
         birthdayMemberName: member.displayName,
+        showAgeInCalendar: showAge,
       } as any);
     });
 
@@ -1066,18 +1138,19 @@ export default function HomeDashboard({
 
   const handleCreateAnnouncement = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newAnnTitle.trim() || !newAnnContent.trim()) return;
+    if (!newAnnTitle.trim()) return;
     setIsSubmitting(true);
     try {
+      const trimmedContent = newAnnContent ? newAnnContent.trim() : "";
       if (editingAnnouncement) {
         if (onUpdateAnnouncement) {
-          await onUpdateAnnouncement(editingAnnouncement.id, newAnnTitle.trim(), newAnnContent.trim());
+          await onUpdateAnnouncement(editingAnnouncement.id, newAnnTitle.trim(), trimmedContent);
           toast.success("✓ 公告修改成功！");
         } else {
           toast.error("❌ 系統不支援修改公告。");
         }
       } else {
-        await onAddAnnouncement(newAnnTitle, newAnnContent);
+        await onAddAnnouncement(newAnnTitle.trim(), trimmedContent);
         toast.success("🎉 公告發布成功！");
       }
       setNewAnnTitle("");
@@ -1203,47 +1276,104 @@ export default function HomeDashboard({
         </div>
       </div>
 
-      {/* 🎂 Birthday countdown and today's birthday banner alerts */}
-      {(birthdayReminders.todayStars.length > 0 || birthdayReminders.countdownList.length > 0) && (
-        <div id="birthday-countdown-alerts" className="space-y-3 font-sans">
-          {birthdayReminders.todayStars.map((star, idx) => (
-            <div key={`today-star-${idx}`} className="bg-[#FFF0F6] border border-[#FBCFE8] text-[#9D174D] p-5 rounded-3xl flex items-center gap-4 shadow-sm animate-fade-in">
-              <span className="text-3xl animate-bounce">🎂</span>
-              <div>
-                <h4 className="font-extrabold text-[#9D174D] text-sm md:text-base flex items-center gap-2">
-                  今天是 {star.member.displayName} 的生日！
-                  <span className="bg-white px-2 py-0.5 rounded-full border border-pink-300 text-[11px] font-black">
-                     {star.age} 歲
-                  </span>
-                </h4>
-                <p className="text-xs text-pink-700 font-semibold mt-1">
-                  💖 祝福 {star.member.displayName} 歲歲平安、心想事成！別忘了給壽星送上最真摯的驚喜與愛意喔！✨🎈
-                </p>
-              </div>
-            </div>
-          ))}
-          {birthdayReminders.countdownList.map((notify, idx) => (
-            <div key={`countdown-${idx}`} className="bg-[#FFF5F6] border border-[#FBCFE8] p-4 rounded-3xl flex items-center justify-between shadow-sm animate-fade-in">
-              <div className="flex items-center gap-3">
-                <span className="text-2xl">🎂</span>
-                <div>
-                  <h4 className="font-extrabold text-rose-800 text-sm md:text-base">
-                    🎂 {notify.member.displayName} 生日倒數 {notify.diffDays} 天
-                  </h4>
-                  <p className="text-xs text-rose-600 font-semibold mt-0.5">
-                    再過幾天就是 {notify.member.displayName} {notify.age} 歲生日囉！
-                  </p>
-                </div>
-              </div>
-              <div className="hidden sm:block">
-                <span className="bg-white border border-rose-200 text-rose-700 text-[11px] font-extrabold px-3 py-1.5 rounded-full shadow-sm">
-                  期待倒數中 🎈
-                </span>
-              </div>
-            </div>
-          ))}
+      {/* 📢 家裡公告 */}
+      <section
+        style={{
+          background: "#FFFFFF",
+          border: "1px solid #E8E2D8",
+          borderRadius: "24px",
+          boxShadow: "0 4px 12px rgba(0,0,0,0.03)",
+        }}
+        className="p-5 font-sans"
+      >
+        <div className="flex justify-between items-center pb-4 mb-4 border-b border-[#F7F3EB] select-none">
+          <div className="flex items-center gap-2">
+            <span className="text-lg">📢</span>
+            <h3 className="text-sm font-black text-[#3C332D]">家裡公告</h3>
+          </div>
+          {isParent && (
+            <button
+              type="button"
+              onClick={() => {
+                setEditingAnnouncement(null);
+                setNewAnnTitle("");
+                setNewAnnContent("");
+                setShowAddAnnModal(true);
+              }}
+              className="flex items-center gap-1 px-3 py-1 text-xs font-bold text-[#5B7283] bg-[#EAF0EB] rounded-lg hover:bg-[#DEE7E0] transition cursor-pointer"
+            >
+              <Plus className="h-3.5 w-3.5" />
+              <span>發佈</span>
+            </button>
+          )}
         </div>
-      )}
+
+        <div className="space-y-4">
+          {announcements.length === 0 ? (
+            <div className="text-center py-8 bg-[#FAF8F5] rounded-xl border border-dashed border-[#EFEAE2]">
+              <p className="text-xs text-gray-400 font-bold">目前沒有公告事項</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {announcements.map((ann) => (
+                <div
+                  key={ann.id}
+                  className="relative bg-[#FAF8F5] p-4 rounded-xl border border-[#EFEAE2] transition text-left flex flex-col justify-between"
+                >
+                  <div>
+                    {isParent && (
+                      <div className="absolute right-2.5 top-2.5 flex items-center gap-1.5 z-10">
+                        <button
+                          onClick={(e) => {
+                            setEditingAnnouncement(ann);
+                            setNewAnnTitle(ann.title);
+                            setNewAnnContent(ann.content);
+                            setShowAddAnnModal(true);
+                          }}
+                          className="p-1.5 text-gray-400 hover:text-[#7C6354] hover:bg-gray-100 rounded-lg cursor-pointer transition"
+                          title="修改公告"
+                        >
+                          <Edit3 className="h-4 w-4" />
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            setAnnouncementToDelete(ann);
+                            setDeleteAnnError(null);
+                            setShowDeleteAnnConfirm(true);
+                          }}
+                          className="p-1.5 text-gray-400 hover:text-rose-500 hover:bg-rose-50 rounded-lg cursor-pointer transition"
+                          title="刪除"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </div>
+                    )}
+                    <h4 className="font-bold text-[#3C332D] text-sm pr-16 mb-2 flex items-center gap-1.5">
+                      📌 {ann.title}
+                    </h4>
+                    <p className="text-xs text-gray-650 leading-relaxed font-semibold pr-1 break-words whitespace-pre-wrap">
+                      {ann.content}
+                    </p>
+                  </div>
+                  
+                  <div className="mt-4">
+                    <div className="pt-2 border-t border-[#F7F3EB] flex justify-between items-center text-[10px] text-gray-400 font-bold">
+                      <span>發佈人: {ann.creatorName}</span>
+                      <span>
+                        {ann.createdAt?.seconds
+                          ? new Date(ann.createdAt.seconds * 1000).toLocaleDateString("zh-TW")
+                          : "剛剛"}
+                      </span>
+                    </div>
+
+
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </section>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
         
@@ -1957,102 +2087,63 @@ export default function HomeDashboard({
 
         {/* Right Column (Sidebars / Widgets) */}
         <div className="lg:col-span-4 space-y-6">
-          
-          {/* 3. 📢 家裡公告 */}
-          <section
-            style={{
-              background: "#FFFFFF",
-              border: "1px solid #E8E2D8",
-              borderRadius: "24px",
-              boxShadow: "0 4px 12px rgba(0,0,0,0.03)",
-            }}
-            className="p-5"
-          >
-            <div className="flex justify-between items-center pb-4 mb-4 border-b border-[#F7F3EB]">
-              <div 
-                onClick={() => setIsAnnouncementExpanded(!isAnnouncementExpanded)}
-                className="flex items-center gap-2 cursor-pointer select-none"
-              >
-                <span className="text-lg">📢</span>
-                <h3 className="text-sm font-black text-[#3C332D]">家裡公告</h3>
-                {isAnnouncementExpanded ? <ChevronUp className="h-4 w-4 text-gray-400" /> : <ChevronDown className="h-4 w-4 text-gray-400" />}
-              </div>
-              {isParent && (
-                <button
-                  onClick={() => {
-                    setEditingAnnouncement(null);
-                    setNewAnnTitle("");
-                    setNewAnnContent("");
-                    setShowAddAnnModal(true);
-                  }}
-                  className="flex items-center gap-1 px-2.5 py-1 text-[10px] font-bold text-[#5B7283] bg-[#EAF0EB] rounded-lg hover:bg-[#DEE7E0] transition cursor-pointer"
-                >
-                  <Plus className="h-3 w-3" />
-                  <span>發佈</span>
-                </button>
-              )}
-            </div>
 
-            {isAnnouncementExpanded && (
-              dataLoaded && !dataLoaded.announcements ? (
-                <ShimmerSkeleton count={2} />
-              ) : announcements.length === 0 ? (
-                <div className="text-center py-6 bg-[#FAF8F5] rounded-xl border border-dashed border-[#EFEAE2]">
-                  <p className="text-xs text-gray-400 font-bold">目前沒有公告事項</p>
-                </div>
-              ) : (
-                <div className="space-y-3 max-h-60 overflow-y-auto pr-1">
-                  {announcements.map((ann) => (
-                    <div
-                      key={ann.id}
-                      className="relative bg-[#FAF8F5] p-3.5 rounded-xl border border-[#EFEAE2] transition"
-                    >
-                    {isParent && (
-                      <div className="absolute right-2.5 top-2 flex items-center gap-1 z-10">
-                        <button
-                          onClick={() => {
-                            setEditingAnnouncement(ann);
-                            setNewAnnTitle(ann.title);
-                            setNewAnnContent(ann.content);
-                            setShowAddAnnModal(true);
-                          }}
-                          className="p-1 text-gray-400 hover:text-[#7C6354] hover:bg-gray-100 rounded-lg cursor-pointer transition"
-                          title="修改公告"
-                        >
-                          <Edit3 className="h-3.5 w-3.5" />
-                        </button>
-                        <button
-                          onClick={() => {
-                            if (confirm("您確認要刪除此公告項目嗎？")) {
-                              onDeleteAnnouncement(ann.id);
-                            }
-                          }}
-                          className="p-1 text-gray-400 hover:text-rose-500 hover:bg-rose-50 rounded-lg cursor-pointer transition"
-                          title="刪除"
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </button>
+          {/* 1. 🎂 媽媽生日倒數 (Placed at the very top of the right column on PC version) */}
+          {(birthdayReminders.todayStars.length > 0 || birthdayReminders.countdownList.length > 0) && (
+            <section
+              style={{
+                background: "#FFF5F6",
+                border: "1px solid #FBCFE8",
+                borderRadius: "24px",
+                boxShadow: "0 4px 12px rgba(219, 39, 119, 0.05)",
+              }}
+              className="p-5 font-sans animate-fade-in text-left"
+            >
+              <div className="flex items-center gap-2 pb-4 mb-4 border-b border-[#FEE2E2] select-none">
+                <span className="text-lg">🎂</span>
+                <h3 className="text-sm font-black text-rose-950">今日生日與壽星倒數</h3>
+              </div>
+              
+              <div className="space-y-3">
+                {/* Today's birthdays */}
+                {birthdayReminders.todayStars.map((star, idx) => (
+                  <div key={`side-today-star-${idx}`} className="bg-white border border-[#FBCFE8] text-[#9D174D] p-3.5 rounded-2xl flex items-center gap-3 shadow-none">
+                    <span className="text-2xl animate-bounce">🎂</span>
+                    <div>
+                      <h4 className="font-extrabold text-[#9D174D] text-xs flex items-center gap-1.5 flex-wrap">
+                        今天是 {star.member.displayName} 的生日！
+                        {!isMom(star.member.displayName) && (
+                          <span className="bg-[#FFF0F6] px-1.5 py-0.5 rounded-full border border-pink-200 text-[9.5px] font-black">
+                            {star.age} 歲
+                          </span>
+                        )}
+                      </h4>
+                      <p className="text-[10px] text-pink-700 font-semibold mt-1 leading-relaxed">
+                        💖 祝福 {star.member.displayName} 歲歲安全、心想事成！🎈
+                      </p>
+                    </div>
+                  </div>
+                ))}
+                
+                {/* Countdown list */}
+                {birthdayReminders.countdownList.map((notify, idx) => (
+                  <div key={`side-countdown-${idx}`} className="bg-white border border-rose-100 p-3.5 rounded-2xl flex items-center justify-between shadow-none">
+                    <div className="flex items-center gap-3 text-left">
+                      <span className="text-xl">🎈</span>
+                      <div>
+                        <h4 className="font-extrabold text-rose-850 text-xs">
+                          {notify.member.displayName} 生日倒數 {notify.diffDays} 天
+                        </h4>
+                        <p className="text-[10px] text-rose-600 font-semibold mt-0.5 leading-relaxed">
+                          再過幾天就是 {notify.member.displayName}{isMom(notify.member.displayName) ? "" : ` ${notify.age} 歲`}生日囉！
+                        </p>
                       </div>
-                    )}
-                    <h4 className="font-bold text-[#3C332D] text-xs pr-14 mb-1 flex items-center gap-1">
-                      📌 {ann.title}
-                    </h4>
-                    <p className="text-[11px] text-gray-650 leading-relaxed font-semibold">
-                      {ann.content}
-                    </p>
-                    <div className="mt-3 pt-2 border-t border-[#F7F3EB] flex justify-between items-center text-[9px] text-gray-400 font-bold">
-                      <span>發佈人: {ann.creatorName}</span>
-                      <span>
-                        {ann.createdAt?.seconds
-                          ? new Date(ann.createdAt.seconds * 1000).toLocaleDateString("zh-TW")
-                          : "剛剛"}
-                      </span>
                     </div>
                   </div>
                 ))}
               </div>
-            ))}
-          </section>
+            </section>
+          )}
 
           {/* 4. ⭐ 家庭星星中心 (Maintains equal focus without rank sorting) */}
           <section
@@ -2064,21 +2155,15 @@ export default function HomeDashboard({
             }}
             className="p-5 font-sans"
           >
-            <div 
-              onClick={() => setIsStarCenterExpanded(!isStarCenterExpanded)}
-              className="flex items-center justify-between pb-4 mb-4 border-b border-[#F7F3EB] cursor-pointer select-none"
-            >
+            <div className="flex items-center justify-between pb-4 mb-4 border-b border-[#F7F3EB] select-none">
               <div className="flex items-center gap-2">
                 <span className="text-lg">⭐</span>
                 <h3 className="text-sm font-black text-[#3C332D]">家庭星星中心</h3>
-                {isStarCenterExpanded ? <ChevronUp className="h-4 w-4 text-gray-400" /> : <ChevronDown className="h-4 w-4 text-gray-400" />}
               </div>
             </div>
 
-            {isStarCenterExpanded && (
-              dataLoaded && !dataLoaded.members ? (
-                <ShimmerSkeleton count={2} />
-              ) : kidsMembers.length === 0 ? (
+            <div className="space-y-4">
+              {kidsMembers.length === 0 ? (
                 <div className="text-center py-6 text-gray-400 font-bold text-xs">
                   尚無孩子成員紀錄
                 </div>
@@ -2091,58 +2176,59 @@ export default function HomeDashboard({
                         key={kid.uid}
                         className="p-4 bg-[#FAF8F5] border border-[#EFEAE2] rounded-2xl space-y-3 shadow-xs hover:bg-[#FFFDF8] transition duration-200"
                       >
-                      {/* Name of Kid and Stars */}
-                      <div className="flex items-center justify-between gap-2 border-b border-gray-150/40 pb-2">
-                        <div className="flex items-center gap-2.5">
-                          <div
-                            style={{ backgroundColor: kid.color || "#B4C3B2" }}
-                            className="h-8.5 w-8.5 rounded-full flex items-center justify-center text-xs text-[#2D2926] border border-[#E5E1DA] font-black shrink-0"
-                          >
-                            {(!kid.photoURL || kid.photoURL.startsWith("http")) 
-                              ? (kid.displayName ? kid.displayName.charAt(0) : "✿") 
-                              : kid.photoURL}
+                        {/* Name of Kid and Stars */}
+                        <div className="flex items-center justify-between gap-2 border-b border-gray-150/40 pb-2">
+                          <div className="flex items-center gap-2.5">
+                            <div
+                              style={{ backgroundColor: kid.color || "#B4C3B2" }}
+                              className="h-8.5 w-8.5 rounded-full flex items-center justify-center text-xs text-[#2D2926] border border-[#E5E1DA] font-black shrink-0"
+                            >
+                              {(!kid.photoURL || kid.photoURL.startsWith("http")) 
+                                ? (kid.displayName ? kid.displayName.charAt(0) : "✿") 
+                                : kid.photoURL}
+                            </div>
+                            <div>
+                              <h4 className="font-extrabold text-xs text-[#3C332D]">{kid.displayName}</h4>
+                              <span className="text-[9px] text-amber-800 bg-amber-50 border border-amber-200/50 px-1.5 py-0.2 rounded font-black font-sans mt-0.5 inline-block">
+                                孩子
+                              </span>
+                            </div>
                           </div>
-                          <div>
-                            <h4 className="font-extrabold text-xs text-[#3C332D]">{kid.displayName}</h4>
-                            <span className="text-[9px] text-amber-800 bg-amber-50 border border-amber-200/50 px-1.5 py-0.2 rounded font-black font-sans mt-0.5 inline-block">
-                              孩子
-                            </span>
+                          <div className="flex items-center gap-1 px-3 py-1 bg-[#FFF9F6] border border-[#F2D6CD]/40 rounded-xl shrink-0">
+                            <span className="text-sm font-black text-[#C76A5A] font-mono">{kid.stars || 0}</span>
+                            <span className="text-[#C76A5A] font-bold text-xs">顆星</span>
                           </div>
                         </div>
-                        <div className="flex items-center gap-1 px-3 py-1 bg-[#FFF9F6] border border-[#F2D6CD]/40 rounded-xl shrink-0">
-                          <span className="text-sm font-black text-[#C76A5A] font-mono">{kid.stars || 0}</span>
-                          <span className="text-[#C76A5A] font-bold text-xs">顆星</span>
-                        </div>
-                      </div>
 
-                      {/* Proximity / Nearest Gift Detail */}
-                      {closestGift ? (
-                        <div className="text-xs space-y-1 text-gray-600 font-medium select-none">
-                          <div className="flex justify-between text-[11px] font-black text-gray-400">
-                            <span>🎯 距離最近禮物：</span>
-                            <span className="text-amber-805 truncate ml-1">{closestGift.title}</span>
+                        {/* Proximity / Nearest Gift Detail */}
+                        {closestGift ? (
+                          <div className="text-xs space-y-1 text-gray-600 font-medium select-none">
+                            <div className="flex justify-between text-[11px] font-black text-gray-400">
+                              <span>🎯 距離最近禮物：</span>
+                              <span className="text-amber-805 truncate ml-1">{closestGift.title}</span>
+                            </div>
+                            <div className="flex justify-between pt-0.5 font-bold">
+                              <span>需要星星：</span>
+                              <span>{closestGift.starsCost} 🌟</span>
+                            </div>
+                            <div className="flex justify-between text-gray-700 font-bold items-center text-[11px]">
+                              <span>目前進度：</span>
+                              {closestGift.isAchieved ? (
+                                <span className="text-emerald-600 font-black">🎉 已達標可以兌換！</span>
+                              ) : (
+                                <span>還差 <span className="text-rose-500 font-black font-mono">{closestGift.gap}</span> 顆星</span>
+                              )}
+                            </div>
                           </div>
-                          <div className="flex justify-between pt-0.5 font-bold">
-                            <span>需要星星：</span>
-                            <span>{closestGift.starsCost} 🌟</span>
-                          </div>
-                          <div className="flex justify-between text-gray-700 font-bold items-center text-[11px]">
-                            <span>目前進度：</span>
-                            {closestGift.isAchieved ? (
-                              <span className="text-emerald-600 font-black">🎉 已達標可以兌換！</span>
-                            ) : (
-                              <span>還差 <span className="text-rose-500 font-black font-mono">{closestGift.gap}</span> 顆星</span>
-                            )}
-                          </div>
-                        </div>
-                      ) : (
-                        <p className="text-[10px] text-gray-450 italic">目前尚未上架任何兌換禮物唷</p>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            ))}
+                        ) : (
+                          <p className="text-[10px] text-gray-450 italic">目前尚未上架任何兌換禮物唷</p>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
           </section>
 
           {/* 5. 🌱 即將完成任務 (Calculates and displays progress to available reward items) */}
@@ -2155,24 +2241,18 @@ export default function HomeDashboard({
             }}
             className="p-5"
           >
-            <div 
-              onClick={() => setIsUpcomingTasksExpanded(!isUpcomingTasksExpanded)}
-              className="flex items-center justify-between pb-4 mb-4 border-b border-[#F7F3EB] cursor-pointer select-none"
-            >
+            <div className="flex items-center justify-between pb-4 mb-4 border-b border-[#F7F3EB] select-none">
               <div className="flex items-center gap-2">
                 <span className="text-lg font-sans">🌱</span>
                 <h3 className="text-sm font-black text-[#3C332D]">即將完成任務</h3>
-                {isUpcomingTasksExpanded ? <ChevronUp className="h-4 w-4 text-gray-400" /> : <ChevronDown className="h-4 w-4 text-gray-400" />}
               </div>
               <span className="text-[9px] bg-emerald-50 text-emerald-700 px-1.5 py-0.5 rounded font-bold border border-emerald-100 shrink-0">
                 願望達成進度
               </span>
             </div>
 
-            {isUpcomingTasksExpanded && (
-              dataLoaded && !dataLoaded.rewards ? (
-                <ShimmerSkeleton count={2} />
-              ) : kidRewardProgressList.length === 0 ? (
+            <div className="space-y-4">
+              {kidRewardProgressList.length === 0 ? (
                 <div className="text-center py-6 text-gray-400 bg-[#FAF8F5] rounded-xl text-xs font-bold border border-dashed border-gray-200">
                   目前沒有可兌換的禮物項目
                 </div>
@@ -2191,54 +2271,55 @@ export default function HomeDashboard({
                     const { reward, diff, pct, canRedeem } = bestGoal;
                     return (
                       <div key={kid.uid} className="bg-[#FAF8F5] p-3.5 rounded-2xl border border-[#EFEAE2] space-y-2.5">
-                      <div className="flex justify-between items-center">
-                        <span className="text-xs font-black text-[#3C332D] flex items-center gap-1.5">
-                          <Smile className="h-3.5 w-3.5 text-amber-500 fill-amber-100" />
-                          {kid.displayName}
-                        </span>
-                        <span className="text-[10px] font-bold text-amber-900 font-mono">
-                          目前 {kid.stars || 0}★
-                        </span>
-                      </div>
-
-                      <div className="border border-white bg-white p-2.5 rounded-xl space-y-1">
                         <div className="flex justify-between items-center">
-                          <span className="text-xs font-black text-gray-800 truncate max-w-[70%]">
-                            🎁 {reward.title}
+                          <span className="text-xs font-black text-[#3C332D] flex items-center gap-1.5">
+                            <Smile className="h-3.5 w-3.5 text-amber-500 fill-amber-100" />
+                            {kid.displayName}
                           </span>
-                          <span className="text-[10px] font-bold text-gray-500 font-mono">
-                            需要 {reward.starsCost}★
+                          <span className="text-[10px] font-bold text-amber-900 font-mono">
+                            目前 {kid.stars || 0}★
                           </span>
                         </div>
 
-                        {canRedeem ? (
-                          <p className="text-[11px] text-emerald-600 font-bold mt-1 bg-emerald-50 border border-emerald-100 p-1.5 rounded-lg flex items-center gap-1">
-                            🎉 已經可以兌換此禮物！快去兌換吧！
-                          </p>
-                        ) : (
-                          <div className="space-y-1.5 mt-1">
-                            <div className="w-full bg-gray-100 rounded-full h-1.5 overflow-hidden">
-                              <div
-                                style={{ width: `${pct}%` }}
-                                className="bg-amber-400 h-1.5 rounded-full transition-all duration-300"
-                              />
-                            </div>
-                            <p className="text-[10px] text-rose-500 font-bold flex items-center gap-1 flex-wrap">
-                              <span>已達成 {pct}%</span>
-                              <span className="text-rose-408 opacity-70">|</span>
-                              <span>還差 {diff} 顆星星 ⭐</span>
-                            </p>
+                        <div className="border border-white bg-white p-2.5 rounded-xl space-y-1">
+                          <div className="flex justify-between items-center">
+                            <span className="text-xs font-black text-gray-800 truncate max-w-[70%]">
+                              🎁 {reward.title}
+                            </span>
+                            <span className="text-[10px] font-bold text-gray-500 font-mono">
+                              需要 {reward.starsCost}★
+                            </span>
                           </div>
-                        )}
+
+                          {canRedeem ? (
+                            <p className="text-[11px] text-emerald-600 font-bold mt-1 bg-emerald-50 border border-emerald-100 p-1.5 rounded-lg flex items-center gap-1">
+                              🎉 已經可以兌換此禮物！快去兌換吧！
+                            </p>
+                          ) : (
+                            <div className="space-y-1.5 mt-1">
+                              <div className="w-full bg-gray-100 rounded-full h-1.5 overflow-hidden">
+                                <div
+                                  style={{ width: `${pct}%` }}
+                                  className="bg-amber-400 h-1.5 rounded-full transition-all duration-300"
+                                />
+                              </div>
+                              <p className="text-[10px] text-rose-500 font-bold flex items-center gap-1 flex-wrap">
+                                <span>已達成 {pct}%</span>
+                                <span className="text-rose-408 opacity-70">|</span>
+                                <span>還差 {diff} 顆星星 ⭐</span>
+                              </p>
+                            </div>
+                          )}
+                        </div>
                       </div>
-                    </div>
-                  );
-                })}
-              </div>
-            ))}
+                    );
+                  })}
+                </div>
+              )}
+            </div>
           </section>
 
-          {/* 6. 🎂 家族生日小幫手 (Pre-birthday 14/7/3/1 days interactive checklist and countdown summary) */}
+          {/* 6. 🎂 家族生日小幫手 (Pre-birthday 14/7/3/1 days interactive checklist and countdown summary, moved to the bottom of right column) */}
           <section
             style={{
               background: "#FFFFFF",
@@ -2246,131 +2327,134 @@ export default function HomeDashboard({
               borderRadius: "24px",
               boxShadow: "0 4px 12px rgba(0,0,0,0.03)",
             }}
-            className="p-5"
+            className="p-5 animate-fade-in text-left"
           >
-            <div 
-              onClick={() => setIsBirthdayHelperExpanded(!isBirthdayHelperExpanded)}
-              className="flex items-center justify-between pb-4 mb-4 border-b border-[#F7F3EB] cursor-pointer select-none"
-            >
+            <div className="flex items-center justify-between pb-4 mb-4 border-b border-[#F7F3EB] select-none">
               <div className="flex items-center gap-2">
                 <span className="text-lg">🎂</span>
                 <h3 className="text-sm font-black text-[#3C332D]">家族生日小幫手</h3>
-                {isBirthdayHelperExpanded ? <ChevronUp className="h-4 w-4 text-gray-400" /> : <ChevronDown className="h-4 w-4 text-gray-400" />}
               </div>
-              <span className="text-[9px] bg-rose-55 px-1.5 py-0.5 rounded font-extrabold border border-rose-200 text-rose-600 bg-rose-50 shrink-0">
-                溫馨備忘
-              </span>
+              <label className="flex items-center gap-1.5 cursor-pointer bg-rose-50 border border-rose-200 text-rose-700 px-2 py-1 rounded-xl hover:bg-rose-100 transition-colors select-none text-[10px] font-black shrink-0">
+                <input
+                  type="checkbox"
+                  checked={disableMomBirthdayAlert}
+                  onChange={(e) => handleToggleMomBirthdayAlert(e.target.checked)}
+                  className="accent-pink-600 h-3 w-3 cursor-pointer"
+                />
+                <span>關閉媽媽生日提醒</span>
+              </label>
             </div>
 
-            {isBirthdayHelperExpanded && (
-              <div className="space-y-4">
-                {/* 1. ⚠️ 重要生日準備清單 (Triggered on exactly 14, 7, 3, or 1 day before) */}
-                {birthdayReminders.warningCards.length > 0 && (
-                  <div className="space-y-4 mb-5 border-b border-dashed border-gray-100 pb-5">
-                {birthdayReminders.warningCards.map((card) => {
-                  const giftKey = `${card.member.uid}-${card.targetYear}-gift`;
-                  const cakeKey = `${card.member.uid}-${card.targetYear}-cake`;
-                  const mealKey = `${card.member.uid}-${card.targetYear}-meal`;
+            <div className="space-y-4">
+              {/* 1. ⚠️ 重要生日準備清單 (Triggered on exactly 14, 7, 3, or 1 day before) */}
+              {birthdayReminders.warningCards.length > 0 && (
+                <div className="space-y-4 mb-5 border-b border-dashed border-gray-100 pb-5">
+                  {birthdayReminders.warningCards.map((card) => {
+                    const giftKey = `${card.member.uid}-${card.targetYear}-gift`;
+                    const cakeKey = `${card.member.uid}-${card.targetYear}-cake`;
+                    const mealKey = `${card.member.uid}-${card.targetYear}-meal`;
 
-                  return (
-                    <div
-                      key={`warn-${card.member.uid}`}
-                      className="p-4 bg-rose-50/60 border border-rose-100 rounded-2xl space-y-3 shadow-none text-left"
-                    >
-                      <h4 className="font-extrabold text-rose-900 text-xs flex items-center gap-1.5">
-                        🎂 {card.member.displayName}生日還有 {card.diffDays} 天
-                      </h4>
-                      <div className="space-y-2 text-xs">
-                        <p className="font-bold text-rose-700/90 text-[11px]">
-                          是否準備生日事宜：
-                        </p>
-                        <div className="grid grid-cols-3 gap-2">
-                          <label className="flex items-center gap-1.5 cursor-pointer bg-white px-2.5 py-1.5 rounded-xl border border-rose-200/50 hover:border-rose-300 transition-colors select-none">
-                            <input
-                              type="checkbox"
-                              checked={!!bdayChecklist[giftKey]}
-                              onChange={() => toggleBdayCheckItem(giftKey)}
-                              className="accent-pink-600 h-3.5 w-3.5"
-                            />
-                            <span className="font-extrabold text-[#9D174D] text-[11px]">禮物</span>
-                          </label>
-
-                          <label className="flex items-center gap-1.5 cursor-pointer bg-white px-2.5 py-1.5 rounded-xl border border-rose-200/50 hover:border-rose-300 transition-colors select-none">
-                            <input
-                              type="checkbox"
-                              checked={!!bdayChecklist[cakeKey]}
-                              onChange={() => toggleBdayCheckItem(cakeKey)}
-                              className="accent-pink-600 h-3.5 w-3.5"
-                            />
-                            <span className="font-extrabold text-[#9D174D] text-[11px]">蛋糕</span>
-                          </label>
-
-                          <label className="flex items-center gap-1.5 cursor-pointer bg-white px-2.5 py-1.5 rounded-xl border border-rose-200/50 hover:border-rose-300 transition-colors select-none">
-                            <input
-                              type="checkbox"
-                              checked={!!bdayChecklist[mealKey]}
-                              onChange={() => toggleBdayCheckItem(mealKey)}
-                              className="accent-pink-600 h-3.5 w-3.5"
-                            />
-                            <span className="font-extrabold text-[#9D174D] text-[11px]">聚餐</span>
-                          </label>
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-
-            {/* 2. 📅 即將到來生日列覽 (Sourced automatically from live profiles) */}
-            <div className="space-y-2.5">
-              <p className="text-[10px] uppercase font-black text-gray-500 tracking-wider">
-                家庭成員生日排程 (自動每年更新)
-              </p>
-              {birthdayReminders.allUpcoming.length === 0 ? (
-                <div className="text-center py-4 text-gray-400 bg-[#FAF8F5] rounded-xl text-[11px] font-bold border border-dashed border-gray-100">
-                  尚無成員生日欄位資訊 ☕
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  {birthdayReminders.allUpcoming.map((star) => (
-                    <div
-                      key={`item-${star.member.uid}`}
-                      className="flex justify-between items-center p-3 bg-[#FAF8F5] border border-gray-100 rounded-xl hover:bg-gray-50/80 transition-colors"
-                    >
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm">🎂</span>
-                        <div>
-                          <h4 className="font-bold text-xs text-gray-800 flex items-center gap-1">
-                            {star.member.displayName}
-                            <span className="text-[9px] font-extrabold text-rose-600 bg-rose-50 border border-rose-100 px-1 rounded">
-                              將滿 {star.age} 歲
-                            </span>
-                          </h4>
-                          <p className="text-[10px] text-gray-400 font-bold mt-0.5">
-                            每年 {star.birthdayStr}
+                    return (
+                      <div
+                        key={`warn-${card.member.uid}`}
+                        className="p-4 bg-rose-50/60 border border-rose-100 rounded-2xl space-y-3 shadow-none text-left"
+                      >
+                        <h4 className="font-extrabold text-rose-900 text-xs flex items-center gap-1.5">
+                          🎂 {card.member.displayName}生日還有 {card.diffDays} 天
+                        </h4>
+                        <div className="space-y-2 text-xs">
+                          <p className="font-bold text-rose-700/90 text-[11px]">
+                            是否準備生日事宜：
                           </p>
+                          <div className="grid grid-cols-3 gap-2">
+                            <label className="flex items-center gap-1.5 cursor-pointer bg-white px-2.5 py-1.5 rounded-xl border border-rose-200/50 hover:border-rose-300 transition-colors select-none">
+                              <input
+                               type="checkbox"
+                               checked={!!bdayChecklist[giftKey]}
+                               onChange={() => toggleBdayCheckItem(giftKey)}
+                               className="accent-pink-600 h-3.5 w-3.5"
+                              />
+                              <span className="font-extrabold text-[#9D174D] text-[11px]">禮物</span>
+                            </label>
+
+                            <label className="flex items-center gap-1.5 cursor-pointer bg-white px-2.5 py-1.5 rounded-xl border border-rose-200/50 hover:border-rose-300 transition-colors select-none">
+                              <input
+                               type="checkbox"
+                               checked={!!bdayChecklist[cakeKey]}
+                               onChange={() => toggleBdayCheckItem(cakeKey)}
+                               className="accent-pink-600 h-3.5 w-3.5"
+                              />
+                              <span className="font-extrabold text-[#9D174D] text-[11px]">蛋糕</span>
+                            </label>
+
+                            <label className="flex items-center gap-1.5 cursor-pointer bg-white px-2.5 py-1.5 rounded-xl border border-rose-200/50 hover:border-rose-300 transition-colors select-none">
+                              <input
+                               type="checkbox"
+                               checked={!!bdayChecklist[mealKey]}
+                               onChange={() => toggleBdayCheckItem(mealKey)}
+                               className="accent-pink-600 h-3.5 w-3.5"
+                              />
+                              <span className="font-extrabold text-[#9D174D] text-[11px]">聚餐</span>
+                            </label>
+                          </div>
                         </div>
                       </div>
-                      <div className="text-right">
-                        {star.diffDays === 0 ? (
-                          <span className="text-[10px] font-black text-rose-600 bg-rose-50 border border-rose-200 px-2 py-0.5 rounded-full animate-pulse shadow-sm">
-                            🎉 今天生日
-                          </span>
-                        ) : (
-                          <span className="text-[10px] font-bold text-gray-500 font-mono bg-white border border-gray-200/60 px-2 py-0.5 rounded-full">
-                            倒數 {star.diffDays} 天
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
+
+              {/* 2. 📅 即將到來生日列覽 (Sourced automatically from live profiles) */}
+              <div className="space-y-2.5">
+                <p className="text-[10px] uppercase font-black text-gray-500 tracking-wider">
+                  家庭成員生日排程 (自動每年更新)
+                </p>
+                {birthdayReminders.allUpcoming.length === 0 ? (
+                  <div className="text-center py-4 text-gray-400 bg-[#FAF8F5] rounded-xl text-[11px] font-bold border border-dashed border-gray-100">
+                    尚無成員生日欄位資訊 ☕
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {birthdayReminders.allUpcoming.map((star) => (
+                      <div
+                        key={`item-${star.member.uid}`}
+                        className="flex justify-between items-center p-3 bg-[#FAF8F5] border border-gray-100 rounded-xl hover:bg-gray-50/80 transition-colors"
+                      >
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm">🎂</span>
+                          <div>
+                            <h4 className="font-bold text-xs text-gray-800 flex items-center gap-1">
+                              {star.member.displayName}
+                              {!isMom(star.member.displayName) && (
+                                <span className="text-[9px] font-extrabold text-rose-600 bg-rose-50 border border-rose-100 px-1 rounded">
+                                  將滿 {star.age} 歲
+                                </span>
+                              )}
+                            </h4>
+                            <p className="text-[10px] text-gray-400 font-bold mt-0.5">
+                              每年 {star.birthdayStr}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          {star.diffDays === 0 ? (
+                            <span className="text-[10px] font-black text-rose-650 bg-rose-50 border border-rose-220 px-2 py-0.5 rounded-full animate-pulse shadow-sm">
+                              🎉 今天生日
+                            </span>
+                          ) : (
+                            <span className="text-[10px] font-bold text-gray-500 font-mono bg-white border border-gray-200/60 px-2 py-0.5 rounded-full">
+                              倒數 {star.diffDays} 天
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
-          </div>
-          )}
           </section>
+
 
           {/* 7. 🎉 最近完成任務 (Approved tasks within last 3 days) */}
           <section
@@ -3456,6 +3540,91 @@ export default function HomeDashboard({
         </div>
       )}
 
+      {/* 🏡 1b. ANNOUNCEMENT DELETE CONFIRMED POPUP OVERLAY */}
+      {showDeleteAnnConfirm && announcementToDelete && (
+        <div className="fixed inset-0 bg-[#3C332D]/40 backdrop-blur-xs z-[60] flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div className="bg-white rounded-[24px] border border-[#EFEAE2] p-6 w-full max-w-sm shadow-2xl relative space-y-4 font-sans text-xs">
+            {/* Modal Header */}
+            <div className="flex items-center gap-2 pb-3 border-b border-[#F5F2EB]">
+              <div className="p-2 bg-rose-50 border border-rose-100 text-rose-500 rounded-xl text-lg shrink-0">
+                🗑️
+              </div>
+              <div>
+                <h3 className="text-sm font-black text-rose-600">
+                  確定要刪除公告嗎？
+                </h3>
+                <p className="text-[10px] text-gray-400 font-bold mt-0.5">
+                  刪除後，所有成員將無法看到此公告內容。
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowDeleteAnnConfirm(false);
+                  setAnnouncementToDelete(null);
+                  setDeleteAnnError(null);
+                }}
+                className="absolute right-4 top-4 p-1 rounded-full bg-gray-50 hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition cursor-pointer"
+                disabled={isDeletingAnn}
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            {/* Target Card Body */}
+            <div className="p-3 bg-[#FAF8F5] border border-[#EFEAE2] rounded-xl text-left space-y-1">
+              <span className="text-[9px] font-black bg-[#EAA59E] text-white px-1.5 py-0.5 rounded">
+                {announcementToDelete.creatorName}
+              </span>
+              <h4 className="font-extrabold text-[#3C332D] text-xs pt-1 truncate justify-start flex items-center gap-1">
+                📌 {announcementToDelete.title}
+              </h4>
+              <p className="text-[11px] text-gray-600 font-bold line-clamp-3">
+                {announcementToDelete.content}
+              </p>
+            </div>
+
+            {/* Error Message Box */}
+            {deleteAnnError && (
+              <div className="bg-rose-50 border border-rose-100 p-3.5 rounded-xl text-rose-700 font-extrabold whitespace-pre-wrap leading-relaxed select-text text-[11px]">
+                {deleteAnnError}
+              </div>
+            )}
+
+            {/* Action Buttons */}
+            <div className="pt-3 border-t border-[#F5F2EB] flex justify-end gap-2 text-xs font-black shrink-0">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowDeleteAnnConfirm(false);
+                  setAnnouncementToDelete(null);
+                  setDeleteAnnError(null);
+                }}
+                className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-600 rounded-xl cursor-pointer transition"
+                disabled={isDeletingAnn}
+              >
+                取消
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmDeleteAnnouncement}
+                className="px-5 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl shadow-md cursor-pointer transition flex items-center gap-1.5"
+                disabled={isDeletingAnn}
+              >
+                {isDeletingAnn ? (
+                  <>
+                    <div className="animate-spin text-white h-3.5 w-3.5 border-2 border-white border-t-transparent rounded-full" />
+                    <span>處理中...</span>
+                  </>
+                ) : (
+                  <span>確認刪除</span>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* 🔮 2. ALL ANNOUNCEMENTS MANAGER POPUP MODAL */}
       {showAllAnnouncements && (
         <div className="fixed inset-0 bg-[#3C332D]/40 backdrop-blur-xs z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
@@ -3505,9 +3674,9 @@ export default function HomeDashboard({
                           </button>
                           <button
                             onClick={() => {
-                              if (confirm("您確認要刪除此公告項目嗎？")) {
-                                onDeleteAnnouncement(ann.id);
-                              }
+                              setAnnouncementToDelete(ann);
+                              setDeleteAnnError(null);
+                              setShowDeleteAnnConfirm(true);
                             }}
                             className="p-1 text-gray-400 hover:text-rose-500 hover:bg-[#FEF2F2] rounded-lg cursor-pointer transition"
                             title="刪除公告"
@@ -3597,10 +3766,9 @@ export default function HomeDashboard({
 
               <div className="space-y-1">
                 <label className="text-[10.5px] font-black text-gray-500 block">
-                  公告詳細內容： <span className="text-red-500">*</span>
+                  公告詳細內容：
                 </label>
                 <textarea
-                  required
                   rows={4}
                   value={newAnnContent}
                   onChange={(e) => setNewAnnContent(e.target.value)}

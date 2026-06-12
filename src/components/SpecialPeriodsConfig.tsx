@@ -388,8 +388,8 @@ export const SpecialPeriodsConfig: React.FC<SpecialPeriodsConfigProps> = ({
         <div className="flex items-center gap-3">
           <span className="text-xl shrink-0">🗓️</span>
           <div>
-            <h2 className="text-xs font-black text-[#3C332D]">特別期間計畫看板</h2>
-            <p className="text-[10px] text-gray-400 font-bold mt-0.5 leading-tight">
+            <h2 className="text-sm md:text-base font-black text-[#3C332D]">特別期間計畫看板</h2>
+            <p className="text-xs md:text-sm text-gray-400 font-bold mt-1 leading-normal">
               集中排定旅遊計畫、考試衝刺或寒暑假作息。網格網頁與作息同步換裝，儀式滿滿。
             </p>
           </div>
@@ -398,41 +398,41 @@ export const SpecialPeriodsConfig: React.FC<SpecialPeriodsConfigProps> = ({
 
       {/* 🧩 Step 1: Compact Creator List (Parents Only) */}
       {isParent ? (
-        <div className="space-y-2.5 font-sans">
-          <h3 className="text-xs font-black text-[#5C3A21] tracking-wider uppercase">✨ 建立新的家庭特別期間：</h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+        <div className="space-y-3 font-sans">
+          <h3 className="text-sm md:text-base font-black text-[#5C3A21] tracking-wider uppercase">✨ 建立新的家庭特別期間：</h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             
             {/* 1. Travel Plane Card */}
-            <div className="bg-[#EAF6FF]/60 border border-[#BFDFFF] rounded-xl px-3 py-2 flex items-center justify-between gap-3 min-h-[60px] transition hover:shadow-xs">
-              <div className="flex items-center gap-2.5 min-w-0">
-                <div className="text-2xl shrink-0">✈️</div>
+            <div className="bg-[#EAF6FF]/60 border border-[#BFDFFF] rounded-xl px-4 py-3 flex items-center justify-between gap-3 min-h-[70px] transition hover:shadow-xs">
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="text-3xl shrink-0">✈️</div>
                 <div className="min-w-0">
-                  <h4 className="font-extrabold text-xs text-blue-900 leading-tight">出遊計畫</h4>
-                  <p className="text-[10px] text-blue-700/80 leading-none mt-0.5 truncate">自訂機票、行李提醒與通知</p>
+                  <h4 className="font-black text-xs md:text-sm text-blue-900 leading-tight">出遊計畫</h4>
+                  <p className="text-xs text-blue-700/85 mt-1 leading-none truncate">自訂機票、行李提醒與通知</p>
                 </div>
               </div>
               <button
                 type="button"
                 onClick={() => handleOpenAddMode(SystemMode.TRAVEL)}
-                className="py-1.5 px-3 shrink-0 text-[10px] font-black bg-[#478ECC] hover:bg-[#3476B0] text-white rounded-lg shadow-xs cursor-pointer transition uppercase"
+                className="py-2 px-4 shrink-0 text-xs font-black bg-[#478ECC] hover:bg-[#3476B0] text-white rounded-lg shadow-xs cursor-pointer transition uppercase"
               >
                 + 建立
               </button>
             </div>
 
             {/* 4. Custom arrangements Theme Card */}
-            <div className="bg-[#EEF2FF]/65 border border-[#CCD6FF] rounded-xl px-3 py-2 flex items-center justify-between gap-3 min-h-[60px] transition hover:shadow-xs">
-              <div className="flex items-center gap-2.5 min-w-0">
-                <div className="text-2xl shrink-0">🎨</div>
+            <div className="bg-[#EEF2FF]/65 border border-[#CCD6FF] rounded-xl px-4 py-3 flex items-center justify-between gap-3 min-h-[70px] transition hover:shadow-xs">
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="text-3xl shrink-0">🎨</div>
                 <div className="min-w-0">
-                  <h4 className="font-extrabold text-xs text-indigo-950 leading-tight">自訂主題計畫</h4>
-                  <p className="text-[10px] text-indigo-700/85 leading-none mt-0.5 truncate">打掃拉練或家庭主題打卡儀式</p>
+                  <h4 className="font-black text-xs md:text-sm text-indigo-950 leading-tight">自訂主題計畫</h4>
+                  <p className="text-xs text-indigo-700/88 mt-1 leading-none truncate">打掃拉練或家庭主題打卡儀式</p>
                 </div>
               </div>
               <button
                 type="button"
                 onClick={() => handleOpenAddMode(SystemMode.CUSTOM)}
-                className="py-1.5 px-3 shrink-0 text-[10px] font-black bg-[#5865F2] hover:bg-[#4752C4] text-white rounded-lg shadow-xs cursor-pointer transition uppercase"
+                className="py-2 px-4 shrink-0 text-xs font-black bg-[#5865F2] hover:bg-[#4752C4] text-white rounded-lg shadow-xs cursor-pointer transition uppercase"
               >
                 + 建立
               </button>
@@ -450,21 +450,21 @@ export const SpecialPeriodsConfig: React.FC<SpecialPeriodsConfigProps> = ({
       )}
 
       {/* 🗓️ List part: Currently Arranged Periods */}
-      <div className="space-y-3 pt-2">
+      <div className="space-y-4 pt-2">
         <div className="flex items-center justify-between">
-          <h3 className="text-xs font-black text-[#5C3A21] tracking-wider uppercase flex items-center gap-1.5">
+          <h3 className="text-sm md:text-base font-black text-[#5C3A21] tracking-wider uppercase flex items-center gap-1.5">
             🗺️ 目前已安排的特別期間 ({configuredModes.length})
           </h3>
         </div>
 
         {configuredModes.length === 0 ? (
-          <div className="bg-[#FFFDF9] border border-dashed border-gray-200 rounded-3xl p-10 text-center text-gray-400 text-xs font-sans">
+          <div className="bg-[#FFFDF9] border border-dashed border-gray-200 rounded-3xl p-10 text-center text-gray-400 text-sm font-sans">
             <Calendar className="h-8 w-8 mx-auto text-gray-300 stroke-[1.5] mb-2" />
             <p className="font-bold text-[#6D5D53]">目前沒有已排定的特別期間計畫喔！</p>
-            {isParent && <p className="text-[10px] text-[#A59285] mt-1">快用上方的大型卡片為全家建立一個吧 ✨</p>}
+            {isParent && <p className="text-xs text-[#A59285] mt-1">快用上方的大型卡片為全家建立一個吧 ✨</p>}
           </div>
         ) : (
-          <div className="grid grid-cols-1 gap-4 font-sans text-xs">
+          <div className="grid grid-cols-1 gap-4 font-sans text-sm md:text-base">
             {configuredModes.map((mode) => {
               const isExpanded = expandedModeId === mode.id;
               
@@ -505,68 +505,78 @@ export const SpecialPeriodsConfig: React.FC<SpecialPeriodsConfigProps> = ({
                     border: isCurrentActive ? "2px solid #5B7283" : "1px solid #E8E2D8",
                     background: isCurrentActive ? "#FFF" : "#FCFBF9",
                   }}
-                  className="rounded-2xl p-4.5 transition shadow-xs flex flex-col gap-3 relative"
+                  className="rounded-2xl p-5.5 transition shadow-xs flex flex-col gap-3.5 relative cursor-pointer hover:bg-white/80 hover:shadow-md"
+                  onClick={() => setExpandedModeId(isExpanded ? null : mode.id)}
                 >
-                  <div className="flex justify-between items-start gap-2">
-                    <div className="flex items-center gap-3">
-                      <span className="text-2xl select-none">{mode.icon || "✈️"}</span>
+                  <div className="flex justify-between items-center gap-3">
+                    <div className="flex items-center gap-3.5">
+                      <span className="text-3xl select-none">{mode.icon || "✈️"}</span>
                       <div>
                         <div className="flex items-center gap-2 flex-wrap">
-                          <h4 className="font-black text-xs text-[#3C332D]">{mode.name}</h4>
-                          <span className={`text-[8px] font-black tracking-wider px-2 py-0.5 rounded-full border ${themeBg}`}>
+                          <h4 className="font-extrabold text-sm md:text-lg text-[#3C332D]">{mode.name}</h4>
+                          <span className={`text-[10.5px] md:text-sm font-black tracking-wider px-2.5 py-1 rounded-full border ${themeBg}`}>
                             {badgeLabel}
                           </span>
                           {isCurrentActive && (
-                            <span className="text-[8px] font-black bg-rose-100 text-rose-700 px-2.5 py-0.5 rounded-full border border-rose-200 animate-pulse">
+                            <span className="text-[10.5px] md:text-sm font-black bg-rose-100 text-rose-700 px-3 py-1 rounded-full border border-rose-200 animate-pulse">
                               進行中 | 第 {elapsedDays} 天
                             </span>
                           )}
                           {isFuture && (
-                            <span className="text-[8px] font-black bg-blue-50 text-blue-600 px-2 py-0.5 rounded-full border border-blue-200">
+                            <span className="text-[10.5px] md:text-sm font-black bg-blue-50 text-blue-600 px-3 py-1 rounded-full border border-blue-200">
                               未開始 | 倒數 {Math.round((start.getTime() - today.getTime()) / (1000 * 3600 * 24))} 天
                             </span>
                           )}
                           {isPast && (
-                            <span className="text-[8px] font-normal bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full border border-gray-200">
+                            <span className="text-[10.5px] md:text-sm font-normal bg-gray-100 text-gray-500 px-3 py-1 rounded-full border border-gray-200">
                               已結束歷史
                             </span>
                           )}
                         </div>
-                        <p className="text-[10px] text-gray-450 font-mono mt-1 flex items-center gap-1 font-bold">
+                        <p className="text-xs md:text-base text-gray-450 font-mono mt-1.5 flex items-center gap-1.5 font-bold">
                           <span>📅</span>
                           <span>{mode.startDate} ～ {mode.endDate} ({totalDays} 天)</span>
                         </p>
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-1.5 shrink-0">
+                    <div className="flex items-center gap-2 shrink-0">
                       <button
                         type="button"
-                        onClick={() => setExpandedModeId(isExpanded ? null : mode.id)}
-                        className="p-1.5 rounded-xl bg-white hover:bg-gray-50 border border-[#E8E2D8] text-[#7C6354] transition cursor-pointer flex items-center gap-1"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setExpandedModeId(isExpanded ? null : mode.id);
+                        }}
+                        className="p-2 px-3.5 md:p-3 md:px-5 rounded-xl bg-white hover:bg-gray-100 border-2 border-[#E8E2D8] text-[#7C6354] transition cursor-pointer flex items-center gap-1.5"
                         title="查看詳細計畫手記"
                       >
-                        <span className="text-[9px] font-bold">詳情</span>
-                        {isExpanded ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+                        <span className="text-xs md:text-sm font-black">詳情</span>
+                        {isExpanded ? <ChevronUp className="h-4.5 w-4.5" /> : <ChevronDown className="h-4.5 w-4.5" />}
                       </button>
                       
                       {isParent && (
                         <>
                           <button
                             type="button"
-                            onClick={() => handleOpenEditMode(mode)}
-                            className="p-1.5 rounded-xl bg-white hover:bg-sky-50 border border-[#E8E2D8] text-sky-600 transition cursor-pointer"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleOpenEditMode(mode);
+                            }}
+                            className="p-2.5 md:p-3.5 rounded-xl bg-white hover:bg-sky-50 border-2 border-[#E8E2D8] text-sky-600 transition cursor-pointer"
                             title="編輯此計畫"
                           >
-                            <Edit3 className="h-3.5 w-3.5" />
+                            <Edit3 className="h-4.5 w-4.5 md:h-5 md:w-5" />
                           </button>
                           <button
                             type="button"
-                            onClick={() => handleDeleteModeClick(mode.id, mode.name)}
-                            className="p-1.5 rounded-xl bg-white hover:bg-rose-50 border border-[#E8E2D8] text-rose-500 transition cursor-pointer"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDeleteModeClick(mode.id, mode.name);
+                            }}
+                            className="p-2.5 md:p-3.5 rounded-xl bg-white hover:bg-rose-50 border-2 border-[#E8E2D8] text-rose-500 transition cursor-pointer"
                             title="刪除此計畫"
                           >
-                            <Trash2 className="h-3.5 w-3.5" />
+                            <Trash2 className="h-4.5 w-4.5 md:h-5 md:w-5" />
                           </button>
                         </>
                       )}
@@ -575,41 +585,41 @@ export const SpecialPeriodsConfig: React.FC<SpecialPeriodsConfigProps> = ({
 
                   {/* Expanded Plan Details Container */}
                   {isExpanded && (
-                    <div className="mt-2 pt-3.5 border-t border-dashed border-[#E8E2D8] space-y-3">
+                    <div className="mt-3.5 pt-4.5 border-t border-dashed border-[#E8E2D8] space-y-4" onClick={(e) => e.stopPropagation()}>
                       
                       {/* A. Travel Module Details */}
                       {mode.type === SystemMode.TRAVEL && (
-                        <div className="space-y-3">
-                          <div className="bg-orange-50/25 p-3 rounded-xl border border-orange-200/50 space-y-1.5 text-gray-650">
-                            <p className="font-extrabold flex items-center gap-1 text-[#5E4029]">
+                        <div className="space-y-4">
+                          <div className="bg-orange-50/25 p-4 rounded-xl border-2 border-orange-200/50 space-y-2 text-gray-750">
+                            <p className="font-extrabold flex items-center gap-1.5 text-sm md:text-base text-[#5E4029]">
                               ✈️ 航班乘降與旅途交通：
-                              <span className="bg-orange-100 text-[10px] px-2 py-0.5 rounded font-mono font-black border border-orange-200 text-orange-850">
+                              <span className="bg-orange-100 text-xs px-2.5 py-1 rounded font-mono font-black border border-orange-200 text-orange-850">
                                 {mode.airline} {mode.flightNumber}
                               </span>
                             </p>
-                            <p className="text-[10px] text-gray-500 font-medium">
+                            <p className="text-xs md:text-sm text-gray-500 font-bold leading-normal">
                               去程預定 <b>{mode.departureTime}</b>（{mode.departureTerminal || "T2"} 航廈） ｜ 回程預定 <b>{mode.returnTime}</b>（{mode.returnTerminal || "T1"} 航廈）
                             </p>
                             {mode.notes && (
-                              <p className="italic text-gray-500 text-[10px] border-l-2 border-orange-200 pl-2">
+                              <p className="italic text-gray-555 text-xs md:text-sm border-l-4 border-orange-250 pl-3 leading-relaxed">
                                 備註小叮嚀：{mode.notes}
                               </p>
                             )}
                           </div>
 
-                          <span className="font-extrabold text-[#5E4029] block mt-1 text-[10.5px] uppercase tracking-wider">
+                          <span className="font-black text-[#5E4029] block mt-1.5 text-xs md:text-sm uppercase tracking-wider">
                             🗺️ 每日詳細行程與食宿安排 {isParent && "(家長Blur直接儲存)"}：
                           </span>
                           
-                          <div className="space-y-2.5 bg-white p-3 rounded-2xl border border-gray-200 max-h-[300px] overflow-y-auto">
+                          <div className="space-y-3.5 bg-white p-4 rounded-2xl border-2 border-gray-150 max-h-[400px] overflow-y-auto">
                             {Object.keys(mode.itinerary || {}).sort().map((date, idx) => {
                               const item = mode.itinerary?.[date] || {};
                               const isTargetEdit = activeItineraryDate === `${mode.id}-${date}`;
                               
                               return (
-                                <div key={date} className="pb-3 border-b border-gray-100 last:border-b-0 last:pb-0 space-y-1 text-xs">
+                                <div key={date} className="pb-4 border-b-2 border-gray-100 last:border-b-0 last:pb-0 space-y-2 text-sm md:text-base">
                                   <div className="flex items-center gap-2 justify-between flex-wrap">
-                                    <span className="bg-[#FFF8F5] text-orange-900 border border-orange-100 px-2.5 py-0.5 rounded-lg font-black shrink-0">
+                                    <span className="bg-[#FFF8F5] text-orange-950 border border-orange-150 px-3 py-1 rounded-xl font-black shrink-0 text-xs md:text-sm">
                                       Day {idx + 1} ({date})
                                     </span>
                                     {isParent ? (
@@ -618,109 +628,109 @@ export const SpecialPeriodsConfig: React.FC<SpecialPeriodsConfigProps> = ({
                                         onClick={() => {
                                           setActiveItineraryDate(isTargetEdit ? "" : `${mode.id}-${date}`);
                                         }}
-                                        className="text-[10px] text-sky-600 hover:underline font-bold"
+                                        className="text-xs md:text-sm text-sky-600 hover:underline font-black cursor-pointer bg-sky-50 px-2 py-1 rounded-lg border border-sky-200"
                                       >
                                         {isTargetEdit ? "關閉編輯 ✔" : "🔧 點此編輯食宿與行程"}
                                       </button>
                                     ) : (
-                                      <span className="text-[10px] font-mono text-gray-400 font-black shrink-0">
+                                      <span className="text-xs md:text-sm font-mono text-gray-500 font-extrabold shrink-0">
                                         🏨 住宿: {item.lodging || "自選"} ｜ 🚗 交通: {item.transport || "安排"}
                                       </span>
                                     )}
                                   </div>
 
                                   {isTargetEdit && isParent ? (
-                                    <div className="bg-[#FAF8F5] p-3 rounded-xl border border-orange-200 space-y-2.5 mt-2">
+                                    <div className="bg-[#FAF8F5] p-3.5 rounded-xl border border-orange-200 space-y-3 mt-2">
                                       {/* 今日重點 & 提醒 edit block at the top */}
-                                      <div className="bg-[#FFFDF4] border border-[#EDE2D2] rounded-lg p-2.5 space-y-2">
+                                      <div className="bg-[#FFFDF4] border border-[#EDE2D2] rounded-lg p-3 space-y-2.5">
                                         <div>
-                                          <span className="text-[9px] text-gray-500 font-bold block mb-1">🌴 今日主題:</span>
+                                          <span className="text-xs text-gray-500 font-bold block mb-1">🌴 今日主題:</span>
                                           <input
                                             type="text"
                                             defaultValue={item.todayTheme || ""}
                                             onBlur={(e) => handleUpdateExpandedItinerary(mode, date, "todayTheme", e.target.value)}
                                             placeholder="例如：放空海灘日、文化探索日..."
-                                            className="w-full bg-white border border-[#E8E2D8] rounded-lg p-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-orange-250 font-medium font-bold text-gray-800"
+                                            className="w-full bg-white border border-[#E8E2D8] rounded-lg p-2 text-sm focus:outline-none focus:ring-1 focus:ring-orange-250 font-bold text-gray-800"
                                           />
                                         </div>
                                         <div>
-                                          <span className="text-[9px] text-gray-500 font-bold block mb-1">📝 今日備註:</span>
+                                          <span className="text-xs text-gray-500 font-bold block mb-1">📝 今日備註:</span>
                                           <textarea
                                             rows={2}
                                             defaultValue={item.todayRemarks || ""}
                                             onBlur={(e) => handleUpdateExpandedItinerary(mode, date, "todayRemarks", e.target.value)}
                                             placeholder="例如：14:00 SPA預約、17:30 看夕陽、記得帶防蚊液"
-                                            className="w-full bg-white border border-[#E8E2D8] rounded-lg p-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-orange-250 font-medium resize-none text-gray-800 leading-normal"
+                                            className="w-full bg-white border border-[#E8E2D8] rounded-lg p-2 text-sm focus:outline-none focus:ring-1 focus:ring-orange-250 font-medium resize-none text-gray-800 leading-normal"
                                           />
                                         </div>
                                       </div>
 
-                                      <div className="grid grid-cols-2 gap-2">
+                                      <div className="grid grid-cols-2 gap-2.5">
                                         <div>
-                                          <span className="text-[9px] text-gray-400 font-bold block mb-1">☀️ 早上活動:</span>
+                                          <span className="text-xs text-gray-455 font-bold block mb-1">☀️ 早上活動:</span>
                                           <input
                                             type="text"
                                             defaultValue={item.morning || ""}
                                             onBlur={(e) => handleUpdateExpandedItinerary(mode, date, "morning", e.target.value)}
-                                            className="w-full bg-white border border-[#E8E2D8] rounded-lg p-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-orange-250 font-medium"
+                                            className="w-full bg-white border border-[#E8E2D8] rounded-lg p-2 text-sm focus:outline-none focus:ring-1 focus:ring-orange-250 font-medium"
                                           />
                                         </div>
                                         <div>
-                                          <span className="text-[9px] text-gray-400 font-bold block mb-1">⛅ 下午活動:</span>
+                                          <span className="text-xs text-gray-455 font-bold block mb-1">⛅ 下午活動:</span>
                                           <input
                                             type="text"
                                             defaultValue={item.afternoon || ""}
                                             onBlur={(e) => handleUpdateExpandedItinerary(mode, date, "afternoon", e.target.value)}
-                                            className="w-full bg-white border border-[#E8E2D8] rounded-lg p-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-orange-250 font-medium"
+                                            className="w-full bg-white border border-[#E8E2D8] rounded-lg p-2 text-sm focus:outline-none focus:ring-1 focus:ring-orange-250 font-medium"
                                           />
                                         </div>
                                       </div>
-                                      <div className="grid grid-cols-2 gap-2">
+                                      <div className="grid grid-cols-2 gap-2.5">
                                         <div>
-                                          <span className="text-[9px] text-gray-400 font-bold block mb-1">🏨 入住宿宿:</span>
+                                          <span className="text-xs text-gray-455 font-bold block mb-1">🏨 入住宿宿:</span>
                                           <input
                                             type="text"
                                             defaultValue={item.lodging || ""}
                                             onBlur={(e) => handleUpdateExpandedItinerary(mode, date, "lodging", e.target.value)}
-                                            className="w-full bg-white border border-[#E8E2D8] rounded-lg p-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-orange-250 font-medium"
+                                            className="w-full bg-white border border-[#E8E2D8] rounded-lg p-2 text-sm focus:outline-none focus:ring-1 focus:ring-orange-250 font-medium"
                                           />
                                         </div>
                                         <div>
-                                          <span className="text-[9px] text-gray-400 font-bold block mb-1">🚌 交通轉乘:</span>
+                                          <span className="text-xs text-gray-455 font-bold block mb-1">🚌 交通轉乘:</span>
                                           <input
                                             type="text"
                                             defaultValue={item.transport || ""}
                                             onBlur={(e) => handleUpdateExpandedItinerary(mode, date, "transport", e.target.value)}
-                                            className="w-full bg-white border border-[#E8E2D8] rounded-lg p-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-orange-250 font-medium"
+                                            className="w-full bg-white border border-[#E8E2D8] rounded-lg p-2 text-sm focus:outline-none focus:ring-1 focus:ring-orange-250 font-medium"
                                           />
                                         </div>
                                       </div>
                                     </div>
                                   ) : (
-                                    <div className="p-2.5 bg-gray-50 rounded-xl border border-gray-100 text-gray-650 leading-relaxed space-y-1.5">
+                                    <div className="p-3.5 bg-gray-50 rounded-xl border border-gray-150 text-gray-750 leading-relaxed space-y-2 text-sm md:text-base">
                                       {/* Today's Key Points and Remarks at the top of daily plan */}
                                       {(item.todayTheme || item.todayRemarks) && (
-                                        <div className="bg-[#FFFDF6] border border-[#EDE2D2] p-2.5 rounded-lg text-[11px] space-y-1 text-[#5E3F27] mb-1">
+                                        <div className="bg-[#FFFDF6] border border-[#EDE2D2] p-3 rounded-lg text-xs md:text-sm space-y-1.5 text-[#5E3F27] mb-1.5">
                                           {item.todayTheme && (
-                                            <p className="font-bold flex items-center gap-1 text-[11px]">
+                                            <p className="font-extrabold flex items-center gap-1.5">
                                               <span>🌴 今日主題：</span>
-                                              <span className="font-extrabold text-[#9A3412] bg-[#FFFBEB] px-2 py-0.5 rounded border border-[#FDE68A]">{item.todayTheme}</span>
+                                              <span className="font-black text-[#9A3412] bg-[#FFFBEB] px-2.5 py-1 rounded-lg border border-[#FDE68A]">{item.todayTheme}</span>
                                             </p>
                                           )}
                                           {item.todayRemarks && (
-                                            <div className="font-semibold text-[10px] text-gray-600 bg-white/70 p-2 rounded border border-dashed border-[#EDE2D2] whitespace-pre-wrap leading-relaxed">
+                                            <div className="font-semibold text-xs md:text-sm text-gray-650 bg-white/70 p-2.5 rounded border border-dashed border-[#EDE2D2] whitespace-pre-wrap leading-relaxed">
                                               📝 今日備註：{item.todayRemarks}
                                             </div>
                                           )}
                                         </div>
                                       )}
-                                      <p className="font-medium text-[11px]">
+                                      <p className="font-bold">
                                         🌅 <b>早餐：</b>{item.breakfast || "（未設定）"} ｜ <b>上午：</b>{item.morning || "（未設定）"}
                                       </p>
-                                      <p className="font-medium text-[11px]">
+                                      <p className="font-bold">
                                         🍜 <b>午餐：</b>{item.lunch || "（未設定）"} ｜ <b>下午：</b>{item.afternoon || "（未設定）"}
                                       </p>
-                                      <p className="font-medium text-[11px]">
+                                      <p className="font-bold">
                                         🍖 <b>晚餐：</b>{item.dinner || "（未設定）"} ｜ <b>晚上：</b>{item.night || "（未設定）"}
                                       </p>
                                     </div>
@@ -734,91 +744,91 @@ export const SpecialPeriodsConfig: React.FC<SpecialPeriodsConfigProps> = ({
 
                       {/* B. Exam Subjects Checklist */}
                       {mode.type === SystemMode.EXAM && (
-                        <div className="space-y-2 bg-[#FFFDF7] border border-purple-100 p-4 rounded-2xl text-purple-950">
-                          <p className="font-extrabold text-xs text-purple-900 border-b border-purple-100 pb-1.5 flex items-center gap-1">
+                        <div className="space-y-3 bg-[#FFFDF7] border-2 border-purple-150 p-5 rounded-2xl text-purple-950">
+                          <p className="font-black text-xs md:text-base text-purple-900 border-b-2 border-purple-100 pb-2 flex items-center gap-1.5">
                             📚 期考大作戰：複習科目焦點與承諾事項
                           </p>
                           {mode.subjects && mode.subjects.length > 0 ? (
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-2 pt-1 font-medium">
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1 font-bold text-sm md:text-base">
                               {mode.subjects.map((sub: any, idx: number) => (
-                                <div key={idx} className="flex justify-between items-center p-2.5 bg-white border border-purple-100/60 rounded-xl shadow-xs">
-                                  <span className="font-black text-purple-700 bg-purple-50 px-2.5 py-1 rounded-lg shrink-0 text-xs">
+                                <div key={idx} className="flex justify-between items-center p-3.5 bg-white border border-purple-150 rounded-xl shadow-xs">
+                                  <span className="font-black text-purple-700 bg-purple-50 px-3 py-1 rounded-lg shrink-0 text-xs md:text-sm">
                                     {sub.name}
                                   </span>
-                                  <span className="text-gray-600 text-[11px] font-bold text-right truncate max-w-[200px]">
+                                  <span className="text-gray-650 font-black text-right truncate max-w-[200px]">
                                     {sub.target || "精熟全書重點"}
                                   </span>
                                 </div>
                               ))}
                             </div>
                           ) : (
-                            <p className="text-gray-400 italic text-[11px]">尚未新增考科規劃</p>
+                            <p className="text-gray-400 italic text-sm">尚未新增考科規劃</p>
                           )}
                         </div>
                       )}
 
                       {/* C. Vacation Daily Tasks Indicator */}
                       {mode.type === SystemMode.VACATION && (
-                        <div className="space-y-2.5 bg-[#F9FFF8] border border-emerald-100 p-4 rounded-2xl text-emerald-950">
-                          <p className="font-extrabold text-xs text-emerald-900 border-b border-emerald-50 pb-1.5 flex items-center justify-between">
+                        <div className="space-y-3 bg-[#F9FFF8] border-2 border-emerald-150 p-5 rounded-2xl text-emerald-950">
+                          <p className="font-black text-xs md:text-base text-emerald-900 border-b-2 border-emerald-50 pb-2 flex items-center justify-between">
                             <span>🌻 {mode.vacationType || "寒暑期"}打卡清單 (打勾完成自我進度)：</span>
                           </p>
                           {mode.dailyTasks && mode.dailyTasks.length > 0 ? (
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-2 pt-0.5 font-bold">
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-0.5 font-bold text-sm md:text-base">
                               {mode.dailyTasks.map((task: any, idx: number) => (
                                 <div 
                                   key={task.id || idx} 
                                   onClick={() => handleToggleTaskCompleted(mode, task.id, "vacation")}
-                                  className={`flex items-center gap-2.5 p-2 rounded-xl border cursor-pointer select-none transition ${
+                                  className={`flex items-center gap-3 p-3 rounded-xl border-2 cursor-pointer select-none transition ${
                                     task.completed 
                                       ? "bg-emerald-50/50 border-emerald-300 text-emerald-800 line-through opacity-70"
                                       : "bg-white border-emerald-100 text-emerald-900 hover:bg-emerald-50/20"
                                   }`}
                                 >
-                                  <div className={`h-4 w-4 rounded flex items-center justify-center border transition ${
+                                  <div className={`h-5 w-5 rounded flex items-center justify-center border-2 transition shrink-0 ${
                                     task.completed ? "bg-emerald-600 border-emerald-600 text-white" : "border-emerald-300 bg-white"
                                   }`}>
                                     {task.completed && <Check className="h-3 w-3 stroke-[3]" />}
                                   </div>
-                                  <span className="text-[11px] font-bold">{task.text}</span>
+                                  <span className="text-xs md:text-sm font-black">{task.text}</span>
                                 </div>
                               ))}
                             </div>
                           ) : (
-                            <p className="text-gray-400 italic text-[11px]">尚未新增每日生活打卡清單</p>
+                            <p className="text-gray-400 italic text-sm">尚未新增每日生活打卡清單</p>
                           )}
                         </div>
                       )}
 
                       {/* D. Custom Tasks Checklist */}
                       {mode.type === SystemMode.CUSTOM && (
-                        <div className="space-y-2.5 bg-[#FCFDFF] border border-indigo-100 p-4 rounded-2xl text-indigo-950">
-                          <p className="font-extrabold text-xs text-indigo-900 border-b border-indigo-50 pb-1.5 flex items-center justify-between">
+                        <div className="space-y-3 bg-[#FCFDFF] border-2 border-indigo-150 p-5 rounded-2xl text-indigo-950">
+                          <p className="font-black text-xs md:text-base text-indigo-900 border-b-2 border-indigo-50 pb-2 flex items-center justify-between">
                             <span>🎨 家庭自訂活約定 (打勾紀錄本日進度)：</span>
                           </p>
                           {mode.customTasks && mode.customTasks.length > 0 ? (
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-2 pt-0.5 font-extrabold">
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-0.5 font-black text-sm md:text-base">
                               {mode.customTasks.map((task: any, idx: number) => (
                                 <div 
                                   key={task.id || idx} 
                                   onClick={() => handleToggleTaskCompleted(mode, task.id, "custom")}
-                                  className={`flex items-center gap-2.5 p-2 rounded-xl border cursor-pointer select-none transition ${
+                                  className={`flex items-center gap-3 p-3 rounded-xl border-2 cursor-pointer select-none transition ${
                                     task.completed 
                                       ? "bg-indigo-50/50 border-indigo-300 text-indigo-800 line-through opacity-70"
                                       : "bg-white border-indigo-100 text-indigo-900 hover:bg-indigo-50/20"
                                   }`}
                                 >
-                                  <div className={`h-4 w-4 rounded flex items-center justify-center border transition ${
+                                  <div className={`h-5 w-5 rounded flex items-center justify-center border-2 transition shrink-0 ${
                                     task.completed ? "bg-indigo-600 border-indigo-600 text-white" : "border-indigo-300 bg-white"
                                   }`}>
                                     {task.completed && <Check className="h-3 w-3 stroke-[3]" />}
                                   </div>
-                                  <span className="text-[11px] font-bold">{task.text}</span>
+                                  <span className="text-xs md:text-sm font-black">{task.text}</span>
                                 </div>
                               ))}
                             </div>
                           ) : (
-                            <p className="text-gray-400 italic text-[11px]">尚未新增自訂生活打卡清單</p>
+                            <p className="text-gray-400 italic text-sm">尚未新增自訂生活打卡清單</p>
                           )}
                         </div>
                       )}

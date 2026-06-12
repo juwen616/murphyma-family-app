@@ -22,6 +22,12 @@ import {
   Info
 } from "lucide-react";
 
+const isMom = (displayName?: string) => {
+  if (!displayName) return false;
+  const nameLower = displayName.toLowerCase();
+  return nameLower.includes("媽媽") || nameLower.includes("mama") || nameLower.includes("mom") || nameLower.includes("mami") || nameLower.includes("mother") || nameLower === "媽媽" || nameLower === "mom";
+};
+
 interface CalendarViewProps {
   currentUser: UserProfile;
   events: CalendarEvent[];
@@ -81,31 +87,16 @@ const getMultiDayLabel = (startDateStr: string, endDateStr: string, currentDateS
 
 const getEventTitleWithPrefix = (evt: CalendarEvent, isBday: boolean, currentDateStr?: string) => {
   if (isBday) {
-    return `🎂 ${(evt as any).birthdayMemberName} ${(evt as any).birthdayAge}歲生日`;
+    const showAge = (evt as any).showAgeInCalendar !== false;
+    return showAge ? `🎂 ${(evt as any).birthdayMemberName} ${(evt as any).birthdayAge}歲生日` : `🎂 ${(evt as any).birthdayMemberName}生日`;
   }
   
-  let timePrefix = "";
-  if (evt.time && evt.time !== "~") {
-    if (evt.time.includes("~")) {
-      const [start, end] = evt.time.split("~");
-      if (start && end) {
-        timePrefix = `🕑 ${start} - ${end} `;
-      } else if (start) {
-        timePrefix = `🕑 ${start} `;
-      } else if (end) {
-        timePrefix = `🕑 ${end} `;
-      }
-    } else {
-      timePrefix = `🕑 ${evt.time} `;
-    }
-  }
-
   const emoji = getEventEmoji(evt.title);
   if (isMultiDayEvent(evt) && currentDateStr && evt.startDate && evt.endDate) {
     const info = getMultiDayLabel(evt.startDate, evt.endDate, currentDateStr);
-    return `${timePrefix}${emoji} ${evt.title} Day${info.dayIndex}`;
+    return `${emoji} ${evt.title} Day${info.dayIndex}`;
   }
-  return `${timePrefix}${emoji} ${evt.title}`;
+  return `${emoji} ${evt.title}`;
 };
 
 const getAppletEventStyleClasses = (evt: CalendarEvent, isBday: boolean, dateStr?: string, viewType?: "month" | "week"): string => {
@@ -468,10 +459,11 @@ export default function CalendarView({
         const age = genYear - birthYear;
         const eventDateStr = `${genYear}-${String(birthMonth).padStart(2, "0")}-${String(birthDay).padStart(2, "0")}`;
 
+        const showAge = member.showAgeInCalendar !== false;
         list.push({
           id: `birthday-${member.uid || Math.random()}-${genYear}`,
           familyId: member.familyId || "",
-          title: `🎂 ${member.displayName} ${age}歲生日`,
+          title: showAge ? `🎂 ${member.displayName} ${age}歲生日` : `🎂 ${member.displayName}生日`,
           date: eventDateStr,
           time: "",
           isFixed: false,
@@ -484,6 +476,7 @@ export default function CalendarView({
           birthdayMemberUid: member.uid,
           birthdayAge: age,
           birthdayMemberName: member.displayName,
+          showAgeInCalendar: showAge,
         } as any);
       });
     });
@@ -1396,9 +1389,9 @@ export default function CalendarView({
 
       {/* Monthly View Grid */}
       {viewType === "month" && (
-        <div id="monthly-view-wrapper" className="w-full border-0 md:border md:border-[#EFEAE2] rounded-none md:rounded-[24px] overflow-hidden bg-white shadow-none md:soft-journal-shadow select-none">
+        <div id="monthly-view-wrapper" className="w-full border-0 md:border md:border-[#A59D84] rounded-none md:rounded-[24px] overflow-hidden bg-white shadow-none md:soft-journal-shadow select-none">
           {/* Weekday headers - small and elegant */}
-          <div className="grid grid-cols-7 bg-[#FFFDF8] border-b border-[#EFEAE2] text-center py-2.5 md:py-3.5 text-[10px] md:text-sm font-black text-[#5B7283] tracking-wide">
+          <div className="grid grid-cols-7 bg-[#FFFDF8] border-b border-[#C0B9A3] text-center py-2.5 md:py-3.5 text-[10px] md:text-sm font-black text-[#5B7283] tracking-wide">
             <div>週日</div>
             <div>週一</div>
             <div>週二</div>
@@ -1408,7 +1401,7 @@ export default function CalendarView({
             <div>週六</div>
           </div>
 
-          <div className="grid grid-cols-7 border-collapse">
+          <div className="grid grid-cols-7 border-collapse border-l border-t border-[#A59D84]">
             {monthDays.map((cell, idx) => {
               const dayEvents = allEvents.filter((e) => {
                 if (e.isFixed) {
@@ -1485,7 +1478,7 @@ export default function CalendarView({
                       }
                     }
                   }}
-                  className={`min-h-[105px] h-[105px] md:min-h-[160px] md:h-auto p-1 md:p-2.5 border-r border-b border-[#EFEAE2]/60 flex flex-col justify-start md:justify-between gap-1 md:gap-0 transition group hover:bg-[#FFFDF8]/90 cursor-pointer overflow-hidden ${cellBg}`}
+                  className={`min-h-[105px] h-[105px] md:min-h-[160px] md:h-auto p-1 md:p-2.5 border-r border-b border-[#A59D84] flex flex-col justify-start md:justify-between gap-1 md:gap-0 transition group hover:bg-[#FFFDF8]/90 cursor-pointer overflow-hidden ${cellBg}`}
                 >
                   {/* MOBILE VIEW COMPACT CELL */}
                   <div className="block md:hidden text-left flex flex-col justify-start h-full w-full overflow-hidden font-sans">
@@ -1552,7 +1545,7 @@ export default function CalendarView({
                               return (
                                 <div
                                   key={evt.id}
-                                  className={`text-[9.5px] leading-[11.5px] py-[1.5px] px-[2px] font-black truncate rounded border ${bgStyle} tracking-tight`}
+                                  className={`text-[11px] leading-[13px] py-1 px-1.5 font-black truncate rounded border ${bgStyle} tracking-tight`}
                                 >
                                   {cleanTitle}
                                 </div>
@@ -1670,10 +1663,10 @@ export default function CalendarView({
                               e.stopPropagation();
                               handleOpenEdit(evt, cell.dateStr);
                             }}
-                            className={`relative flex flex-col p-2 transition hover:translate-y-[-1px] group/item cursor-pointer text-xs font-bold leading-tight ${getAppletEventStyleClasses(evt, isBday, cell.dateStr, "month")}`}
+                            className={`relative flex flex-col p-2 transition hover:translate-y-[-1px] group/item cursor-pointer text-sm md:text-[13.5px] font-black leading-tight ${getAppletEventStyleClasses(evt, isBday, cell.dateStr, "month")}`}
                           >
                             <div className="flex items-center justify-between gap-1 overflow-hidden">
-                              <span className="truncate whitespace-nowrap overflow-hidden block max-w-[85%] font-sans font-extrabold text-[#3C332D]">
+                              <span className="truncate whitespace-nowrap overflow-hidden block max-w-[85%] font-sans font-black text-sm md:text-[14px] text-[#3C332D]">
                                 {getEventTitleWithPrefix(evt, isBday, cell.dateStr)}
                               </span>
                               {isUserAllowedToDelete(evt) && (
@@ -1694,7 +1687,7 @@ export default function CalendarView({
                               </div>
                             )}
                             {evt.time && (
-                              <span className="text-[10px] font-mono font-bold text-[#5B7283] mt-1 flex items-center gap-0.5">
+                              <span className="text-xs md:text-[12.5px] font-mono font-extrabold text-[#5B7283] mt-1 flex items-center gap-0.5">
                                 🕒 {evt.time}
                               </span>
                             )}
@@ -1718,9 +1711,9 @@ export default function CalendarView({
 
       {/* Weekly View Grid */}
       {viewType === "week" && (
-        <div id="weekly-view-wrapper" className="border border-[#EFEAE2] rounded-[24px] overflow-hidden soft-journal-shadow bg-white">
+        <div id="weekly-view-wrapper" className="border border-[#A59D84] rounded-[24px] overflow-hidden soft-journal-shadow bg-white">
           {/* DESKTOP HEADER ROW */}
-          <div className="hidden md:grid grid-cols-7 bg-[#FFFDF8] border-b border-[#EFEAE2] text-center py-4 text-xs font-black text-[#5B7283] tracking-wide select-none">
+          <div className="hidden md:grid grid-cols-7 bg-[#FFFDF8] border-b border-[#C0B9A3] text-center py-4 text-xs font-black text-[#5B7283] tracking-wide select-none">
             {weekDays.map((wd) => {
               const dayOfWeek = new Date(wd.dateStr).getDay();
               let textHeaderColor = "text-[#5B7283]";
@@ -1799,7 +1792,7 @@ export default function CalendarView({
           </div>
 
           {/* DESKTOP GRID CONTENTS */}
-          <div className="hidden md:grid grid-cols-7 min-h-[400px]">
+          <div className="hidden md:grid grid-cols-7 min-h-[400px] border-l border-b border-[#A59D84]">
             {weekDays.map((cell) => {
               const dayEvents = getEventsForDate(cell.dateStr);
               const holiday = getHolidayForDate(cell.dateStr);
@@ -1855,7 +1848,7 @@ export default function CalendarView({
                       }
                     }
                   }}
-                  className={`p-4 border-r border-[#EFEAE2] flex flex-col justify-between hover:bg-[#FFFDF8]/60 cursor-pointer min-h-[350px] transition ${cellBg}`}
+                  className={`p-4 border-r border-[#A59D84] flex flex-col justify-between hover:bg-[#FFFDF8]/60 cursor-pointer min-h-[350px] transition ${cellBg}`}
                 >
                   <div>
                     <div className="flex justify-between items-start mb-2">
@@ -1911,7 +1904,7 @@ export default function CalendarView({
                           className={`p-3 border transition cursor-pointer leading-relaxed ${getAppletEventStyleClasses(evt, isBday, cell.dateStr, "week")}`}
                         >
                           <div className="flex justify-between items-start gap-1">
-                            <h4 className="text-sm font-extrabold font-sans tracking-tight text-[#3C332D]">
+                            <h4 className="text-base font-black font-sans tracking-tight text-[#3C332D]">
                               {getEventTitleWithPrefix(evt, isBday, cell.dateStr)}
                             </h4>
                             {isUserAllowedToDelete(evt) && (
@@ -3413,7 +3406,7 @@ export default function CalendarView({
                         }`}
                       >
                         <div className="flex items-center justify-between gap-2 overflow-hidden">
-                          <span className="font-extrabold text-xs text-[#3C332D] truncate block max-w-[85%]">
+                          <span className="font-black text-sm md:text-base text-[#3C332D] truncate block max-w-[85%]">
                             {getEventTitleWithPrefix(evt, isBday, selectedMobileDate)}
                           </span>
                           
@@ -3431,7 +3424,7 @@ export default function CalendarView({
                         </div>
 
                         {evt.time && (
-                          <span className="text-[10px] font-mono font-bold text-gray-500 flex items-center gap-1">
+                          <span className="text-xs font-mono font-extrabold text-gray-550 flex items-center gap-1">
                             🕐 {evt.time}
                           </span>
                         )}

@@ -40,6 +40,10 @@ export interface UserProfile {
   color?: string;
   birthday?: string;
   gender?: string;
+  invitationId?: string;
+  inviteCode?: string;
+  inviteStatus?: string;
+  showAgeInCalendar?: boolean;
 }
 
 export interface Family {

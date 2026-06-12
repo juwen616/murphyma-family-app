@@ -86,8 +86,7 @@ service cloud.firestore {
 
     // 2. Families Collection
     match /families/{familyId} {
-      allow get: if isSignedIn();
-      allow list: if isSignedIn() && (isMemberOfFamily(familyId) || isSuperAdmin(request.auth.uid));
+      allow read: if isSignedIn();
       allow create: if isSignedIn();
       allow update: if isSignedIn() && (getUserFamilyId(request.auth.uid) == familyId && isUserAdmin(request.auth.uid)) || isSuperAdmin(request.auth.uid);
       allow delete: if isSignedIn() && isSuperAdmin(request.auth.uid);
@@ -167,8 +166,20 @@ service cloud.firestore {
     match /announcements/{announcementId} {
       allow read: if isSignedIn() && (isMemberOfFamily(resource.data.get('familyId', null)) || isSuperAdmin(request.auth.uid));
       allow create: if isSignedIn() && (isMemberOfFamily(request.resource.data.get('familyId', null)) || isSuperAdmin(request.auth.uid));
-      allow update: if isSignedIn() && (isSuperAdmin(request.auth.uid) || (isMemberOfFamily(resource.data.get('familyId', null)) && isUserAdmin(request.auth.uid)));
-      allow delete: if isSignedIn() && (isSuperAdmin(request.auth.uid) || (isMemberOfFamily(resource.data.get('familyId', null)) && isUserAdmin(request.auth.uid)));
+      allow update: if isSignedIn() && (
+        isSuperAdmin(request.auth.uid) || 
+        (isMemberOfFamily(resource.data.get('familyId', null)) && (
+          isUserParentOrAdmin(request.auth.uid) || 
+          resource.data.get('creatorUid', null) == request.auth.uid
+        ))
+      );
+      allow delete: if isSignedIn() && (
+        isSuperAdmin(request.auth.uid) || 
+        (isMemberOfFamily(resource.data.get('familyId', null)) && (
+          isUserParentOrAdmin(request.auth.uid) || 
+          resource.data.get('creatorUid', null) == request.auth.uid
+        ))
+      );
     }
 
     // 7b. Family Notes Collection
@@ -249,11 +260,7 @@ service cloud.firestore {
 
     // 15. Join Requests Collection
     match /join_requests/{requestId} {
-      allow get, list: if isSignedIn() && (
-        isSuperAdmin(request.auth.uid) || 
-        resource.data.userId == request.auth.uid || 
-        isUserParentOrAdmin(request.auth.uid)
-      );
+      allow read: if isSignedIn();
       allow create: if isSignedIn();
       allow update: if isSignedIn() && (
         isSuperAdmin(request.auth.uid) || 
@@ -269,11 +276,7 @@ service cloud.firestore {
 
     // 16. Invites Collection
     match /invites/{inviteId} {
-      allow get, list: if isSignedIn() && (
-        isSuperAdmin(request.auth.uid) || 
-        isUserParentOrAdmin(request.auth.uid) ||
-        resource.data.email == request.auth.token.email
-      );
+      allow read: if isSignedIn();
       allow create: if isSignedIn() && (
         isSuperAdmin(request.auth.uid) ||
         isUserParentOrAdmin(request.auth.uid)

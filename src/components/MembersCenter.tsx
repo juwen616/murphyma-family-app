@@ -24,7 +24,7 @@ interface MembersCenterProps {
     birthday?: string;
     color?: string;
     photoURL?: string;
-  }) => Promise<void>;
+  }) => Promise<string | void>;
   onEditMember?: (
     uid: string,
     updatedData: {
@@ -96,6 +96,22 @@ export default function MembersCenter({
   const [activeMode, setActiveMode] = useState<SystemMode>(systemMode);
   const [isUpdating, setIsUpdating] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [showAdvancedInfo, setShowAdvancedInfo] = useState(false);
+
+  const getRoleChineseName = (r: any) => {
+    if (r === "Owner" || r === "Admin" || r === UserRole.ADMIN) return "管理員";
+    if (r === "Parent" || r === UserRole.PARENT) return "家長";
+    if (r === "Child" || r === "Kid" || r === "KID" || r === UserRole.KID) return "小孩";
+    return "一般唯讀成員";
+  };
+
+  const formatTime = (ts: any) => {
+    if (!ts) return "—";
+    if (typeof ts === "string") return ts.split("T")[0];
+    if (ts.seconds) return new Date(ts.seconds * 1000).toLocaleDateString("zh-TW");
+    if (ts.toDate) return ts.toDate().toLocaleDateString("zh-TW");
+    return "—";
+  };
 
   // Custom Confirmation Dialog States
   const [confirmDialog, setConfirmDialog] = useState<{
@@ -124,6 +140,7 @@ export default function MembersCenter({
 
   // Sub-tabs for Owner views
   const [memberSubTab, setMemberSubTab] = useState<"list" | "invites">("list");
+  const [autoCreateInvite, setAutoCreateInvite] = useState(true);
   const [invites, setInvites] = useState<any[]>([]);
   const [loadingInvites, setLoadingInvites] = useState(false);
   const [targetInviteRole, setTargetInviteRole] = useState<"Owner" | "Parent" | "Child" | "Viewer">("Parent");
@@ -199,14 +216,14 @@ export default function MembersCenter({
 
   const handleDeleteInvite = async (inviteId: string, code: string) => {
     showConfirm(
-      "使邀請碼失效",
-      `確認要刪除/使此邀請碼「${code}」失效嗎？刪除後新進者將無法再憑此代碼加入！`,
+      "確定刪除此邀請？",
+      `確定刪除此邀請碼「${code}」？刪除後邀請碼將永久失效。`,
       async () => {
         try {
           await deleteDoc(doc(db, "invites", inviteId));
-          toast.success("✓ 已撤銷該邀請碼");
+          toast.success("✓ 已刪除該邀請代碼");
         } catch (err: any) {
-          toast.error("❌ 撤銷失敗：" + err.message);
+          toast.error("❌ 刪除失敗：" + err.message);
         }
       }
     );
@@ -280,6 +297,7 @@ export default function MembersCenter({
   const [birthday, setBirthday] = useState("2020-10-10");
   const [color, setColor] = useState("#B4C3B2");
   const [photoURL, setPhotoURL] = useState("✿");
+  const [showAgeInCalendar, setShowAgeInCalendar] = useState(true);
   const [isSubmittingForm, setIsSubmittingForm] = useState(false);
 
   // Deletion Confirm Modal states
@@ -583,6 +601,8 @@ export default function MembersCenter({
     setBirthday("2015-04-18");
     setColor("#B4C3B2");
     setPhotoURL("✿");
+    setAutoCreateInvite(true);
+    setShowAgeInCalendar(true);
     setShowFormModal(true);
   };
 
@@ -593,6 +613,7 @@ export default function MembersCenter({
     setBirthday(member.birthday || "2015-04-18");
     setColor(member.color || "#B4C3B2");
     setPhotoURL(member.photoURL || "✿");
+    setShowAgeInCalendar(member.showAgeInCalendar !== false);
     setShowFormModal(true);
   };
 
@@ -633,18 +654,42 @@ export default function MembersCenter({
             birthday,
             color,
             photoURL,
+            showAgeInCalendar,
           });
         }
       } else {
-        if (onAddMember) {
-          await onAddMember({
-            displayName: displayName.trim(),
-            role,
-            birthday,
-            color,
-            photoURL,
-          });
-        }
+        // Create only an invitation code in database, do NOT call onAddMember
+        const inviteCode = generateInviteCode();
+        const inviteId = `invite_${Math.random().toString(36).substr(2, 9)}`;
+
+        await setDoc(doc(db, "invites", inviteId), {
+          id: inviteId,
+          familyId,
+          familyName,
+          inviterUid: currentUser.uid,
+          status: "pending",
+          targetRole: role,
+          inviteCode,
+          email: inviteEmailConstraint.trim().toLowerCase(),
+          createdAt: new Date().toISOString(),
+          createdBy: currentUser.displayName || currentUser.email || "Owner",
+          memberName: displayName.trim()
+        });
+
+        // Create audit trace
+        const auditId = `aud_${Date.now()}_invite_manual`;
+        await setDoc(doc(db, "audit_logs", auditId), {
+          id: auditId,
+          userId: currentUser.uid,
+          userName: currentUser.displayName || currentUser.email || "Owner",
+          familyId,
+          action: `新增成員「${displayName.trim()}」並產生專屬邀請碼`,
+          targetId: inviteId,
+          targetName: `邀請碼 ${inviteCode}`,
+          createdAt: new Date().toISOString()
+        });
+
+        toast.success(`🎉 邀請建立成功！專屬邀請碼：${inviteCode}`);
       }
       setShowFormModal(false);
     } catch (err) {
@@ -679,370 +724,376 @@ export default function MembersCenter({
               <Users className="h-4.5 w-4.5" />
             </div>
             <div>
-              <h2 className="text-sm md:text-lg font-black text-[#2D2926] font-sans">家庭成員中心</h2>
-              <p className="hidden md:block text-xs text-gray-500 mt-0.5 font-medium">檢視與自訂所有的家庭成員名冊</p>
+              <h2 className="text-sm md:text-lg font-black text-[#2D2926] font-sans">家庭成員管理</h2>
+              <p className="hidden md:block text-xs text-gray-500 mt-0.5 font-medium">檢視家族成員並建立專屬邀請碼</p>
             </div>
           </div>
 
           {isParent && (
             <button
               onClick={handleOpenAdd}
-              className="flex items-center gap-1 text-xs font-black text-white bg-[#4A6076] hover:bg-[#3b4c5e] px-3 py-2 rounded-xl transition cursor-pointer shadow-xs max-h-[38px]"
+              className="flex items-center gap-1 text-xs font-black text-white bg-[#4A6076] hover:bg-[#3b4c5e] px-3.5 py-2 rounded-xl transition cursor-pointer shadow-xs max-h-[38px]"
             >
-              <Plus className="h-3.5 w-3.5" />
-              <span>新增</span>
+              <Plus className="h-4 w-4" />
+              <span>➕新增成員</span>
             </button>
           )}
         </div>
 
-        {isParent && (
-          <div className="flex border-b border-[#FAF9F6] gap-2 mb-2">
-            <button
-              onClick={() => setMemberSubTab("list")}
-              className={`pb-2.5 text-xs font-black border-b-2 transition whitespace-nowrap cursor-pointer px-4 ${
-                memberSubTab === "list"
-                  ? "border-[#4A6076] text-[#4A6076] font-extrabold"
-                  : "border-transparent text-gray-400 hover:text-gray-700"
-              }`}
-            >
-              👥 家族成員名冊
-            </button>
-            <button
-              onClick={() => setMemberSubTab("invites")}
-              className={`pb-2.5 text-xs font-black border-b-2 transition whitespace-nowrap cursor-pointer px-4 relative ${
-                memberSubTab === "invites"
-                  ? "border-[#4A6076] text-[#4A6076] font-extrabold"
-                  : "border-transparent text-gray-400 hover:text-gray-700"
-              }`}
-            >
-              ✉️ 專屬邀請與審核中心
-              {pendingRequests.length > 0 && (
-                <span className="absolute -top-1 -right-2 h-4 w-4 bg-[#E28F83] text-white font-extrabold text-[9px] rounded-full flex items-center justify-center animate-pulse">
-                  {pendingRequests.length}
-                </span>
-              )}
-            </button>
+        {/* 1. Pending Join Requests (Approvals) if any exist */}
+        {pendingRequests && pendingRequests.length > 0 && isParent && (
+          <div className="bg-amber-50/50 border border-amber-200 rounded-2xl p-4 space-y-3">
+            <div className="flex items-center gap-2">
+              <span className="text-lg">⏳</span>
+              <div>
+                <h3 className="text-xs font-black text-amber-900">待審批進駐的家庭申請 ({pendingRequests.length})</h3>
+                <p className="text-[10px] text-amber-700 font-medium">新成員輸入了您家的邀請碼，請審查並核准加入！</p>
+              </div>
+            </div>
+            <div className="divide-y divide-amber-100">
+              {pendingRequests.map((req) => (
+                <div key={req.id} className="py-2.5 flex items-center justify-between gap-4 flex-wrap sm:flex-nowrap">
+                  <div>
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <span className="text-xs font-black text-amber-950 bg-amber-100 px-2 py-0.5 rounded border border-amber-200">
+                        {req.userName}
+                      </span>
+                      <span className="text-[10px] text-gray-500 font-bold font-mono">({req.userEmail})</span>
+                    </div>
+                    <p className="text-[10px] text-amber-800 mt-1">
+                      申請角色：<span className="font-extrabold">{getRoleChineseName(req.role)}</span>
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={async () => {
+                        if (onApproveJoinRequest) await onApproveJoinRequest(req);
+                      }}
+                      className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[11px] px-3 py-1.5 rounded-lg cursor-pointer transition shadow-xs animate-none"
+                    >
+                      ✓ 同意加入
+                    </button>
+                    <button
+                      onClick={() => {
+                        showConfirm(
+                          "拒絕加入申請",
+                          `確定拒絕「${req.userName}」的家庭加入申請嗎？`,
+                          async () => {
+                            if (onRejectJoinRequest) await onRejectJoinRequest(req);
+                          }
+                        );
+                      }}
+                      className="bg-[#FFFDFB] hover:bg-gray-50 text-gray-500 border border-gray-200 font-semibold text-[11px] px-3 py-1.5 rounded-lg cursor-pointer transition"
+                    >
+                      拒絕
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
         )}
 
-        {memberSubTab === "list" ? (
-          <div className="space-y-4">
-            <div className="bg-[#FAF8F4]/80 border border-[#E5E1DA] p-4 rounded-2xl flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 text-xs leading-relaxed text-gray-700 font-sans">
-            <div>
-              <p className="font-bold text-gray-400 uppercase tracking-widest text-[9px] mb-0.5">我的家庭單位</p>
-              🏠 <b>家庭名稱：</b> <span className="font-extrabold text-[#4A6076] text-sm">{familyName}</span>
-              <div className="mt-1 flex items-center gap-1.5 text-gray-500 font-semibold select-all">
-                🔑 行事曆邀請碼：<span className="font-mono text-gray-800 bg-white border border-[#E5E1DA] px-2 py-0.5 rounded text-xs tracking-tight">{familyId}</span>
-              </div>
+          <div className="space-y-3">
+            <div className="flex justify-between items-center">
+              <h3 className="text-xs font-black text-[#2D2926] flex items-center gap-1.5 font-sans">
+                <span>👥 已加入成員</span>
+                <span className="text-[10px] py-0.5 px-2 bg-[#F9F8F6] text-[#4A6076] border border-[#E5E1DA] rounded-full font-bold">
+                  {familyMembers.length}
+                </span>
+              </h3>
             </div>
 
-            <button
-              onClick={handleCopyCode}
-              className="flex items-center gap-1.5 text-xs font-black text-[#4A6076] bg-white border border-[#E5E1DA] hover:bg-[#FAF8F4] px-3.5 py-2 rounded-xl transition cursor-pointer shadow-[1.5px_1.5px_0px_#E5E1DA]"
-            >
-              {copied ? (
-                <>
-                  <Check className="h-3.5 w-3.5 text-emerald-500" />
-                  <span>已複製</span>
-                </>
-              ) : (
-                <>
-                  <Copy className="h-3.5 w-3.5" />
-                  <span>複製邀請碼</span>
-                </>
-              )}
-            </button>
-          </div>
-
-          {/* Pending Join Requests Roster */}
-          {pendingRequests && pendingRequests.length > 0 && (currentUser.role as string === "Owner" || currentUser.role as string === "Parent") && (
-            <div className="bg-amber-50/50 border-2 border-dashed border-amber-300 rounded-[24px] p-5 mb-6 space-y-4">
-              <div className="flex items-center justify-between border-b border-amber-200 pb-2.5">
-                <div className="flex items-center gap-2">
-                  <span className="text-xl">⏳</span>
-                  <div>
-                    <h3 className="text-sm font-black text-amber-900">待核准成員加入申請 ({pendingRequests.length})</h3>
-                    <p className="text-[10px] text-amber-700 font-medium">新成員輸入了您家的邀請碼，正在等待您核准加入！</p>
-                  </div>
-                </div>
-              </div>
-              <div className="divide-y divide-amber-100/50">
-                {pendingRequests.map((req) => (
-                  <div key={req.id} className="py-3 flex flex-row items-center justify-between gap-4 flex-wrap sm:flex-nowrap">
-                    <div className="space-y-1">
-                      <div className="flex items-center gap-1.5 flex-wrap">
-                        <span className="text-xs font-black text-amber-950 bg-amber-100 px-2 py-0.5 rounded border border-amber-200">
-                          {req.userName}
-                        </span>
-                        <span className="text-[10px] text-gray-500 font-bold font-mono">({req.userEmail})</span>
-                      </div>
-                      <p className="text-[10px] text-amber-800">
-                        申請關係角色：<span className="font-extrabold">{req.role === UserRole.PARENT ? "家長" : (req.role === UserRole.CHILD || req.role === UserRole.KID ? "小孩" : "一般成員")}</span>
-                      </p>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <button
-                        onClick={async () => {
-                          if (onApproveJoinRequest) await onApproveJoinRequest(req);
-                        }}
-                        className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs px-3.5 py-1.5 rounded-xl cursor-pointer transition shadow-xs"
-                      >
-                        ✓ 同意加入
-                      </button>
-                      <button
-                        onClick={() => {
-                          showConfirm(
-                            "拒絕加入申請",
-                            `您確定要拒絕「${req.userName}」的家庭加入申請嗎？`,
-                            async () => {
-                              if (onRejectJoinRequest) await onRejectJoinRequest(req);
-                            }
-                          );
-                        }}
-                        className="bg-[#FFFDFB] hover:bg-gray-50 text-gray-500 border border-gray-200 font-semibold text-xs px-3.5 py-1.5 rounded-xl cursor-pointer transition"
-                      >
-                        拒絕
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          <div className="space-y-2">
-            {familyMembers.map((member) => {
-              const themeColor = member.color || "#B4C3B2";
-              const canEdit = currentUser.role === UserRole.ADMIN || currentUser.role === UserRole.PARENT || member.uid === currentUser.uid;
-              const avatarTxt = member.displayName ? member.displayName.charAt(0) : "✿";
-              
-              return (
-                <div
-                  key={member.uid}
-                  onClick={() => handleOpenRecords(member)}
-                  style={{ border: "1px solid #E9E2DB" }}
-                  className="bg-white rounded-xl px-4 py-2 hover:bg-[#FAF8F4]/30 cursor-pointer flex items-center justify-between gap-3 h-[64px] transition duration-150 select-none"
-                >
-                  {/* Left: Avatar & Details */}
-                  <div className="flex items-center gap-3 min-w-0">
-                    <div
-                      style={{ backgroundColor: themeColor }}
-                      className="h-10 w-10 rounded-full flex items-center justify-center text-md text-[#2D2926] border border-[#E5E1DA] font-black shrink-0 relative animate-none"
-                    >
-                      {(!member.photoURL || member.photoURL.startsWith("http")) 
-                        ? avatarTxt 
-                        : member.photoURL}
-                      {member.role === UserRole.KID && (
-                        <span className="absolute -bottom-0.5 -right-0.5 bg-amber-400 text-white rounded-full h-3.5 w-3.5 flex items-center justify-center text-[7.5px] font-bold border border-white">
-                          ⭐
-                        </span>
-                      )}
-                    </div>
+            <div className="overflow-x-auto border border-[#E5E1DA] rounded-2xl bg-white select-none">
+              <table className="w-full text-left text-xs border-collapse">
+                <thead>
+                  <tr className="bg-[#FCFBF9] border-b border-[#E5E1DA] text-gray-500 font-bold select-none font-sans">
+                    <th className="p-3">姓名</th>
+                    <th className="p-3">角色</th>
+                    <th className="p-3">Email</th>
+                    <th className="p-3 text-center">生日顯示年齡</th>
+                    <th className="p-3">加入時間</th>
+                    {isParent && <th className="p-3 text-center">操作</th>}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[#FAF9F6] font-sans">
+                  {familyMembers.map((member) => {
+                    const themeColor = member.color || "#B4C3B2";
+                    const canEdit = currentUser.role === UserRole.ADMIN || currentUser.role === UserRole.PARENT || member.uid === currentUser.uid;
+                    const canDelete = isParent && member.uid !== currentUser.uid;
+                    const avatarTxt = member.displayName ? member.displayName.charAt(0) : "✿";
                     
-                    <div className="min-w-0 leading-tight">
-                      <div className="flex items-center gap-1.5 flex-wrap">
-                        <h4 className="font-extrabold text-[#2D2926] text-xs truncate">
-                          {member.displayName}
-                        </h4>
-                        {member.uid === currentUser.uid && (
-                          <span className="text-[8px] font-bold bg-[#4A6076] text-white px-1.5 py-0.2 rounded select-none scale-90">
-                            我
-                          </span>
-                        )}
-                      </div>
-                      <p className="text-[10px] text-gray-400 font-bold mt-0.5">
-                        身份：{getRoleName(member.role)} {member.role === UserRole.KID ? `• ⭐ ${member.stars || 0} 顆` : ""}
-                      </p>
-                    </div>
-                  </div>
-
-                  {/* Right: edit icon or Chevron */}
-                  <div className="flex items-center gap-2 shrink-0">
-                    {canEdit && (
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation(); // vital
-                          handleOpenEdit(member);
-                        }}
-                        className="text-gray-400 hover:text-[#4A6076] p-1.5 hover:bg-slate-50 border border-transparent hover:border-[#E5E1DA] rounded-lg transition cursor-pointer"
-                        title="編輯成員資料"
+                    return (
+                      <tr 
+                        key={member.uid} 
+                        onClick={() => handleOpenRecords(member)}
+                        className="hover:bg-[#FAF8F4]/30 cursor-pointer transition"
                       >
-                        <Edit3 className="h-4 w-4" />
-                      </button>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-        ) : (
-          <div className="space-y-6 animate-in fade-in duration-200 font-sans text-gray-800">
-            {/* 1. Generate Invite Code Block */}
-            <div className="bg-[#FCFBF9] border border-[#E5E1DA] rounded-2xl p-5 space-y-4 shadow-sm">
-              <div>
-                <h3 className="text-xs font-black text-gray-800 flex items-center gap-1.5">
-                  <Sparkles className="h-4 w-4 text-amber-500" />
-                  <span>產製專屬進駐邀請碼 (指定角色 & 帳號限制)</span>
-                </h3>
-                <p className="text-[10px] text-gray-400 mt-1">產出專用 6 碼的大寫合規邀請碼，受邀者憑此碼註冊將「自動加入並直接開通您所指派的角色權限」</p>
-              </div>
-
-              <form onSubmit={handleCreateInviteCode} className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end bg-white p-4 rounded-xl border border-[#FAF8F4]">
-                <div className="space-y-2">
-                  <label className="block text-[11px] font-black text-[#4A6076]">預先賦予角色權限</label>
-                  <select
-                    value={targetInviteRole}
-                    onChange={(e) => setTargetInviteRole(e.target.value as any)}
-                    className="w-full text-xs border border-[#E5E1DA] bg-[#F9F8F6] rounded-xl px-3 py-2 cursor-pointer font-bold focus:outline-none"
-                  >
-                    <option value="Owner">管理員 (Owner)</option>
-                    <option value="Parent">家長 (Parent)</option>
-                    <option value="Child">孩子 (Child)</option>
-                    <option value="Viewer">一般唯讀成員 (Viewer)</option>
-                  </select>
-                </div>
-
-                <div className="space-y-2">
-                  <label className="block text-[11px] font-black text-[#4A6076]">限制指定登入 Email (選填)</label>
-                  <input
-                    type="email"
-                    placeholder="不填代表開放任何人凭此代碼加入"
-                    value={inviteEmailConstraint}
-                    onChange={(e) => setInviteEmailConstraint(e.target.value)}
-                    className="w-full text-xs border border-[#E5E1DA] bg-[#F9F8F6] rounded-xl px-3.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-[#405060]"
-                  />
-                </div>
-
-                <div>
-                  <button
-                    type="submit"
-                    disabled={submittingInvite}
-                    className="w-full text-xs font-black text-white bg-[#4A6076] hover:bg-[#344658] px-4 py-2.5 rounded-xl transition cursor-pointer select-none"
-                  >
-                    {submittingInvite ? "產製中..." : "✨ 產製並存檔新進邀請碼"}
-                  </button>
-                </div>
-              </form>
-            </div>
-
-            {/* 2. Invitation List */}
-            <div className="space-y-3">
-              <h4 className="text-xs font-black text-gray-800 flex items-center gap-1.5">
-                🎫 目前已產製的邀請代碼 ({invites.length})
-              </h4>
-              
-              {loadingInvites ? (
-                <div className="text-center py-6 text-xs text-gray-400">正在讀取最新邀請碼...</div>
-              ) : invites.length === 0 ? (
-                <div className="text-center py-8 border border-dashed border-[#E5E1DA] rounded-2xl text-xs text-gray-400 font-medium">
-                  目前尚無任何有效的進駐邀請碼，請在上方欄位新增加密代碼。
-                </div>
-              ) : (
-                <div className="overflow-x-auto border border-[#E5E1DA] rounded-2xl bg-white max-h-[300px] overflow-y-auto">
-                  <table className="w-full text-left text-xs border-collapse">
-                    <thead>
-                      <tr className="bg-[#FCFBF9] border-b border-[#E5E1DA] text-gray-500 font-bold select-none sticky top-0">
-                        <th className="p-3">大寫邀請碼</th>
-                        <th className="p-3">目標開通角色</th>
-                        <th className="p-3">綁定限定 Email</th>
-                        <th className="p-3">產製者</th>
-                        <th className="p-3">代碼狀態</th>
-                        <th className="p-3 text-center">操作</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {invites.map((inv) => (
-                        <tr key={inv.id} className="border-b border-[#FAF9F6] last:border-0 hover:bg-[#FAF8F4]/30">
-                          <td className="p-3 font-mono font-black text-[#4A6076] flex items-center gap-2">
-                            <span>{inv.inviteCode}</span>
-                            <button
-                              onClick={() => {
-                                navigator.clipboard.writeText(inv.inviteCode);
-                                toast.success("✓ 邀請碼已複製至剪貼簿！");
-                              }}
-                              className="text-gray-400 hover:text-gray-600 cursor-pointer"
-                              title="複製"
+                        <td className="p-3">
+                          <div className="flex items-center gap-2.5">
+                            <div
+                              style={{ backgroundColor: themeColor }}
+                              className="h-8 w-8 rounded-full flex items-center justify-center text-xs text-[#2D2926] border border-[#E5E1DA] font-black shrink-0 relative"
                             >
-                              <Copy className="h-3 w-3" />
-                            </button>
+                              {(!member.photoURL || member.photoURL.startsWith("http")) ? avatarTxt : member.photoURL}
+                              {member.role === UserRole.KID && (
+                                <span className="absolute -bottom-0.5 -right-0.5 bg-amber-400 text-white rounded-full h-3.5 w-3.5 flex items-center justify-center text-[7.5px] font-bold border border-white">
+                                  ⭐
+                                </span>
+                              )}
+                            </div>
+                            <div className="font-extrabold text-[#2D2926]">
+                              <div className="flex items-center gap-1">
+                                <span>{member.displayName}</span>
+                                {member.uid === currentUser.uid && (
+                                  <span className="text-[8px] font-bold bg-[#4A6076] text-white px-1.5 rounded transform scale-90">我</span>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="p-3 font-semibold text-gray-700">
+                          {getRoleChineseName(member.role)}
+                        </td>
+                        <td className="p-3 font-mono text-gray-500 text-[11px] truncate max-w-[150px]">
+                          {member.email || "（一般由大人管理）"}
+                        </td>
+                        <td className="p-3 text-center" onClick={(e) => e.stopPropagation()}>
+                          <label className="inline-flex items-center gap-1 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={member.showAgeInCalendar !== false}
+                              disabled={!canEdit}
+                              onChange={async (e) => {
+                                const checked = e.target.checked;
+                                try {
+                                  if (onEditMember) {
+                                    await onEditMember(member.uid, {
+                                      displayName: member.displayName,
+                                      role: member.role,
+                                      showAgeInCalendar: checked,
+                                    } as any);
+                                    toast.success(`✓ 已${checked ? "設定在行事曆顯示" : "設定不顯示"} ${member.displayName} 的生日年齡`);
+                                  }
+                                } catch (err: any) {
+                                  toast.error("更新失敗：" + err.message);
+                                }
+                              }}
+                              className="rounded border-[#E5E1DA] text-[#4A6076] focus:ring-[#4A6076] h-4 w-4 cursor-pointer"
+                            />
+                            <span className="text-[10px] text-gray-500 font-bold hidden sm:inline-block">顯示年齡</span>
+                          </label>
+                        </td>
+                        <td className="p-3 text-gray-400 font-mono text-[11px]">
+                          {formatTime(member.createdAt)}
+                        </td>
+                        {isParent && (
+                          <td className="p-3 text-center" onClick={(e) => e.stopPropagation()}>
+                            <div className="flex items-center justify-center gap-2">
+                              {canEdit && (
+                                <button
+                                  onClick={() => handleOpenEdit(member)}
+                                  className="text-[11px] font-black text-gray-500 hover:text-gray-800 p-1.5 hover:bg-slate-50 border border-transparent hover:border-[#E5E1DA] rounded transition cursor-pointer"
+                                  title="編輯資料"
+                                >
+                                  編輯
+                                </button>
+                              )}
+                              {canDelete && (
+                                <button
+                                  onClick={async () => {
+                                    showConfirm(
+                                      "從家庭中移除成員",
+                                      `確認要將「${member.displayName}」從家庭中移除（解除綁定）嗎？此操作將解除其家庭關係、保留其帳號與資料。`,
+                                      async () => {
+                                        try {
+                                          if (onDeleteMember) {
+                                            await onDeleteMember(member.uid);
+                                            toast.success("✓ 已解除該成員的家庭綁定");
+                                          }
+                                        } catch (err: any) {
+                                          toast.error("移除失敗：" + err.message);
+                                        }
+                                      }
+                                    );
+                                  }}
+                                  className="text-[11px] font-black text-rose-500 hover:text-rose-700 p-1.5 hover:bg-rose-50 border border-transparent hover:border-rose-100 rounded transition cursor-pointer"
+                                  title="移除成員"
+                                >
+                                  移除成員
+                                </button>
+                              )}
+                            </div>
                           </td>
+                        )}
+                      </tr>
+                    );
+                  })}
+                  {familyMembers.length === 0 && (
+                    <tr>
+                      <td colSpan={isParent ? 5 : 4} className="p-8 text-center text-gray-400">目前家庭中尚無其他成員</td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+        {/* 3. 邀請中成員 (Members Being Invited) */}
+        {isParent && (
+          <div className="space-y-3 pt-2">
+            <h3 className="text-xs font-black text-[#2D2926] flex items-center gap-1.5 font-sans">
+              <span>✉️ 邀請中成員</span>
+              <span className="text-[10px] py-0.5 px-2 bg-[#F9F8F6] text-[#4A6076] border border-[#E5E1DA] rounded-full font-bold">
+                {invites.filter(inv => inv.status === 'pending' || inv.status === 'expired' || inv.status === 'cancelled').length}
+              </span>
+            </h3>
+
+            <div className="overflow-x-auto border border-[#E5E1DA] rounded-2xl bg-white select-none">
+              <table className="w-full text-left text-xs border-collapse">
+                <thead>
+                  <tr className="bg-[#FCFBF9] border-b border-[#E5E1DA] text-gray-500 font-bold select-none font-sans">
+                    <th className="p-3">受邀者姓名</th>
+                    <th className="p-3">預計角色</th>
+                    <th className="p-3">邀請碼</th>
+                    <th className="p-3">Email 限制</th>
+                    <th className="p-3">狀態</th>
+                    <th className="p-3">建立時間</th>
+                    <th className="p-3 text-center">操作</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[#FAF9F6] font-sans">
+                  {invites
+                    .filter(inv => inv.status === "pending" || inv.status === "expired" || inv.status === "cancelled")
+                    .map((inv) => {
+                      const targetName = inv.memberName || "通用邀請 (不限特定人)";
+                      const statusLabel = 
+                        inv.status === "pending" ? "⏱️ 待加入" : 
+                        inv.status === "expired" ? "⏳ 已失效" : "🚫 已取消";
+                      const statusColor = 
+                        inv.status === "pending" ? "text-amber-600 bg-amber-50 border-amber-100" : 
+                        inv.status === "expired" ? "text-gray-500 bg-gray-50 border-gray-100" : 
+                        "text-rose-500 bg-rose-50 border-rose-100";
+
+                      return (
+                        <tr key={inv.id} className="hover:bg-[#FAF8F4]/30 transition">
+                          <td className="p-3 font-semibold text-[#2D2926]">{targetName}</td>
                           <td className="p-3">
                             <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                              inv.targetRole === "Owner" ? "bg-red-50 text-red-600 border border-red-150/40" :
+                              inv.targetRole === "Owner" || inv.targetRole === "ADMIN" ? "bg-red-50 text-red-600 border border-red-150/40" :
                               inv.targetRole === "Parent" ? "bg-indigo-50 text-indigo-700 border border-indigo-150/40" :
-                              inv.targetRole === "Child" ? "bg-amber-50 text-amber-700 border border-amber-150/40" :
+                              inv.targetRole === "Child" || inv.targetRole === "KID" ? "bg-amber-50 text-amber-700 border border-amber-150/40" :
                               "bg-slate-50 text-slate-600 border border-slate-150/40"
                             }`}>
-                              {inv.targetRole}
+                              {inv.targetRole === "Owner" || inv.targetRole === "ADMIN" ? "管理員" :
+                               inv.targetRole === "Parent" ? "家長" :
+                               inv.targetRole === "Child" || inv.targetRole === "KID" ? "小孩" : "唯讀成員"}
                             </span>
                           </td>
-                          <td className="p-3 font-mono text-gray-500">{inv.email || "⚠️ 任何人憑此代碼進駐"}</td>
-                          <td className="p-3 text-gray-400">{inv.createdBy || "Owner"}</td>
+                          <td className="p-3 font-mono font-black text-[#4A6076]">
+                            <div className="flex items-center gap-2">
+                              <span className="bg-gray-100 px-1.5 py-0.5 rounded text-[11px] leading-tight select-all">{inv.inviteCode}</span>
+                              <button
+                                onClick={() => {
+                                  navigator.clipboard.writeText(inv.inviteCode);
+                                  toast.success("✓ 邀請碼已複製至剪貼簿！");
+                                }}
+                                className="text-gray-400 hover:text-gray-650 cursor-pointer p-0.5"
+                                title="複製邀請碼"
+                              >
+                                <Copy className="h-3 w-3" />
+                              </button>
+                            </div>
+                          </td>
+                          <td className="p-3 font-sans text-gray-500 truncate max-w-[150px]">
+                            {inv.email || "（無限制）"}
+                          </td>
                           <td className="p-3">
-                            <span className={`font-semibold ${inv.status === "pending" ? "text-amber-600" : "text-emerald-600"}`}>
-                              {inv.status === "pending" ? "⏱️ 待進駐使用" : "✅ 已成功被進駐"}
+                            <span className={`px-1.5 py-0.5 rounded border text-[10px] font-bold ${statusColor}`}>
+                              {statusLabel}
                             </span>
+                          </td>
+                          <td className="p-3 text-gray-400 font-mono text-[11px]">
+                            {inv.createdAt ? new Date(inv.createdAt).toLocaleDateString() : "-"}
                           </td>
                           <td className="p-3 text-center">
                             <button
                               onClick={() => handleDeleteInvite(inv.id, inv.inviteCode)}
-                              className="text-rose-500 hover:text-rose-700 font-bold hover:underline py-1 px-2 text-[10px] cursor-pointer"
+                              className="text-rose-500 hover:text-[#E28F83] font-bold hover:bg-rose-50 px-2 py-1 rounded text-[10px] border border-transparent hover:border-rose-100 transition cursor-pointer"
                             >
-                              撤銷失效
+                              刪除邀請
                             </button>
                           </td>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </div>
-
-            {/* 3. Pending Register Approvals */}
-            <div className="space-y-3 pt-2">
-              <h4 className="text-xs font-black text-gray-800 flex items-center gap-1.5">
-                ⏱️ 待審批進駐的家庭申請 ({pendingRequests.length})
-              </h4>
-              
-              {pendingRequests.length === 0 ? (
-                <div className="text-center py-8 border border-dashed border-[#E5E1DA] rounded-2xl text-xs text-gray-400 font-medium bg-gray-50/40">
-                  目前沒有任何待核准的家庭進駐申請（若有人使用通用家庭 ID 申請，將會在此處列出）。
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  {pendingRequests.map((req) => (
-                    <div key={req.id} className="flex justify-between items-center text-xs border border-[#E5E1DA] bg-[#FCFBF9] p-4 rounded-xl hover:bg-white transition duration-150">
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <p className="font-extrabold text-[#4A6076] text-sm">{req.userName}</p>
-                          <span className="bg-slate-100 text-gray-700 font-bold px-2 py-0.5 rounded text-[10px] transform scale-95">預設：{req.role}</span>
-                        </div>
-                        <p className="text-[10px] text-gray-400 font-semibold mt-1 font-mono">Email: {req.userEmail || "未登錄"}</p>
-                        <p className="text-[9px] text-gray-400 mt-0.5">申請時間：{new Date(req.createdAt).toLocaleString()}</p>
-                      </div>
-                      <div className="flex gap-2">
-                        <button
-                          onClick={() => onRejectJoinRequest?.(req)}
-                          className="px-3 py-1.5 text-[10px] font-black text-rose-600 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-lg transition overflow-hidden cursor-pointer"
-                        >
-                          拒絕
-                        </button>
-                        <button
-                          onClick={() => onApproveJoinRequest?.(req)}
-                          className="px-3 py-1.5 text-[10px] font-black text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg transition overflow-hidden cursor-pointer"
-                        >
-                          同意進駐
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
+                      );
+                    })}
+                  {invites.filter(inv => inv.status === "pending" || inv.status === "expired" || inv.status === "cancelled").length === 0 && (
+                    <tr>
+                      <td colSpan={7} className="p-8 text-center text-gray-400">目前尚無任何受邀請中的名單。隨時點擊右上角新增成員！</td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
             </div>
           </div>
         )}
+
+        {/* 4. 進階資訊 - 預設收合 */}
+        <div className="bg-gray-50 border border-gray-200 rounded-2xl p-4 mt-6">
+          <button 
+            type="button"
+            onClick={() => setShowAdvancedInfo(!showAdvancedInfo)}
+            className="w-full flex items-center justify-between text-xs font-bold text-gray-550 hover:text-gray-800 transition cursor-pointer"
+          >
+            <span className="flex items-center gap-1.5">
+              <BadgeInfo className="h-4 w-4 text-gray-400" />
+              <span>⚙️ 進階資訊</span>
+            </span>
+            {showAdvancedInfo ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+          </button>
+          
+          {showAdvancedInfo && (
+            <div className="mt-4 pt-4 border-t border-gray-200 text-xs text-gray-600 space-y-3.5 animate-in fade-in duration-150 font-sans">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <span className="text-gray-400 font-bold block text-[10px] uppercase tracking-wide">家庭名稱</span>
+                  <span className="font-extrabold text-[#2D2926] text-sm">{familyName}</span>
+                </div>
+                <div>
+                  <span className="text-gray-400 font-bold block text-[10px] uppercase tracking-wide font-sans">家庭代碼 (舊系統)</span>
+                  <div className="flex items-center gap-2 mt-1">
+                    <span className="font-mono text-gray-800 bg-white border border-[#E5E1DA] px-2 py-0.5 rounded text-xs select-all">{familyId}</span>
+                    <button
+                      type="button"
+                      onClick={handleCopyCode}
+                      className="text-[10px] font-bold text-[#4A6076] bg-white border border-[#E5E1DA] hover:bg-gray-50 px-2 py-1 rounded transition cursor-pointer"
+                    >
+                      {copied ? "已複製" : "複製"}
+                    </button>
+                  </div>
+                </div>
+                <div>
+                  <span className="text-gray-400 font-bold block text-[10px] uppercase tracking-wide font-sans">Owner / 建立者</span>
+                  <span className="font-bold text-gray-800">
+                    {(() => {
+                      const owner = familyMembers.find(m => m.role === UserRole.ADMIN || m.role === UserRole.PARENT);
+                      return owner ? owner.displayName : "管理員";
+                    })()}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-gray-400 font-bold block text-[10px] uppercase tracking-wide font-sans">家庭啟用日期</span>
+                  <span className="font-mono text-gray-700">
+                    {(() => {
+                      const owner = familyMembers.find(m => m.role === UserRole.ADMIN || m.role === UserRole.PARENT);
+                      return formatTime(owner?.createdAt);
+                    })()}
+                  </span>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Settings / Mode switcher Box - 1 Column */}
@@ -1554,94 +1605,147 @@ export default function MembersCenter({
             </h3>
 
             <form onSubmit={handleFormSubmit} className="space-y-4">
-              <div>
-                <label className="block text-xs font-bold text-[#4A6076] mb-1">成員姓名</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="例如：小華、爸爸、外公"
-                  value={displayName}
-                  onChange={(e) => setDisplayName(e.target.value)}
-                  className="w-full text-sm border border-[#E5E1DA] rounded-lg px-3 py-2 bg-[#F9F8F6] focus:outline-none focus:ring-2 focus:ring-[#4A6076]"
-                />
-              </div>
+              {editingMember ? (
+                <>
+                  {/* Editing Mode Fields */}
+                  <div>
+                    <label className="block text-xs font-bold text-[#4A6076] mb-1">成員姓名</label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="例如：小華、媽媽"
+                      value={displayName}
+                      onChange={(e) => setDisplayName(e.target.value)}
+                      className="w-full text-sm border border-[#E5E1DA] rounded-lg px-3 py-2 bg-[#F9F8F6] focus:outline-none"
+                    />
+                  </div>
 
-              <div>
-                <label className="block text-xs font-bold text-[#4A6076] mb-1">家庭身份 / 角色</label>
-                <select
-                  value={role}
-                  onChange={(e) => setRole(e.target.value as UserRole)}
-                  className="w-full text-sm border border-[#E5E1DA] rounded-lg px-3 py-2 bg-[#F9F8F6] focus:outline-none focus:ring-2 focus:ring-[#4A6076] cursor-pointer font-sans font-bold text-gray-800"
-                >
-                  <option value={UserRole.ADMIN}>管理員 (媽媽)</option>
-                  <option value={UserRole.PARENT}>家長 (爸爸/媽媽)</option>
-                  <option value={UserRole.KID}>小孩</option>
-                  <option value={UserRole.MEMBER}>家庭成員</option>
-                  <option value={UserRole.PET}>寵物</option>
-                </select>
-              </div>
+                  <div>
+                    <label className="block text-xs font-bold text-[#4A6076] mb-1">家庭身份 / 角色</label>
+                    <select
+                      value={role}
+                      onChange={(e) => setRole(e.target.value as UserRole)}
+                      className="w-full text-sm border border-[#E5E1DA] rounded-lg px-3 py-2 bg-[#F9F8F6] font-bold text-gray-800"
+                    >
+                      <option value="Owner">管理員 (Owner)</option>
+                      <option value="Parent">家長 (Parent)</option>
+                      <option value="Child">孩子 (Child)</option>
+                      <option value="Viewer">唯讀成員 (Viewer)</option>
+                    </select>
+                  </div>
 
-              <div>
-                <label className="block text-xs font-bold text-[#4A6076] mb-1 flex items-center gap-1">
-                  <Calendar className="h-3.5 w-3.5" />
-                  成員生日 (非必填)
-                </label>
-                <input
-                  type="date"
-                  value={birthday}
-                  onChange={(e) => setBirthday(e.target.value)}
-                  className="w-full text-sm border border-[#E5E1DA] rounded-lg px-3 py-1.5 bg-[#F9F8F6] focus:outline-none font-mono text-gray-800 font-bold"
-                />
-              </div>
+                  <div>
+                    <label className="block text-xs font-bold text-[#4A6076] mb-1 flex items-center gap-1">
+                      <Calendar className="h-3.5 w-3.5" />
+                      成員生日 (非必填)
+                    </label>
+                    <input
+                      type="date"
+                      value={birthday}
+                      onChange={(e) => setBirthday(e.target.value)}
+                      className="w-full text-sm border border-[#E5E1DA] rounded-lg px-3 py-1.5 bg-[#F9F8F6] font-mono font-bold text-gray-800"
+                    />
+                  </div>
 
-              {/* Theme color selectors of beautiful Morandi values */}
-              <div>
-                <label className="block text-xs font-bold text-[#4A6076] mb-1">專屬代表主題色</label>
-                <div className="flex items-center gap-2.5 mt-1">
-                  {MORANDI_COLORS.map((col) => {
-                    const isSelected = color === col.value;
-                    return (
-                      <button
-                        type="button"
-                        key={col.value}
-                        onClick={() => setColor(col.value)}
-                        style={{ backgroundColor: col.value }}
-                        className={`h-7 w-7 rounded-full border transition cursor-pointer relative ${
-                          isSelected ? "ring-2 ring-offset-2 ring-[#4A6076] scale-110" : "border-gray-200"
-                        }`}
-                        title={col.name}
-                      >
-                        {isSelected && (
-                          <span className="absolute inset-0 flex items-center justify-center text-[10px] text-white">✓</span>
-                        )}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
+                  <div className="flex items-center gap-2 pt-1 bg-[#FAF8F4]/50 p-2.5 rounded-xl border border-[#E5E1DA]/40">
+                    <input
+                      type="checkbox"
+                      id="show-age-edit"
+                      checked={showAgeInCalendar}
+                      onChange={(e) => setShowAgeInCalendar(e.target.checked)}
+                      className="rounded border-[#E5E1DA] text-[#4A6076] focus:ring-[#4A6076] h-4 w-4 cursor-pointer"
+                    />
+                    <label htmlFor="show-age-edit" className="text-xs font-bold text-[#4A6076] cursor-pointer select-none">
+                      🎂 行事曆中顯示年齡 (勾選顯示 / 取消不顯示)
+                    </label>
+                  </div>
 
-              {/* Symbolic Icon/Avatar selectors */}
-              <div>
-                <label className="block text-xs font-bold text-[#4A6076] mb-1.5">選擇代表圖示 (手帳簡約風格)</label>
-                <div className="grid grid-cols-7 gap-2 mt-1 bg-[#FAF8F4] p-3 rounded-xl border border-[#E5E1DA]">
-                  {JAPANESE_SYMBOLS.map((sym) => {
-                    const isSelected = photoURL === sym.value;
-                    return (
-                      <button
-                        title={sym.name}
-                        type="button"
-                        key={sym.value}
-                        onClick={() => setPhotoURL(sym.value)}
-                        className={`h-9 w-9 text-base flex items-center justify-center rounded-lg border transition-all cursor-pointer select-none ${
-                          isSelected ? "bg-white border-[#4A6076] ring-2 ring-[#4A6076]/15 font-bold scale-110 shadow-sm text-gray-800" : "border-[#E5E1DA] hover:bg-gray-50 text-gray-500"
-                        }`}
-                      >
-                        {sym.value}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
+                  <div>
+                    <label className="block text-xs font-bold text-[#4A6076] mb-1">專屬代表主題色</label>
+                    <div className="flex items-center gap-2 mt-1">
+                      {MORANDI_COLORS.map((col) => {
+                        const isSelected = color === col.value;
+                        return (
+                          <button
+                            type="button"
+                            key={col.value}
+                            onClick={() => setColor(col.value)}
+                            style={{ backgroundColor: col.value }}
+                            className={`h-7 w-7 rounded-full border transition cursor-pointer relative ${
+                              isSelected ? "ring-2 ring-offset-2 ring-[#4A6076] scale-110" : "border-gray-200"
+                            }`}
+                            title={col.name}
+                          >
+                            {isSelected && <span className="absolute inset-0 flex items-center justify-center text-[10px] text-white">✓</span>}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-[#4A6076] mb-1.5">選擇代表圖示 (手帳簡約風格)</label>
+                    <div className="grid grid-cols-7 gap-1.5 mt-1 bg-[#FAF8F4] p-3 rounded-xl border border-[#E5E1DA]">
+                      {JAPANESE_SYMBOLS.map((sym) => {
+                        const isSelected = photoURL === sym.value;
+                        return (
+                          <button
+                            title={sym.name}
+                            type="button"
+                            key={sym.value}
+                            onClick={() => setPhotoURL(sym.value)}
+                            className={`h-8 w-8 text-sm flex items-center justify-center rounded bg-white border cursor-pointer select-none ${
+                              isSelected ? "border-[#4A6076] ring-2 ring-[#4A6076]/15 font-bold scale-110" : "border-[#E5E1DA] text-gray-500"
+                            }`}
+                          >
+                            {sym.value}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <>
+                  {/* Simplified Add Invitation Mode Fields */}
+                  <div>
+                    <label className="block text-xs font-bold text-[#4A6076] mb-1">成員姓名</label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="例如：哥哥、妹妹、外婆"
+                      value={displayName}
+                      onChange={(e) => setDisplayName(e.target.value)}
+                      className="w-full text-sm border border-[#E5E1DA] rounded-lg px-3 py-2 bg-[#F9F8F6] focus:outline-none focus:ring-1 focus:ring-[#4C6278]"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-[#4A6076] mb-1">賦予角色權限</label>
+                    <select
+                      value={role}
+                      onChange={(e) => setRole(e.target.value as UserRole)}
+                      className="w-full text-sm border border-[#E5E1DA] rounded-lg px-3 py-2 bg-[#F9F8F6] font-bold text-gray-800"
+                    >
+                      <option value="Parent">家長 (Parent)</option>
+                      <option value="Child">孩子 (Child)</option>
+                      <option value="Viewer">唯讀成員 (Viewer)</option>
+                      <option value="Owner">管理員 (Owner)</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-[#4A6076] mb-1">限制指定登入 Email (選填)</label>
+                    <input
+                      type="email"
+                      placeholder="受邀人的 Email，不填表示開放"
+                      value={inviteEmailConstraint}
+                      onChange={(e) => setInviteEmailConstraint(e.target.value)}
+                      className="w-full text-sm border border-[#E5E1DA] rounded-lg px-3 py-2 bg-[#F9F8F6] focus:outline-none font-sans"
+                    />
+                  </div>
+                </>
+              )}
 
               <div className="flex justify-between items-center pt-4 border-t border-gray-100 mt-2">
                 <div>
@@ -1650,19 +1754,20 @@ export default function MembersCenter({
                       type="button"
                       onClick={() => {
                         showConfirm(
-                          "⚠ 移除家庭成員",
-                          `⚠ 確定要將「${editingMember.displayName}」從家庭中完全移除嗎？此對應所有雲端資料與紀錄都將連帶刪除，且無法原復！`,
+                          "從家庭中移除成員",
+                          `確認要將「${editingMember.displayName}」從家庭中移除（解除綁定）嗎？此操作將保留其帳號，但不刪除其任何資料。`,
                           async () => {
                             try {
                               await onDeleteMember(editingMember.uid);
                               setShowFormModal(false);
+                              toast.success("✓ 已解除家庭綁定");
                             } catch (err: any) {
-                              toast.error("刪除失敗：" + err.message);
+                              toast.error("移除失敗：" + err.message);
                             }
                           }
                         );
                       }}
-                      className="text-xs font-black text-rose-500 hover:text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 px-3 py-2 rounded-xl transition cursor-pointer"
+                      className="text-xs font-bold text-rose-600 hover:text-rose-700 bg-rose-50 border border-rose-200 px-3 py-1.5 rounded-lg transition cursor-pointer"
                     >
                       移除成員
                     </button>
@@ -1673,16 +1778,16 @@ export default function MembersCenter({
                   <button
                     type="button"
                     onClick={() => setShowFormModal(false)}
-                    className="px-4 py-2 text-xs font-bold text-[#666] hover:bg-[#F1F3F5] border border-[#E5E1DA] rounded-lg transition cursor-pointer"
+                    className="px-3.5 py-1.5 text-xs text-gray-600 hover:bg-gray-150 border border-gray-250 rounded-lg transition"
                   >
                     取消
                   </button>
                   <button
                     type="submit"
                     disabled={isSubmittingForm}
-                    className="px-4 py-2 text-xs font-black text-white bg-[#4A6076] hover:bg-[#3b4c5e] rounded-lg transition disabled:opacity-50 cursor-pointer"
+                    className="px-4 py-1.5 text-xs font-bold text-white bg-[#4A6076] hover:bg-[#3b4c5e] rounded-lg transition disabled:opacity-50"
                   >
-                    {isSubmittingForm ? "儲存中..." : editingMember ? "儲存修改" : "確認新增"}
+                    {isSubmittingForm ? "執行中..." : editingMember ? "儲存修改" : "建立成員邀請"}
                   </button>
                 </div>
               </div>

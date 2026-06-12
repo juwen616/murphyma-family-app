@@ -133,6 +133,32 @@ export default function AdminCenter({
   const [familySuspendTarget, setFamilySuspendTarget] = useState<{ famId: string; shouldSuspend: boolean; memberCount: number; actionText: string } | null>(null);
   const [showFamilySuspendModal, setShowFamilySuspendModal] = useState(false);
 
+  // Edit Family state
+  const [showEditFamilyModal, setShowEditFamilyModal] = useState(false);
+  const [editFamilyName, setEditFamilyName] = useState("");
+  const [editFamilyTarget, setEditFamilyTarget] = useState<any>(null);
+
+  const handleOpenEditFamily = (item: any) => {
+    setEditFamilyTarget(item);
+    setEditFamilyName(item.familyName || "");
+    setShowEditFamilyModal(true);
+  };
+
+  const handleConfirmEditFamily = async () => {
+    if (!editFamilyTarget || !editFamilyName.trim()) return;
+    try {
+      await updateDoc(doc(db, "families", editFamilyTarget.id), {
+        name: editFamilyName.trim(),
+      });
+      toast.success("✓ 成功更新家庭名稱！");
+      setShowEditFamilyModal(false);
+      setEditFamilyTarget(null);
+      fetchAdminData();
+    } catch (err: any) {
+      toast.error(`❌ 更新失敗：${err.message}`);
+    }
+  };
+
   // Detailed Modal State
   const [selectedFamilyDetails, setSelectedFamilyDetails] = useState<any | null>(null);
   const [loadingDetails, setLoadingDetails] = useState(false);
@@ -741,13 +767,36 @@ export default function AdminCenter({
           memberCount: 0,
           familyObj: null,
           ownerUser: null,
-          members: []
+          members: [],
+          lastLoginTime: "--",
+          lastLoginDevice: "--"
         });
       } else {
         wlFamilies.forEach(fam => {
           const famMembers = users.filter((u) => u.familyId === fam.id);
           const isAnyMemberSuspended = famMembers.some((u) => u.suspended);
           
+          // Find login logs corresponding to this family members
+          const famMemberEmails = new Set(famMembers.map(m => m.email?.toLowerCase()).filter(Boolean));
+          const famMemberUids = new Set(famMembers.map(m => m.uid).filter(Boolean));
+          const famLoginLogs = loginLogs.filter(log => {
+            const emailLower = log.email?.toLowerCase();
+            return (emailLower && (emailLower === wl.email?.toLowerCase() || famMemberEmails.has(emailLower))) ||
+                   (log.userId && famMemberUids.has(log.userId));
+          });
+
+          let lastLoginTime = "--";
+          let lastLoginDevice = "--";
+          if (famLoginLogs.length > 0) {
+            const sortedLogs = [...famLoginLogs].sort((a, b) => {
+              const tA = a.loginTime ? (a.loginTime.seconds ? a.loginTime.seconds * 1000 : new Date(a.loginTime).getTime()) : 0;
+              const tB = b.loginTime ? (b.loginTime.seconds ? b.loginTime.seconds * 1000 : new Date(b.loginTime).getTime()) : 0;
+              return tB - tA;
+            });
+            lastLoginTime = formatTime(sortedLogs[0].loginTime);
+            lastLoginDevice = `${sortedLogs[0].device || "未知"} (${sortedLogs[0].browser || "未知"})`;
+          }
+
           list.push({
             id: fam.id,
             whitelistId: wl.id,
@@ -758,7 +807,9 @@ export default function AdminCenter({
             memberCount: famMembers.length,
             familyObj: fam,
             ownerUser: owners.find((o) => o.familyId === fam.id) || famMembers.find((m) => m.role === "Owner" || m.role === "OWNER" || m.role === "Parent") || null,
-            members: famMembers
+            members: famMembers,
+            lastLoginTime,
+            lastLoginDevice
           });
         });
       }
@@ -773,6 +824,26 @@ export default function AdminCenter({
         const adminEmail = owner?.email || fam.ownerEmail || "";
         const isAnyMemberSuspended = famMembers.some((u) => u.suspended);
         
+        const famMemberEmails = new Set(famMembers.map(m => m.email?.toLowerCase()).filter(Boolean));
+        const famMemberUids = new Set(famMembers.map(m => m.uid).filter(Boolean));
+        const famLoginLogs = loginLogs.filter(log => {
+          const emailLower = log.email?.toLowerCase();
+          return (emailLower && (emailLower === adminEmail.toLowerCase() || famMemberEmails.has(emailLower))) ||
+                 (log.userId && famMemberUids.has(log.userId));
+        });
+
+        let lastLoginTime = "--";
+        let lastLoginDevice = "--";
+        if (famLoginLogs.length > 0) {
+          const sortedLogs = [...famLoginLogs].sort((a, b) => {
+            const tA = a.loginTime ? (a.loginTime.seconds ? a.loginTime.seconds * 1000 : new Date(a.loginTime).getTime()) : 0;
+            const tB = b.loginTime ? (b.loginTime.seconds ? b.loginTime.seconds * 1000 : new Date(b.loginTime).getTime()) : 0;
+            return tB - tA;
+          });
+          lastLoginTime = formatTime(sortedLogs[0].loginTime);
+          lastLoginDevice = `${sortedLogs[0].device || "未知"} (${sortedLogs[0].browser || "未知"})`;
+        }
+
         list.push({
           id: fam.id,
           whitelistId: null,
@@ -783,13 +854,15 @@ export default function AdminCenter({
           memberCount: famMembers.length,
           familyObj: fam,
           ownerUser: owner || null,
-          members: famMembers
+          members: famMembers,
+          lastLoginTime,
+          lastLoginDevice
         });
       }
     });
 
     return list;
-  }, [whitelist, families, users]);
+  }, [whitelist, families, users, loginLogs]);
 
   // Aligned Audit Tracker and Login logs correlation
   const alignedLoginLogs = useMemo(() => {
@@ -1120,60 +1193,35 @@ export default function AdminCenter({
               {/* Main Family-Centric Table */}
               <div className="bg-white border border-[#E5E1DA] rounded-2xl shadow-sm overflow-hidden p-6 space-y-4">
                 <div>
-                  <h3 className="text-sm font-black text-gray-800">👨‍👩‍👧‍👦 家庭管理與授權總覽</h3>
+                  <h3 className="text-sm font-black text-gray-800">👨‍👩‍👧‍👦 家庭管理與授權總覽 (Excel 模式)</h3>
                   <p className="text-[11px] text-gray-400 mt-0.5">
-                    以家長（Mommy Admin）角度出發的 SaaS 彙總視角，將白名單授權、家庭註冊與成員狀態進行了對齊，並支援時空旅行、全面停權等。
+                    以統一儲存格表格的維度，全面列出系統現有家庭。支持直接查看、編輯、登入家庭、停權與刪除。
                   </p>
                 </div>
 
                 <div className="overflow-x-auto border border-gray-150 rounded-xl">
                   <table className="w-full text-left text-xs border-collapse">
                     <thead>
-                      <tr className="bg-gray-50 border-b border-gray-150 text-gray-500 font-extrabold select-none">
-                        <th className="p-3.5">家庭狀態</th>
-                        <th className="p-3.5">管理員 Gmail</th>
+                      <tr className="bg-gray-50 border-b border-[#E5E1DA] text-gray-500 font-extrabold select-none">
                         <th className="p-3.5">家庭名稱</th>
-                        <th className="p-3.5">成員數</th>
-                        <th className="p-3.5">開通註冊日期</th>
-                        <th className="p-3.5 text-right">超級特權操作</th>
+                        <th className="p-3.5">Owner Gmail</th>
+                        <th className="p-3.5 text-center">成員數</th>
+                        <th className="p-3.5">建立時間</th>
+                        <th className="p-3.5">最後登入</th>
+                        <th className="p-3.5">最後登入狀態</th>
+                        <th className="p-3.5 text-center">狀態</th>
+                        <th className="p-3.5 text-right">操作</th>
                       </tr>
                     </thead>
                     <tbody>
                       {filteredFamilyViewModels.length === 0 ? (
                         <tr>
-                          <td colSpan={6} className="p-8 text-center text-gray-400 italic font-medium">查無任何與搜尋條件符合之家庭與授權資料</td>
+                          <td colSpan={8} className="p-8 text-center text-gray-400 italic font-medium">查無任何與搜尋條件符合之家庭與授權資料</td>
                         </tr>
                       ) : (
                         filteredFamilyViewModels.map((item) => (
                           <tr key={item.id} className="border-b border-gray-100 last:border-0 hover:bg-[#FAF8F4]/30 transition-colors">
                             
-                            {/* STATUS BADGE */}
-                            <td className="p-3.5">
-                              {item.status === "unregistered" && (
-                                <span className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-250">
-                                  <AlertTriangle className="h-2.5 w-2.5 font-bold" />
-                                  <span>未註冊開群</span>
-                                </span>
-                              )}
-                              {item.status === "registered" && (
-                                <span className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-250">
-                                  <Check className="h-2.5 w-2.5 font-extrabold" />
-                                  <span>常規運作中</span>
-                                </span>
-                              )}
-                              {item.status === "suspended" && (
-                                <span className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded text-[10px] font-bold bg-rose-50 text-rose-700 border border-rose-250">
-                                  <AlertCircle className="h-2.5 w-2.5" />
-                                  <span>已停權停用</span>
-                                </span>
-                              )}
-                            </td>
-
-                            {/* GMAIL */}
-                            <td className="p-3.5 font-mono font-extrabold text-indigo-900 select-all tracking-tight">
-                              {item.adminEmail}
-                            </td>
-
                             {/* FAMILY NAME */}
                             <td className="p-3.5 font-black text-gray-800">
                               {item.familyName}
@@ -1182,14 +1230,51 @@ export default function AdminCenter({
                               )}
                             </td>
 
+                            {/* OWNER GMAIL */}
+                            <td className="p-3.5 font-mono font-extrabold text-indigo-900 select-all tracking-tight">
+                              {item.adminEmail}
+                            </td>
+
                             {/* MEMBER COUNT */}
-                            <td className="p-3.5 font-black text-gray-700">
+                            <td className="p-3.5 text-center font-black text-gray-700">
                               {item.status === "unregistered" ? "—" : `${item.memberCount} 人`}
                             </td>
 
                             {/* CREATED DATE */}
                             <td className="p-3.5 text-gray-400 font-medium">
                               {formatTime(item.createdAt)}
+                            </td>
+
+                            {/* LAST LOGIN */}
+                            <td className="p-3.5 text-gray-700 font-mono font-bold">
+                              {item.lastLoginTime || "--"}
+                            </td>
+
+                            {/* LAST LOGIN DEVICE / STATUS */}
+                            <td className="p-3.5 text-gray-500 font-mono text-[10px] max-w-[150px] truncate" title={item.lastLoginDevice}>
+                              {item.lastLoginDevice || "--"}
+                            </td>
+
+                            {/* STATUS BADGE */}
+                            <td className="p-3.5 text-center">
+                              {item.status === "unregistered" && (
+                                <span className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-250">
+                                  <AlertTriangle className="h-2.5 w-2.5 font-bold" />
+                                  <span>未註冊</span>
+                                </span>
+                              )}
+                              {item.status === "registered" && (
+                                <span className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-250">
+                                  <Check className="h-2.5 w-2.5 font-extrabold" />
+                                  <span>常規中</span>
+                                </span>
+                              )}
+                              {item.status === "suspended" && (
+                                <span className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded text-[10px] font-bold bg-rose-50 text-rose-700 border border-rose-250">
+                                  <AlertCircle className="h-2.5 w-2.5" />
+                                  <span>已停權</span>
+                                </span>
+                              )}
                             </td>
 
                             {/* PRIVILEGED ACTIONS */}
@@ -1200,8 +1285,27 @@ export default function AdminCenter({
                                   <button
                                     onClick={() => handleViewFamilyDetails(item)}
                                     className="text-[10.5px] bg-[#FAF8F5] hover:bg-[#FAF4ED] border border-[#E5E1DA] text-[#7C6354] px-2.5 py-1.5 rounded-lg transition cursor-pointer font-bold shrink-0"
+                                    title="查看"
                                   >
-                                    細節
+                                    查看
+                                  </button>
+
+                                  {/* EDIT FAMILY NAME */}
+                                  <button
+                                    onClick={() => handleOpenEditFamily(item)}
+                                    className="text-[10.5px] bg-white hover:bg-gray-55 border border-gray-300 text-gray-700 px-2.5 py-1.5 rounded-lg transition cursor-pointer font-bold shrink-0"
+                                    title="編輯"
+                                  >
+                                    編輯
+                                  </button>
+
+                                  {/* SIMULATED LOGIN SWAP */}
+                                  <button
+                                    onClick={() => handleSimulateAsFamilyAdmin(item)}
+                                    className="text-[10.5px] bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 text-indigo-700 px-2.5 py-1.5 rounded-lg transition cursor-pointer font-black shrink-0 relative hover:scale-105"
+                                    title="登入家庭"
+                                  >
+                                    登入家庭
                                   </button>
 
                                   {/* SUSPEND OR RESTORE */}
@@ -1213,24 +1317,16 @@ export default function AdminCenter({
                                         : "bg-rose-50 text-rose-600 border-rose-250 hover:bg-rose-100"
                                     }`}
                                   >
-                                    {item.status === "suspended" ? "恢復運作" : "全面停權"}
+                                    {item.status === "suspended" ? "恢復" : "停權"}
                                   </button>
 
                                   {/* COMPLETE ERASE / DELETE */}
                                   <button
                                     onClick={() => handleFullyDeleteFamily(item.id, item.familyName)}
                                     className="text-[10.5px] bg-rose-600 hover:bg-rose-700 text-white border border-rose-650 px-2.5 py-1.5 rounded-lg transition cursor-pointer font-black shrink-0 shadow-xs"
-                                    title="完全從 Firestore 雲端資料庫中剔除此家庭與全部子集合"
+                                    title="刪除"
                                   >
-                                    完全刪除
-                                  </button>
-
-                                  {/* SIMULATED LOGIN SWAP */}
-                                  <button
-                                    onClick={() => handleSimulateAsFamilyAdmin(item)}
-                                    className="text-[10.5px] bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 text-indigo-700 px-2.5 py-1.5 rounded-lg transition cursor-pointer font-black shrink-0 relative hover:scale-105"
-                                  >
-                                    實體登入
+                                    刪除
                                   </button>
                                 </>
                               ) : (
@@ -2003,6 +2099,62 @@ export default function AdminCenter({
                 ) : (
                   <span>執行指令</span>
                 )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 3. Family Name Editing Modal */}
+      {showEditFamilyModal && editFamilyTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/65 p-4 backdrop-blur-xs font-sans">
+          <div className="bg-[#FAF8F5] border border-gray-150 rounded-3xl shadow-2xl max-w-md w-full overflow-hidden flex flex-col animate-in zoom-in duration-150" style={{ maxHeight: "85vh" }}>
+            {/* Modal Header */}
+            <div className="px-6 py-5 border-b border-gray-150 shrink-0 flex items-center gap-3 bg-indigo-50/10">
+              <div className="p-2.5 rounded-2xl bg-indigo-50 text-indigo-700">
+                <Sparkles className="h-5 w-5" />
+              </div>
+              <div>
+                <h3 className="text-base font-black text-[#3C332D]">編輯家庭基本資訊</h3>
+                <p className="text-[11px] text-gray-500 mt-0.5">更改特定註冊家庭的對外名稱</p>
+              </div>
+            </div>
+
+            {/* Modal Content */}
+            <div className="p-6 overflow-y-auto text-xs space-y-4 font-semibold text-[#4A3E3D]">
+              <div className="space-y-2">
+                <label className="block text-xs font-bold text-gray-700">家庭名稱</label>
+                <input
+                  type="text"
+                  value={editFamilyName}
+                  onChange={(e) => setEditFamilyName(e.target.value)}
+                  className="w-full text-sm border-2 border-[#E5E1DA] focus:border-indigo-500 bg-white rounded-xl px-4 py-3 focus:outline-none font-bold text-black"
+                  placeholder="請輸入家庭名稱"
+                />
+              </div>
+              <div className="font-mono text-[11px] bg-[#FAF8F5] border border-gray-200 p-3 rounded-2xl text-gray-500">
+                <div>Owner Email: <span className="font-bold text-gray-800">{editFamilyTarget.adminEmail}</span></div>
+                <div>ID: <span className="font-bold text-gray-850">{editFamilyTarget.id}</span></div>
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="bg-gray-100 border-t border-gray-150 p-4 shrink-0 flex justify-end gap-2 text-xs font-black">
+              <button
+                onClick={() => {
+                  setShowEditFamilyModal(false);
+                  setEditFamilyTarget(null);
+                }}
+                className="px-5 py-2.5 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-xl transition active:scale-95 cursor-pointer font-bold"
+              >
+                取消
+              </button>
+              <button
+                onClick={handleConfirmEditFamily}
+                disabled={!editFamilyName.trim()}
+                className="px-5 py-2.5 bg-[#4A3E3D] hover:bg-[#3C3231] text-white rounded-xl transition active:scale-95 cursor-pointer font-bold shadow-md"
+              >
+                儲存更新
               </button>
             </div>
           </div>

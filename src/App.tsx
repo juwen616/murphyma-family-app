@@ -389,6 +389,38 @@ export default function App() {
     return () => clearInterval(timer);
   }, [developerModeActive]);
 
+  // Load Whitelist status dynamically
+  useEffect(() => {
+    if (!user || !user.email) {
+      setIsWhitelistedCreator(false);
+      return;
+    }
+    if (user.email.toLowerCase() === "juwen616@gmail.com") {
+      setIsWhitelistedCreator(true);
+      return;
+    }
+    const checkWhitelist = async () => {
+      try {
+        const creatorsRef = collection(db, "allowed_family_creators");
+        const q = query(creatorsRef, where("email", "==", user.email!.toLowerCase()));
+        getDocs(q).then((qSnap) => {
+          let active = false;
+          qSnap.forEach(docSnap => {
+            if (docSnap.data().status === "active") {
+              active = true;
+            }
+          });
+          setIsWhitelistedCreator(active);
+        }).catch(err => {
+          console.error("Error loading whitelist snap:", err);
+        });
+      } catch (err) {
+        console.error("Error loading whitelist:", err);
+      }
+    };
+    checkWhitelist();
+  }, [user?.email]);
+
   // 1. Monitor Authentication State Change
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
@@ -401,7 +433,12 @@ export default function App() {
           const userSnap = await getDoc(userDocRef);
 
           if (userSnap.exists()) {
-            setCurrentUserProfile(userSnap.data() as UserProfile);
+            const profileData = userSnap.data() as UserProfile;
+            setCurrentUserProfile(profileData);
+            if (profileData.familyId) {
+              setActivePage("home");
+              setOnboardingChoice("none");
+            }
           } else {
             // First time logging in - set initial null family profile to trigger onboarding
             const initProfile: UserProfile = {
@@ -1104,11 +1141,35 @@ export default function App() {
         const targetFamilyName = inviteData.familyName || "我的家庭";
 
         // Upgraded Role processing (We directly enroll them!)
+        // Fetch placeholder member profile if memberId exists to merge stars, name, themes
+        let placeholderData: any = {};
+        if (inviteData.memberId) {
+          const mSnap = await getDoc(doc(db, "users", inviteData.memberId));
+          if (mSnap.exists()) {
+            placeholderData = mSnap.data();
+            // Delete placeholder document to prevent duplication of members
+            await deleteDoc(doc(db, "users", inviteData.memberId));
+          }
+          // Delete old family_members link for this placeholder
+          const oldMemberLinkId = `${targetFamilyId}_${inviteData.memberId}`;
+          await deleteDoc(doc(db, "family_members", oldMemberLinkId));
+        }
+
+        const mergedDisplayName = placeholderData.displayName || joinDisplayName.trim() || currentUserProfile.displayName;
+        const mergedColor = placeholderData.color || currentUserProfile.color || "#B4C3B2";
+        const mergedPhotoURL = placeholderData.photoURL || currentUserProfile.photoURL || "✿";
+        const mergedBirthday = placeholderData.birthday || currentUserProfile.birthday || "";
+        const mergedStars = placeholderData.stars || 0;
+
         // 1. Update the user document
         await updateDoc(doc(db, "users", user.uid), {
           familyId: targetFamilyId,
           role: targetRole,
-          displayName: joinDisplayName.trim() || currentUserProfile.displayName,
+          displayName: mergedDisplayName,
+          color: mergedColor,
+          photoURL: mergedPhotoURL,
+          birthday: mergedBirthday,
+          stars: mergedStars,
           updatedAt: new Date().toISOString()
         });
 
@@ -1118,17 +1179,20 @@ export default function App() {
           id: memberId,
           familyId: targetFamilyId,
           userId: user.uid,
-          displayName: joinDisplayName.trim() || currentUserProfile.displayName || "家庭成員",
+          displayName: mergedDisplayName,
           role: targetRole,
-          stars: 0,
+          stars: mergedStars,
           createdAt: serverTimestamp(),
         });
 
-        // 3. Mark the invite as accepted
+        // 3. Mark the invite as accepted and sync joined information
         await updateDoc(doc(db, "invites", inviteDoc.id), {
           status: "accepted",
           acceptedBy: user.uid,
-          acceptedAt: new Date().toISOString()
+          acceptedAt: new Date().toISOString(),
+          joinedUserId: user.uid,
+          joinedEmail: user.email || "",
+          joinedTime: new Date().toISOString()
         });
 
         // 4. Audit Log
@@ -1254,10 +1318,36 @@ export default function App() {
 
   // Delete announcement (妈妈 only)
   const handleDeleteAnnouncement = async (id: string) => {
+    // Step 1
+    console.log("Delete Start");
+    
+    // Step 2
+    console.log("announcementId", id);
+    console.log("familyId", effectiveUserProfile?.familyId);
+    console.log("currentUser.uid", user?.uid);
+    
+    // Step 3
+    console.log(`實際刪除路徑: announcements/${id}`);
+
     try {
-      await deleteDoc(doc(db, "announcements", id));
-    } catch (err) {
-      handleFirestoreError(err, OperationType.DELETE, `announcements/${id}`);
+      const docRef = doc(db, "announcements", id);
+      await deleteDoc(docRef);
+      console.log("公告刪除成功");
+      
+      // Update local state immediately for instant refresh without page reload
+      setAnnouncements((prev) => prev.filter((item) => item.id !== id));
+      toast.success("✓ 公告刪除成功！");
+    } catch (err: any) {
+      console.error("公告刪除失敗");
+      console.error("Firebase Error Code:", err?.code || "N/A");
+      console.error("Firebase Error Message:", err?.message || err?.toString());
+      console.error(err);
+      
+      const errMsg = `Firebase Error [${err?.code || "UNKNOWN"}]: ${err?.message || "資料刪除失敗"}`;
+      toast.error(`❌ ${errMsg}`);
+      
+      // Rethrow to let UI catch it and display it in the Admin Debug Info section of the specific card
+      throw err;
     }
   };
 
@@ -2460,6 +2550,7 @@ function generateTemplateDates(startDateStr: string, weekdays: number[], count: 
         clearCachedData(CACHE_KEY_MEMBERS(currentUserProfile.familyId));
         setTimeout(() => loadAppletData(true), 100);
       }
+      return newUid;
     } catch (err) {
       handleFirestoreError(err, OperationType.CREATE, "users");
     }
@@ -2474,6 +2565,7 @@ function generateTemplateDates(startDateStr: string, weekdays: number[], count: 
       birthday?: string;
       color?: string;
       photoURL?: string;
+      showAgeInCalendar?: boolean;
     }
   ) => {
     try {
@@ -2484,6 +2576,7 @@ function generateTemplateDates(startDateStr: string, weekdays: number[], count: 
       if (updatedData.birthday !== undefined) updateObj.birthday = updatedData.birthday;
       if (updatedData.color !== undefined) updateObj.color = updatedData.color;
       if (updatedData.photoURL !== undefined) updateObj.photoURL = updatedData.photoURL;
+      if (updatedData.showAgeInCalendar !== undefined) updateObj.showAgeInCalendar = updatedData.showAgeInCalendar;
       
       await updateDoc(doc(db, "users", memberUid), updateObj);
       if (currentUserProfile?.familyId) {
@@ -2502,13 +2595,27 @@ function generateTemplateDates(startDateStr: string, weekdays: number[], count: 
       return;
     }
     try {
-      await deleteDoc(doc(db, "users", memberUid));
+      // Unlink member from family instead of deleting their account
+      await updateDoc(doc(db, "users", memberUid), {
+        familyId: "",
+        role: "",
+        invitationId: "",
+        inviteCode: "",
+        inviteStatus: ""
+      });
+
+      // Revoke family_members join record
+      if (currentUserProfile?.familyId) {
+        const fmLinkId = `${currentUserProfile.familyId}_${memberUid}`;
+        await deleteDoc(doc(db, "family_members", fmLinkId));
+      }
+
       if (currentUserProfile?.familyId) {
         clearCachedData(CACHE_KEY_MEMBERS(currentUserProfile.familyId));
         setTimeout(() => loadAppletData(true), 100);
       }
     } catch (err) {
-      handleFirestoreError(err, OperationType.DELETE, `users/${memberUid}`);
+      handleFirestoreError(err, OperationType.UPDATE, `users/${memberUid}`);
     }
   };
 
@@ -2996,7 +3103,7 @@ function generateTemplateDates(startDateStr: string, weekdays: number[], count: 
             <div className="flex items-center gap-1.5 select-none overflow-x-auto scrollbar-none whitespace-nowrap flex-nowrap shrink-0">
               <button
                 onClick={() => setActivePage("home")}
-                className={`px-3.5 py-1 text-xs font-black rounded-full transition-all duration-200 border cursor-pointer whitespace-nowrap ${
+                className={`px-5 py-2.5 text-sm md:text-base font-black rounded-full transition-all duration-200 border cursor-pointer whitespace-nowrap ${
                   activePage === "home"
                     ? "bg-[#F5EBE6] text-[#7C6354] border-[#E7DCD5] shadow-sm font-extrabold"
                     : "bg-white text-[#666666] border-[#E5E1DA] hover:bg-gray-50/55"
@@ -3007,7 +3114,7 @@ function generateTemplateDates(startDateStr: string, weekdays: number[], count: 
 
               <button
                 onClick={() => setActivePage("calendar")}
-                className={`px-3.5 py-1 text-xs font-black rounded-full transition-all duration-200 border cursor-pointer whitespace-nowrap ${
+                className={`px-5 py-2.5 text-sm md:text-base font-black rounded-full transition-all duration-200 border cursor-pointer whitespace-nowrap ${
                   activePage === "calendar"
                     ? "bg-[#F5EBE6] text-[#7C6354] border-[#E7DCD5] shadow-sm font-extrabold"
                     : "bg-white text-[#666666] border-[#E5E1DA] hover:bg-gray-50/55"
@@ -3018,7 +3125,7 @@ function generateTemplateDates(startDateStr: string, weekdays: number[], count: 
 
               <button
                 onClick={() => setActivePage("tasks")}
-                className={`px-3.5 py-1 text-xs font-black rounded-full transition-all duration-200 border cursor-pointer whitespace-nowrap ${
+                className={`px-5 py-2.5 text-sm md:text-base font-black rounded-full transition-all duration-200 border cursor-pointer whitespace-nowrap ${
                   activePage === "tasks"
                     ? "bg-[#F5EBE6] text-[#7C6354] border-[#E7DCD5] shadow-sm font-extrabold"
                     : "bg-white text-[#666666] border-[#E5E1DA] hover:bg-gray-50/55"
@@ -3029,7 +3136,7 @@ function generateTemplateDates(startDateStr: string, weekdays: number[], count: 
 
               <button
                 onClick={() => setActivePage("rewards")}
-                className={`px-3.5 py-1 text-xs font-black rounded-full transition-all duration-200 border cursor-pointer whitespace-nowrap ${
+                className={`px-5 py-2.5 text-sm md:text-base font-black rounded-full transition-all duration-200 border cursor-pointer whitespace-nowrap ${
                   activePage === "rewards"
                     ? "bg-[#F5EBE6] text-[#7C6354] border-[#E7DCD5] shadow-sm font-extrabold"
                     : "bg-white text-[#666666] border-[#E5E1DA] hover:bg-gray-50/55"
@@ -3041,7 +3148,7 @@ function generateTemplateDates(startDateStr: string, weekdays: number[], count: 
               {effectiveUserProfile && (effectiveUserProfile.role === UserRole.ADMIN || effectiveUserProfile.role === UserRole.PARENT) && (
                 <button
                   onClick={() => setActivePage("favorites")}
-                  className={`px-3.5 py-1 text-xs font-black rounded-full transition-all duration-200 border cursor-pointer whitespace-nowrap ${
+                  className={`px-5 py-2.5 text-sm md:text-base font-black rounded-full transition-all duration-200 border cursor-pointer whitespace-nowrap ${
                     activePage === "favorites"
                       ? "bg-[#F5EBE6] text-[#7C6354] border-[#E7DCD5] shadow-sm font-extrabold"
                       : "bg-white text-[#666666] border-[#E5E1DA] hover:bg-gray-50/55"
@@ -3054,7 +3161,7 @@ function generateTemplateDates(startDateStr: string, weekdays: number[], count: 
               {effectiveUserProfile && (effectiveUserProfile.role === UserRole.ADMIN || effectiveUserProfile.role === UserRole.PARENT) && (
                 <button
                   onClick={() => setActivePage("special-periods")}
-                  className={`px-3.5 py-1 text-xs font-black rounded-full transition-all duration-200 border cursor-pointer whitespace-nowrap ${
+                  className={`px-5 py-2.5 text-sm md:text-base font-black rounded-full transition-all duration-200 border cursor-pointer whitespace-nowrap ${
                     activePage === "special-periods"
                       ? "bg-[#F5EBE6] text-[#7C6354] border-[#E7DCD5] shadow-sm font-extrabold"
                       : "bg-white text-[#666666] border-[#E5E1DA] hover:bg-gray-50/55"
@@ -3067,7 +3174,7 @@ function generateTemplateDates(startDateStr: string, weekdays: number[], count: 
               {effectiveUserProfile && (effectiveUserProfile.role === UserRole.ADMIN || effectiveUserProfile.role === UserRole.PARENT) && (
                 <button
                   onClick={() => setActivePage("members")}
-                  className={`px-3.5 py-1 text-xs font-black rounded-full transition-all duration-200 border cursor-pointer whitespace-nowrap ${
+                  className={`px-5 py-2.5 text-sm md:text-base font-black rounded-full transition-all duration-200 border cursor-pointer whitespace-nowrap ${
                     activePage === "members"
                       ? "bg-[#F5EBE6] text-[#7C6354] border-[#E7DCD5] shadow-sm font-extrabold"
                       : "bg-white text-[#666666] border-[#E5E1DA] hover:bg-gray-50/55"
@@ -3079,7 +3186,7 @@ function generateTemplateDates(startDateStr: string, weekdays: number[], count: 
 
               <button
                 onClick={() => setActivePage("notes")}
-                className={`px-3.5 py-1 text-xs font-black rounded-full transition-all duration-200 border cursor-pointer whitespace-nowrap ${
+                className={`px-5 py-2.5 text-sm md:text-base font-black rounded-full transition-all duration-200 border cursor-pointer whitespace-nowrap ${
                   activePage === "notes"
                     ? "bg-[#F5EBE6] text-[#7C6354] border-[#E7DCD5] shadow-sm font-extrabold"
                     : "bg-white text-[#666666] border-[#E5E1DA] hover:bg-gray-50/55"
@@ -3091,7 +3198,7 @@ function generateTemplateDates(startDateStr: string, weekdays: number[], count: 
               {isSuperAdmin && (
                 <button
                   onClick={() => setActivePage("admin")}
-                  className={`px-3.5 py-1 text-xs font-black rounded-full transition-all duration-200 border cursor-pointer whitespace-nowrap ${
+                  className={`px-5 py-2.5 text-sm md:text-base font-black rounded-full transition-all duration-200 border cursor-pointer whitespace-nowrap ${
                     activePage === "admin"
                       ? "bg-indigo-50 text-indigo-700 border-indigo-200 shadow-sm font-extrabold"
                       : "bg-white text-indigo-600 border-[#E5E1DA] hover:bg-indigo-50/25"
