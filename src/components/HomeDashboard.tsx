@@ -1252,7 +1252,7 @@ export default function HomeDashboard({
           <section
             id="home-announcements"
             style={{
-              background: "#FFF6F4",
+              background: "#FFFFFF",
               border: "1px solid #F3CDC4",
               borderRadius: "24px",
               boxShadow: "0 4px 12px rgba(230, 110, 95, 0.03)",

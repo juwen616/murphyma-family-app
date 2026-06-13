@@ -955,12 +955,12 @@ export default function MembersCenter({
               <table className="w-full text-left text-xs border-collapse">
                 <thead>
                   <tr className="bg-[#FCFBF9] border-b border-[#E5E1DA] text-gray-500 font-bold select-none font-sans">
-                    <th className="p-3">受邀者姓名</th>
-                    <th className="p-3">預計角色</th>
+                    <th className="p-3">受邀姓名</th>
+                    <th className="p-3">角色</th>
                     <th className="p-3">邀請碼</th>
-                    <th className="p-3">Email 限制</th>
+                    <th className="p-3">限定 Email</th>
                     <th className="p-3">狀態</th>
-                    <th className="p-3">建立時間</th>
+                    <th className="p-3">產製日期</th>
                     <th className="p-3 text-center">操作</th>
                   </tr>
                 </thead>
@@ -968,7 +968,7 @@ export default function MembersCenter({
                   {invites
                     .filter(inv => inv.status === "pending" || inv.status === "expired" || inv.status === "cancelled")
                     .map((inv) => {
-                      const targetName = inv.memberName || "通用邀請 (不限特定人)";
+                      const targetName = inv.memberName || "尚未設定姓名";
                       const statusLabel = 
                         inv.status === "pending" ? "⏱️ 待加入" : 
                         inv.status === "expired" ? "⏳ 已失效" : "🚫 已取消";
@@ -1008,7 +1008,7 @@ export default function MembersCenter({
                             </div>
                           </td>
                           <td className="p-3 font-sans text-gray-500 truncate max-w-[150px]">
-                            {inv.email || "（無限制）"}
+                            {inv.email || "無"}
                           </td>
                           <td className="p-3">
                             <span className={`px-1.5 py-0.5 rounded border text-[10px] font-bold ${statusColor}`}>
@@ -1711,19 +1711,20 @@ export default function MembersCenter({
                 <>
                   {/* Simplified Add Invitation Mode Fields */}
                   <div>
-                    <label className="block text-xs font-bold text-[#4A6076] mb-1">成員姓名</label>
+                    <label className="block text-xs font-bold text-[#4A6076] mb-1">受邀者姓名</label>
                     <input
                       type="text"
                       required
-                      placeholder="例如：哥哥、妹妹、外婆"
+                      placeholder="例如：爸爸、媽媽、阿嬤、小華、金龜子"
                       value={displayName}
                       onChange={(e) => setDisplayName(e.target.value)}
                       className="w-full text-sm border border-[#E5E1DA] rounded-lg px-3 py-2 bg-[#F9F8F6] focus:outline-none focus:ring-1 focus:ring-[#4C6278]"
                     />
+                    <p className="text-[10px] text-gray-400 mt-1 font-medium">此名稱為加入後正式顯示名稱。加入者不可修改。</p>
                   </div>
 
                   <div>
-                    <label className="block text-xs font-bold text-[#4A6076] mb-1">賦予角色權限</label>
+                    <label className="block text-xs font-bold text-[#4A6076] mb-1">預計家庭角色關係</label>
                     <select
                       value={role}
                       onChange={(e) => setRole(e.target.value as UserRole)}
@@ -1737,14 +1738,15 @@ export default function MembersCenter({
                   </div>
 
                   <div>
-                    <label className="block text-xs font-bold text-[#4A6076] mb-1">限制指定登入 Email (選填)</label>
+                    <label className="block text-xs font-bold text-[#4A6076] mb-1">限定指定 Google 帳號加入 (選填)</label>
                     <input
                       type="email"
-                      placeholder="受邀人的 Email，不填表示開放"
+                      placeholder="例如：abc@gmail.com。欲綁定指定帳號請填寫"
                       value={inviteEmailConstraint}
                       onChange={(e) => setInviteEmailConstraint(e.target.value)}
                       className="w-full text-sm border border-[#E5E1DA] rounded-lg px-3 py-2 bg-[#F9F8F6] focus:outline-none font-sans"
                     />
+                    <p className="text-[10px] text-gray-400 mt-1 font-medium">留白表示：免帳號模式（適合長輩與小孩，只需輸入邀請碼即可直接加入）</p>
                   </div>
                 </>
               )}
@@ -1789,7 +1791,7 @@ export default function MembersCenter({
                     disabled={isSubmittingForm}
                     className="px-4 py-1.5 text-xs font-bold text-white bg-[#4A6076] hover:bg-[#3b4c5e] rounded-lg transition disabled:opacity-50"
                   >
-                    {isSubmittingForm ? "執行中..." : editingMember ? "儲存修改" : "建立成員邀請"}
+                    {isSubmittingForm ? "執行中..." : editingMember ? "儲存修改" : "建立邀請"}
                   </button>
                 </div>
               </div>
