@@ -24,6 +24,7 @@ interface MembersCenterProps {
     birthday?: string;
     color?: string;
     photoURL?: string;
+    showAgeInCalendar?: boolean;
   }) => Promise<string | void>;
   onEditMember?: (
     uid: string,
@@ -33,6 +34,7 @@ interface MembersCenterProps {
       birthday?: string;
       color?: string;
       photoURL?: string;
+      showAgeInCalendar?: boolean;
     }
   ) => Promise<void>;
   onDeleteMember?: (uid: string) => Promise<void>;

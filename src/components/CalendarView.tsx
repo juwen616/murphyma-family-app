@@ -199,6 +199,16 @@ export default function CalendarView({
 
   const [viewType, setViewType] = useState<"list" | "month" | "week">("month");
   const [selectedMobileDate, setSelectedMobileDate] = useState<string>(todayDateStr);
+
+  const handleSetViewType = (newType: "list" | "month" | "week") => {
+    setViewType(newType);
+    if (selectedMobileDate) {
+      const p = selectedMobileDate.split("-");
+      if (p.length === 3) {
+        setCurrentDate(new Date(parseInt(p[0], 10), parseInt(p[1], 10) - 1, parseInt(p[2], 10)));
+      }
+    }
+  };
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
 
   const [touchStart, setTouchStart] = useState<number | null>(null);
@@ -1216,7 +1226,7 @@ export default function CalendarView({
               📍 今天
             </button>
             <button
-              onClick={() => setViewType(viewType === "month" ? "week" : "month")}
+              onClick={() => handleSetViewType(viewType === "month" ? "week" : "month")}
               className="block md:hidden text-[11px] font-black px-3 py-1.5 bg-amber-50 text-amber-850 border border-amber-250 rounded-full hover:bg-amber-100 transition cursor-pointer shrink-0"
             >
               {viewType === "month" ? "🔄 切換週曆" : "🔄 切換月曆"}
@@ -1227,7 +1237,7 @@ export default function CalendarView({
         {/* Calendar View Toggle switches (Desktop only) */}
         <div className="hidden md:flex items-center gap-1 p-1 bg-[#FFFDF8] border border-[#EFEAE2] rounded-full font-sans w-full md:w-auto justify-between md:justify-start overflow-x-auto scrollbar-none animate-in fade-in">
           <button
-            onClick={() => setViewType("list")}
+            onClick={() => handleSetViewType("list")}
             className={`flex-1 md:flex-initial px-4 py-2 text-xs font-black transition rounded-full cursor-pointer whitespace-nowrap ${
               viewType === "list"
                 ? "bg-amber-100 text-[#3C332D] border border-amber-200 shadow-sm"
@@ -1237,7 +1247,7 @@ export default function CalendarView({
             列表
           </button>
           <button
-            onClick={() => setViewType("month")}
+            onClick={() => handleSetViewType("month")}
             className={`flex-1 md:flex-initial px-4 py-2 text-xs font-black transition rounded-full cursor-pointer whitespace-nowrap ${
               viewType === "month"
                 ? "bg-amber-100 text-[#3C332D] border border-amber-200 shadow-sm"
@@ -1247,7 +1257,7 @@ export default function CalendarView({
             月曆
           </button>
           <button
-            onClick={() => setViewType("week")}
+            onClick={() => handleSetViewType("week")}
             className={`flex-1 md:flex-initial px-4 py-2 text-xs font-black transition rounded-full cursor-pointer whitespace-nowrap ${
               viewType === "week"
                 ? "bg-amber-100 text-[#3C332D] border border-amber-200 shadow-sm"
@@ -1463,11 +1473,11 @@ export default function CalendarView({
                   id={`calendar-day-${cell.dateStr}`}
                   key={`${cell.dateStr}-${idx}`}
                   onClick={() => {
+                    setSelectedMobileDate(cell.dateStr);
                     if (window.innerWidth < 768) {
                       if (activeMode && activeMode.type === "travel") {
                         setSelectedModeForDetail({ mode: activeMode, dateStr: cell.dateStr });
                       } else {
-                        setSelectedMobileDate(cell.dateStr);
                         setIsDrawerOpen(true);
                       }
                     } else {
@@ -1545,7 +1555,18 @@ export default function CalendarView({
                               return (
                                 <div
                                   key={evt.id}
-                                  className={`text-[11px] leading-[13px] py-1 px-1.5 font-black truncate rounded border ${bgStyle} tracking-tight`}
+                                  className={`text-[10px] font-black rounded border ${bgStyle} tracking-tight`}
+                                  style={{
+                                    padding: "2px 2.5px",
+                                    lineHeight: "1.15",
+                                    display: "-webkit-box",
+                                    WebkitLineClamp: 2,
+                                    WebkitBoxOrient: "vertical",
+                                    overflow: "hidden",
+                                    textOverflow: "ellipsis",
+                                    whiteSpace: "normal",
+                                    wordBreak: "break-all",
+                                  }}
                                 >
                                   {cleanTitle}
                                 </div>
@@ -1833,11 +1854,11 @@ export default function CalendarView({
                   id={`calendar-day-${cell.dateStr}`}
                   key={cell.dateStr}
                   onClick={() => {
+                    setSelectedMobileDate(cell.dateStr);
                     if (window.innerWidth < 768) {
                       if (activeMode && activeMode.type === "travel") {
                         setSelectedModeForDetail({ mode: activeMode, dateStr: cell.dateStr });
                       } else {
-                        setSelectedMobileDate(cell.dateStr);
                         setIsDrawerOpen(true);
                       }
                     } else {

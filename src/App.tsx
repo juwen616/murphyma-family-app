@@ -88,6 +88,21 @@ export default function App() {
   const [isLoggingIn, setIsLoggingIn] = useState(false);
   const [isSandboxLoggingIn, setIsSandboxLoggingIn] = useState(false);
 
+  // New states for the redesigned landing login page
+  const [loginTab, setLoginTab] = useState<"google" | "invite">("google");
+  const [bindGoogle, setBindGoogle] = useState(true);
+
+  // 5-second Auth loading timeout guard to prevent page freezing
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (isLoadingAuth) {
+        console.warn("Auth initialization timed out (5s), displaying login portal directly.");
+        setIsLoadingAuth(false);
+      }
+    }, 5000);
+    return () => clearTimeout(timer);
+  }, [isLoadingAuth]);
+
   // Family Onboarding states
   const [onboardingChoice, setOnboardingChoice] = useState<"none" | "create" | "join">("none");
   const [newFamilyName, setNewFamilyName] = useState("");
@@ -432,28 +447,199 @@ export default function App() {
           const userDocRef = doc(db, "users", firebaseUser.uid);
           const userSnap = await getDoc(userDocRef);
 
-          if (userSnap.exists()) {
-            const profileData = userSnap.data() as UserProfile;
-            setCurrentUserProfile(profileData);
-            if (profileData.familyId) {
+          // Check if there is a pending land-page join request in local storage
+          const pendingFamId = localStorage.getItem("pending_join_family_id");
+          const pendingName = localStorage.getItem("pending_join_display_name");
+          const pendingRole = (localStorage.getItem("pending_join_role") as UserRole) || UserRole.MEMBER;
+
+          if (pendingFamId && pendingName) {
+            // Yes, user just clicked "加入家庭" on the login landing page!
+            localStorage.removeItem("pending_join_family_id");
+            localStorage.removeItem("pending_join_display_name");
+            localStorage.removeItem("pending_join_role");
+            localStorage.removeItem("pending_join_bind_google");
+
+            const inputCode = pendingFamId.trim();
+            const joinedName = pendingName.trim();
+
+            const query = (await import("firebase/firestore")).query;
+            const collection = (await import("firebase/firestore")).collection;
+            const where = (await import("firebase/firestore")).where;
+            const getDocs = (await import("firebase/firestore")).getDocs;
+
+            // Find matching family or pre-determined invite code in invites collection
+            const qInvite = query(
+              collection(db, "invites"),
+              where("inviteCode", "==", inputCode.toUpperCase()),
+              where("status", "==", "pending")
+            );
+            const snapInvite = await getDocs(qInvite);
+
+            if (!snapInvite.empty) {
+              const inviteDoc = snapInvite.docs[0];
+              const inviteData = inviteDoc.data();
+              const targetFamilyId = inviteData.familyId;
+              const targetFamilyName = inviteData.familyName || "我的家庭";
+              const targetRole = inviteData.targetRole || pendingRole;
+
+              let placeholderData: any = {};
+              if (inviteData.memberId) {
+                const mSnap = await getDoc(doc(db, "users", inviteData.memberId));
+                if (mSnap.exists()) {
+                  placeholderData = mSnap.data();
+                  await deleteDoc(doc(db, "users", inviteData.memberId));
+                }
+                const oldMemberLinkId = `${targetFamilyId}_${inviteData.memberId}`;
+                await deleteDoc(doc(db, "family_members", oldMemberLinkId));
+              }
+
+              const mergedDisplayName = placeholderData.displayName || joinedName;
+              const mergedColor = placeholderData.color || "#B4C3B2";
+              const mergedPhotoURL = placeholderData.photoURL || "✿";
+              const mergedBirthday = placeholderData.birthday || "";
+              const mergedStars = placeholderData.stars || 0;
+
+              const updatedProfile: UserProfile = {
+                uid: firebaseUser.uid,
+                email: firebaseUser.email || "",
+                displayName: mergedDisplayName,
+                color: mergedColor,
+                photoURL: mergedPhotoURL,
+                birthday: mergedBirthday,
+                familyId: targetFamilyId,
+                role: targetRole,
+                stars: mergedStars,
+                createdAt: serverTimestamp(),
+              };
+
+              await setDoc(doc(db, "users", firebaseUser.uid), updatedProfile);
+
+              const memberId = `${targetFamilyId}_${firebaseUser.uid}`;
+              await setDoc(doc(db, "family_members", memberId), {
+                id: memberId,
+                familyId: targetFamilyId,
+                userId: firebaseUser.uid,
+                displayName: mergedDisplayName,
+                role: targetRole,
+                stars: mergedStars,
+                createdAt: serverTimestamp(),
+              });
+
+              await updateDoc(doc(db, "invites", inviteDoc.id), {
+                status: "accepted",
+                acceptedBy: firebaseUser.uid,
+                acceptedAt: new Date().toISOString(),
+                joinedUserId: firebaseUser.uid,
+                joinedEmail: firebaseUser.email || "",
+                joinedTime: new Date().toISOString(),
+              });
+
+              const auditId = `aud_${Date.now()}_join`;
+              await setDoc(doc(db, "audit_logs", auditId), {
+                id: auditId,
+                userId: firebaseUser.uid,
+                userName: `${mergedDisplayName} (${targetRole})`,
+                familyId: targetFamilyId,
+                action: `進入「${targetFamilyName}」：使用專屬邀請碼「${inputCode.toUpperCase()}」自動啟用 ${targetRole} 權限`,
+                targetId: targetFamilyId,
+                targetName: targetFamilyName,
+                createdAt: new Date().toISOString(),
+              });
+
+              setCurrentUserProfile(updatedProfile);
               setActivePage("home");
               setOnboardingChoice("none");
+              toast.success(`🎉 歡迎！您已使用專屬邀請碼成功進駐家庭「${targetFamilyName}」，並取得「${targetRole}」角色！`);
+            } else {
+              // Direct family check or simple inviteCode on family node
+              let targetFamilyId = "";
+              let targetFamilyName = "";
+
+              const directSnap = await getDoc(doc(db, "families", inputCode));
+              if (directSnap.exists()) {
+                targetFamilyId = directSnap.id;
+                targetFamilyName = directSnap.data().name;
+              } else {
+                const qFam = query(collection(db, "families"), where("inviteCode", "==", inputCode.toUpperCase()));
+                const snapFam = await getDocs(qFam);
+                if (!snapFam.empty) {
+                  const docFam = snapFam.docs[0];
+                  targetFamilyId = docFam.id;
+                  targetFamilyName = docFam.data().name;
+                }
+              }
+
+              if (!targetFamilyId) {
+                toast.error("❌ 找不到此邀請碼或家庭，請重新確認代碼！");
+                const initProfile: UserProfile = {
+                  uid: firebaseUser.uid,
+                  email: firebaseUser.email || "",
+                  displayName: joinedName || firebaseUser.displayName || "家庭成員",
+                  photoURL: "✿",
+                  color: "#B4C3B2",
+                  familyId: null,
+                  role: pendingRole,
+                  stars: 0,
+                  createdAt: serverTimestamp(),
+                };
+                await setDoc(doc(db, "users", firebaseUser.uid), initProfile);
+                setCurrentUserProfile(initProfile);
+              } else {
+                const requestId = `req_${Date.now()}_${firebaseUser.uid.substr(0, 5)}`;
+                const requestData = {
+                  id: requestId,
+                  userId: firebaseUser.uid,
+                  userEmail: firebaseUser.email || "",
+                  userName: joinedName,
+                  familyId: targetFamilyId,
+                  familyName: targetFamilyName,
+                  role: pendingRole,
+                  status: "pending",
+                  createdAt: new Date().toISOString(),
+                };
+                await setDoc(doc(db, "join_requests", requestId), requestData);
+
+                const initProfile: UserProfile = {
+                  uid: firebaseUser.uid,
+                  email: firebaseUser.email || "",
+                  displayName: joinedName,
+                  photoURL: "✿",
+                  color: "#B4C3B2",
+                  familyId: null,
+                  role: pendingRole,
+                  stars: 0,
+                  createdAt: serverTimestamp(),
+                };
+                await setDoc(doc(db, "users", firebaseUser.uid), initProfile);
+                setCurrentUserProfile(initProfile);
+
+                toast.success(`🎉 申請已送出！請通知管理員媽媽前往「家庭成員 ➡️ 邀請與加入審核」面板按下核准！`);
+              }
             }
           } else {
-            // First time logging in - set initial null family profile to trigger onboarding
-            const initProfile: UserProfile = {
-              uid: firebaseUser.uid,
-              email: firebaseUser.email || "",
-              displayName: firebaseUser.displayName || "家庭成員",
-              photoURL: "✿",
-              color: "#B4C3B2",
-              familyId: null,
-              role: UserRole.MEMBER, // Defaut transient member role until onboarding selection
-              stars: 0,
-              createdAt: serverTimestamp(),
-            };
-            await setDoc(userDocRef, initProfile);
-            setCurrentUserProfile(initProfile);
+            // Standard loading flow
+            if (userSnap.exists()) {
+              const profileData = userSnap.data() as UserProfile;
+              setCurrentUserProfile(profileData);
+              if (profileData.familyId) {
+                setActivePage("home");
+                setOnboardingChoice("none");
+              }
+            } else {
+              const initProfile: UserProfile = {
+                uid: firebaseUser.uid,
+                email: firebaseUser.email || "",
+                displayName: firebaseUser.displayName || "家庭成員",
+                photoURL: "✿",
+                color: "#B4C3B2",
+                familyId: null,
+                role: UserRole.MEMBER,
+                stars: 0,
+                createdAt: serverTimestamp(),
+              };
+              await setDoc(userDocRef, initProfile);
+              setCurrentUserProfile(initProfile);
+            }
           }
         } catch (err) {
           console.error("Auth state loading error:", err);
@@ -919,23 +1105,47 @@ export default function App() {
       if (err instanceof Error && (err.message.includes("auth/cancelled-popup-request") || (err as any).code === "auth/cancelled-popup-request")) {
         console.warn("Popup login was cancelled or replaced by a new login flow.");
       } else {
-        alert("登入失敗，請確認彈出視窗未被阻擋。如果是在預覽框架內，請點選右上角「在新分頁打開」以順利進行驗證！");
+        toast.error("登入失敗\n請重新嘗試 Google 登入。\n若持續失敗請聯絡管理員。");
       }
     } finally {
       setIsLoggingIn(false);
     }
   };
 
-  const handleSandboxLogin = async () => {
-    if (isSandboxLoggingIn) return;
-    setIsSandboxLoggingIn(true);
+  const handleLandingPageJoin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!joinFamilyId.trim()) {
+      toast.error("⚠️ 請輸入家庭邀請碼！");
+      return;
+    }
+    if (!joinDisplayName.trim()) {
+      toast.error("⚠️ 請輸入您的姓名！");
+      return;
+    }
+    if (isOnboardingBusy) return;
+
+    setIsOnboardingBusy(true);
     try {
-      await signInAnonymously(auth);
-    } catch (err) {
-      console.error("Sandbox login error:", err);
-      alert("沙盒免密密防阻擋登入失敗，請稍後再試。");
+      // Save joining details to localStorage
+      localStorage.setItem("pending_join_family_id", joinFamilyId.trim());
+      localStorage.setItem("pending_join_display_name", joinDisplayName.trim());
+      localStorage.setItem("pending_join_role", joinRole);
+      localStorage.setItem("pending_join_bind_google", bindGoogle ? "yes" : "no");
+
+      // Verify that Google redirect/login popup should proceed
+      const provider = new GoogleAuthProvider();
+      await signInWithPopup(auth, provider);
+    } catch (err: any) {
+      console.error("Landing page invite join error:", err);
+      // Clean up local storage items
+      localStorage.removeItem("pending_join_family_id");
+      localStorage.removeItem("pending_join_display_name");
+      localStorage.removeItem("pending_join_role");
+      localStorage.removeItem("pending_join_bind_google");
+      
+      toast.error("登入失敗\n請重新嘗試 Google 登入。\n若持續失敗請聯絡管理員。");
     } finally {
-      setIsSandboxLoggingIn(false);
+      setIsOnboardingBusy(false);
     }
   };
 
@@ -2706,36 +2916,121 @@ function generateTemplateDates(startDateStr: string, weekdays: number[], count: 
             <p className="text-sm text-gray-500 font-medium">比行事曆更貼心，比記事本更有趣。用愛串聯全家生活！</p>
           </div>
 
-          <div className="bg-amber-50/50 border border-amber-200 rounded-xl p-4 text-xs text-left leading-relaxed text-amber-900 space-y-1.5">
-            <span className="font-extrabold text-amber-850 flex items-center gap-1.5">
-              💡 安全與連接提醒：
-            </span>
-            <p>
-              本系統採用 <b>Google 快速認證安全登入</b>。初次登入會引導設定您在家庭的角色。若安全視窗被瀏覽器攔截，可點選右上角的「在新分頁打開」連結正常認證。
-            </p>
+          {/* Tab Navigation Pill */}
+          <div className="flex bg-[#FAF8F5] border border-[#EFEAE2] p-1.5 rounded-2xl select-none">
+            <button
+              type="button"
+              onClick={() => setLoginTab("google")}
+              className={`flex-1 py-2.5 text-xs font-black rounded-xl transition cursor-pointer flex items-center justify-center gap-1.5 ${
+                loginTab === "google"
+                  ? "bg-indigo-600 text-white shadow-md"
+                  : "text-gray-500 hover:text-gray-855"
+              }`}
+            >
+              🔑 Google 快速登入
+            </button>
+            <button
+              type="button"
+              onClick={() => setLoginTab("invite")}
+              className={`flex-1 py-2.5 text-xs font-black rounded-xl transition cursor-pointer flex items-center justify-center gap-1.5 ${
+                loginTab === "invite"
+                  ? "bg-emerald-600 text-white shadow-md"
+                  : "text-gray-500 hover:text-gray-855"
+              }`}
+            >
+              ✉️ 家庭邀請碼加入
+            </button>
           </div>
 
-          <div className="space-y-3">
-            <button
-              onClick={handleGoogleLogin}
-              disabled={isLoggingIn || isSandboxLoggingIn}
-              className="w-full py-3.5 bg-indigo-600 hover:bg-indigo-700 active:translate-y-0.5 text-white font-bold rounded-2xl shadow-md cursor-pointer transition flex items-center justify-center gap-2.5 tracking-wide text-sm disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              <Sparkles className="h-4.5 w-4.5 text-indigo-200" /> {isLoggingIn ? "正在啟動 Google 登入..." : "使用 Google 快速登入"}
-            </button>
+          {loginTab === "google" && (
+            <div className="space-y-5 animate-in fade-in duration-200">
+              <div className="bg-amber-50/60 border border-amber-200 rounded-xl p-4 text-xs text-left leading-relaxed text-amber-900 space-y-1.5">
+                <span className="font-extrabold text-amber-850 flex items-center gap-1.5 select-none">
+                  💡 安全與連接提醒：
+                </span>
+                <p>
+                  本系統採用 <b>Google 快速認證安全登入</b>。初次登入會引導設定您在家庭的角色。若安全視窗被瀏覽器攔截，可點選右上角的「在新分頁打開」連結正常認證。
+                </p>
+              </div>
 
-            <div className="relative flex py-1 items-center justify-center">
-              <span className="text-[11px] font-bold text-gray-400">─── 框架限制解決方案 ───</span>
+              <button
+                onClick={handleGoogleLogin}
+                disabled={isLoggingIn || isOnboardingBusy}
+                className="w-full py-3.5 bg-indigo-600 hover:bg-indigo-700 active:translate-y-0.5 text-white font-extrabold rounded-2xl shadow-md cursor-pointer transition flex items-center justify-center gap-2.5 tracking-wide text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <Sparkles className="h-4.5 w-4.5 text-indigo-200" />
+                {isLoggingIn ? "正在啟動 Google 登入..." : "使用 Google 快速登入"}
+              </button>
             </div>
+          )}
 
-            <button
-              onClick={handleSandboxLogin}
-              disabled={isLoggingIn || isSandboxLoggingIn}
-              className="w-full py-3 bg-[#FAF8F5] hover:bg-[#F4EFE6] text-[#6B4B3E] font-extrabold rounded-2xl border border-[#EFEAE2] active:translate-y-0.5 cursor-pointer transition flex items-center justify-center gap-2.5 tracking-wide text-xs disabled:opacity-50 disabled:cursor-not-allowed shadow-inner"
-            >
-              <span>🚪 免跳窗沙盒登入 (防瀏覽器阻擋模式)</span>
-            </button>
-          </div>
+          {loginTab === "invite" && (
+            <form onSubmit={handleLandingPageJoin} className="space-y-4 text-left animate-in fade-in duration-200">
+              <div>
+                <label className="block text-xs font-extrabold text-gray-500 mb-1">
+                  家庭邀請碼
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="請輸入 6 位代碼（例如：AB12CD）"
+                  value={joinFamilyId}
+                  onChange={(e) => setJoinFamilyId(e.target.value)}
+                  className="w-full text-sm border border-gray-205 rounded-xl px-3.5 py-2.5 focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-[#FAF8F5]/50"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-extrabold text-gray-500 mb-1">
+                  姓名 / 稱呼
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="例如：爸爸、媽媽、小華"
+                  value={joinDisplayName}
+                  onChange={(e) => setJoinDisplayName(e.target.value)}
+                  className="w-full text-sm border border-gray-205 rounded-xl px-3.5 py-2.5 focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-[#FAF8F5]/50"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-extrabold text-gray-500 mb-2">
+                  是否綁定 Google
+                </label>
+                <div className="flex flex-col gap-2 bg-[#FAF8F5] border border-[#EFEAE2] rounded-xl p-3">
+                  <label className="flex items-center gap-2 text-xs font-bold text-gray-700 cursor-pointer select-none">
+                    <input
+                      type="radio"
+                      name="bindGoogle"
+                      checked={bindGoogle === true}
+                      onChange={() => setBindGoogle(true)}
+                      className="accent-indigo-600 h-4 w-4"
+                    />
+                    <span>是（推薦）</span>
+                  </label>
+                  <label className="flex items-center gap-2 text-xs font-semibold text-gray-500 cursor-pointer select-none">
+                    <input
+                      type="radio"
+                      name="bindGoogle"
+                      checked={bindGoogle === false}
+                      onChange={() => setBindGoogle(false)}
+                      className="accent-indigo-600 h-4 w-4"
+                    />
+                    <span>否（訪客模式 - 本機儲存，仍需單次 Google 安全核實驗證）</span>
+                  </label>
+                </div>
+              </div>
+
+              <button
+                type="submit"
+                disabled={isOnboardingBusy}
+                className="w-full mt-2 py-3.5 bg-emerald-600 hover:bg-emerald-700 active:translate-y-0.5 text-white font-extrabold rounded-2xl shadow-md cursor-pointer transition flex items-center justify-center gap-2.5 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isOnboardingBusy ? "正在進行安全性確認與進駐..." : "加入家庭"}
+              </button>
+            </form>
+          )}
         </div>
       </div>
     );
@@ -3248,6 +3543,7 @@ function generateTemplateDates(startDateStr: string, weekdays: number[], count: 
                   onDeleteConfiguredMode={handleDeleteConfiguredMode}
                   onChangePage={setActivePage}
                   dataLoaded={dataLoaded}
+                  activeFamily={activeFamily}
                 />
               )}
 
@@ -3429,6 +3725,7 @@ function generateTemplateDates(startDateStr: string, weekdays: number[], count: 
                         onDeleteConfiguredMode={handleDeleteConfiguredMode}
                         onChangePage={setActivePage}
                         dataLoaded={dataLoaded}
+                        activeFamily={activeFamily}
                       />
                     </div>
                   )}

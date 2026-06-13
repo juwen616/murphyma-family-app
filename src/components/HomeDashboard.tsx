@@ -76,6 +76,7 @@ interface HomeDashboardProps {
     favorites: boolean;
     redemptions: boolean;
   };
+  activeFamily?: any;
 }
 
 function ShimmerSkeleton({ count = 3, className = "" }: { count?: number; className?: string }) {
@@ -233,6 +234,7 @@ export default function HomeDashboard({
   onDeleteConfiguredMode,
   onChangePage,
   dataLoaded,
+  activeFamily,
 }: HomeDashboardProps) {
   const [newAnnTitle, setNewAnnTitle] = useState("");
   const [newAnnContent, setNewAnnContent] = useState("");
@@ -337,16 +339,6 @@ export default function HomeDashboard({
   const [isUpcomingTasksExpanded, setIsUpcomingTasksExpanded] = useState(true);
   const [isBirthdayHelperExpanded, setIsBirthdayHelperExpanded] = useState(true);
   const [isRecentlyCompletedExpanded, setIsRecentlyCompletedExpanded] = useState(false);
-
-  const [disableMomBirthdayAlert, setDisableMomBirthdayAlert] = useState<boolean>(() => {
-    return localStorage.getItem("disable_mom_birthday_alert") === "true";
-  });
-
-  const handleToggleMomBirthdayAlert = (val: boolean) => {
-    localStorage.setItem("disable_mom_birthday_alert", String(val));
-    setDisableMomBirthdayAlert(val);
-    toast.success(val ? "📴 已關閉媽媽生日放大提醒" : "🔔 已開啟媽媽生日放大提醒");
-  };
 
   const isParent = currentUser.role === UserRole.ADMIN || currentUser.role === UserRole.PARENT;
 
@@ -665,24 +657,6 @@ export default function HomeDashboard({
   const todayDateStr = simulatedTodayDate || getLocalToday();
   const todayHoliday = getHolidayForDate(todayDateStr);
 
-  // Checkbox preparations state for family birthdays (Keyed by `${member.uid}-${targetYear}-[category]`)
-  const [bdayChecklist, setBdayChecklist] = useState<{ [key: string]: boolean }>(() => {
-    try {
-      const saved = localStorage.getItem("family_birthday_checklist");
-      return saved ? JSON.parse(saved) : {};
-    } catch (e) {
-      return {};
-    }
-  });
-
-  const toggleBdayCheckItem = (key: string) => {
-    setBdayChecklist((prev) => {
-      const updated = { ...prev, [key]: !prev[key] };
-      localStorage.setItem("family_birthday_checklist", JSON.stringify(updated));
-      return updated;
-    });
-  };
-
   // Dynamic Birthday Calculations (Auto-recurring, age calculated based on current calendar year)
   const birthdayReminders = useMemo(() => {
     const todayStars: any[] = [];
@@ -738,12 +712,8 @@ export default function HomeDashboard({
         birthdayStr: `${birthMonth}/${birthDay}`,
       };
 
-      const skipMomAlert = isMom(member.displayName) && disableMomBirthdayAlert;
-
       if (diffDays === 0) {
-        if (!skipMomAlert) {
-          todayStars.push(item);
-        }
+        todayStars.push(item);
       } else {
         // 14 days, 7 days, 3 days, 1 day checklists:
         if ([14, 7, 3, 1].includes(diffDays)) {
@@ -751,9 +721,7 @@ export default function HomeDashboard({
         }
         // 7 days countdown short banner warning:
         if (diffDays <= 7 && diffDays > 0) {
-          if (!skipMomAlert) {
-            countdownList.push(item);
-          }
+          countdownList.push(item);
         }
       }
 
@@ -764,7 +732,7 @@ export default function HomeDashboard({
     allUpcoming.sort((a, b) => a.diffDays - b.diffDays);
 
     return { todayStars, warningCards, countdownList, allUpcoming };
-  }, [familyMembers, todayDateStr, disableMomBirthdayAlert]);
+  }, [familyMembers, todayDateStr]);
 
   const getInvolvedMembers = (evt: CalendarEvent) => {
     const list: string[] = [];
@@ -1212,173 +1180,173 @@ export default function HomeDashboard({
     <div id="home-dashboard" className="space-y-6 select-none font-sans">
       {/* 💻 DESKTOP-ONLY INTERFACE CONTEXT */}
       <div className="hidden md:block space-y-6">
-        {/* 🏡 SATELLITE SYSTEM HEADER BANNER */}
-      <div
-        id="mode-hero-banner"
-        style={{
-          background: "#F8D8D0",
-          border: "1px solid #F0C4B8",
-          borderRadius: "24px",
-          maxHeight: "120px",
-          minHeight: "100px",
-        }}
-        className="p-5 flex items-center justify-between shadow-sm transition-all duration-300 relative overflow-hidden"
-      >
-        <div className="flex items-center gap-3 relative z-10 font-sans">
-          <div className="h-10 w-10 bg-white/50 backdrop-blur rounded-2xl flex items-center justify-center text-xl shrink-0">
-            🏡
-          </div>
-          <div className="space-y-1">
-            <h1 className="text-sm md:text-base font-black text-[#6B4B3E]">
-              今天是 {dateLabel}
-            </h1>
-            <p className="text-[11px] md:text-xs text-[#8A5F4E] font-bold flex items-center gap-1.5 flex-wrap leading-tight">
-              <span>{bannerText}</span>
-              <span className="bg-white/40 px-2 py-0.5 rounded-full text-[10px] uppercase tracking-wider scale-95">
-                {getSystemModeName(systemMode)}
-              </span>
-            </p>
-            {activeModeConfig && (() => {
-              const start = new Date(activeModeConfig.startDate);
-              const end = new Date(activeModeConfig.endDate);
-              const today = new Date(todayDateStr);
-              start.setHours(0,0,0,0);
-              end.setHours(0,0,0,0);
-              today.setHours(0,0,0,0);
-              const elapsedDays = Math.round((today.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1;
-              const remainingDays = Math.round((end.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)) + 1;
-
-              const emoji = activeModeConfig.type === SystemMode.TRAVEL ? "✈️"
-                : activeModeConfig.type === SystemMode.EXAM ? "📚"
-                : activeModeConfig.type === SystemMode.VACATION ? "🏕️" : "✨";
-
-              const text = activeModeConfig.type === SystemMode.EXAM 
-                ? `目前進行中：${activeModeConfig.name}（剩${remainingDays}天）`
-                : `目前進行中：${activeModeConfig.name}（第${elapsedDays}天）`;
-
-              return (
-                <div className="mt-1 flex items-center gap-1.5 bg-white/40 border border-white/20 px-2.5 py-0.5 rounded-full text-[10px] font-black text-[#6B4B3E] shrink-0 w-fit">
-                  <span>{emoji}</span>
-                  <span>{text}</span>
-                </div>
-              );
-            })()}
-          </div>
-        </div>
-
-        {/* Aggregate score info for kids */}
-        <div className="hidden sm:flex bg-white/40 backdrop-blur-md px-3.5 py-2 rounded-xl text-center flex-col justify-center border border-white/20 select-none font-sans">
-          <span className="text-[9px] uppercase tracking-wide text-[#6B4B3E] font-black">個人星星庫累積</span>
-          <span className="text-[#6B4B3E] text-sm font-black tracking-tight flex items-center justify-center gap-1 mt-0.5">
-            <Star className="h-3 w-3 fill-[#EAA59E] stroke-[#EAA59E] inline-block" />
-            {currentUser.role === UserRole.KID ? `${currentUser.stars || 0} 顆` : "家長守護中"}
-          </span>
-        </div>
-      </div>
-
-      {/* 📢 家裡公告 */}
-      <section
-        style={{
-          background: "#FFFFFF",
-          border: "1px solid #E8E2D8",
-          borderRadius: "24px",
-          boxShadow: "0 4px 12px rgba(0,0,0,0.03)",
-        }}
-        className="p-5 font-sans"
-      >
-        <div className="flex justify-between items-center pb-4 mb-4 border-b border-[#F7F3EB] select-none">
-          <div className="flex items-center gap-2">
-            <span className="text-lg">📢</span>
-            <h3 className="text-sm font-black text-[#3C332D]">家裡公告</h3>
-          </div>
-          {isParent && (
-            <button
-              type="button"
-              onClick={() => {
-                setEditingAnnouncement(null);
-                setNewAnnTitle("");
-                setNewAnnContent("");
-                setShowAddAnnModal(true);
-              }}
-              className="flex items-center gap-1 px-3 py-1 text-xs font-bold text-[#5B7283] bg-[#EAF0EB] rounded-lg hover:bg-[#DEE7E0] transition cursor-pointer"
-            >
-              <Plus className="h-3.5 w-3.5" />
-              <span>發佈</span>
-            </button>
-          )}
-        </div>
-
-        <div className="space-y-4">
-          {announcements.length === 0 ? (
-            <div className="text-center py-8 bg-[#FAF8F5] rounded-xl border border-dashed border-[#EFEAE2]">
-              <p className="text-xs text-gray-400 font-bold">目前沒有公告事項</p>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {announcements.map((ann) => (
-                <div
-                  key={ann.id}
-                  className="relative bg-[#FAF8F5] p-4 rounded-xl border border-[#EFEAE2] transition text-left flex flex-col justify-between"
-                >
-                  <div>
-                    {isParent && (
-                      <div className="absolute right-2.5 top-2.5 flex items-center gap-1.5 z-10">
-                        <button
-                          onClick={(e) => {
-                            setEditingAnnouncement(ann);
-                            setNewAnnTitle(ann.title);
-                            setNewAnnContent(ann.content);
-                            setShowAddAnnModal(true);
-                          }}
-                          className="p-1.5 text-gray-400 hover:text-[#7C6354] hover:bg-gray-100 rounded-lg cursor-pointer transition"
-                          title="修改公告"
-                        >
-                          <Edit3 className="h-4 w-4" />
-                        </button>
-                        <button
-                          onClick={(e) => {
-                            setAnnouncementToDelete(ann);
-                            setDeleteAnnError(null);
-                            setShowDeleteAnnConfirm(true);
-                          }}
-                          className="p-1.5 text-gray-400 hover:text-rose-500 hover:bg-rose-50 rounded-lg cursor-pointer transition"
-                          title="刪除"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </button>
-                      </div>
-                    )}
-                    <h4 className="font-bold text-[#3C332D] text-sm pr-16 mb-2 flex items-center gap-1.5">
-                      📌 {ann.title}
-                    </h4>
-                    <p className="text-xs text-gray-650 leading-relaxed font-semibold pr-1 break-words whitespace-pre-wrap">
-                      {ann.content}
-                    </p>
-                  </div>
-                  
-                  <div className="mt-4">
-                    <div className="pt-2 border-t border-[#F7F3EB] flex justify-between items-center text-[10px] text-gray-400 font-bold">
-                      <span>發佈人: {ann.creatorName}</span>
-                      <span>
-                        {ann.createdAt?.seconds
-                          ? new Date(ann.createdAt.seconds * 1000).toLocaleDateString("zh-TW")
-                          : "剛剛"}
-                      </span>
-                    </div>
-
-
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      </section>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
         
         {/* Left Column (Main schedules - 60%+ Wide layout) */}
         <div className="lg:col-span-8 space-y-6">
+
+          {/* 🏡 SATELLITE SYSTEM HEADER BANNER */}
+          <div
+            id="mode-hero-banner"
+            style={{
+              background: "#FFF6F4",
+              border: "1px solid #F3CDC4",
+              borderRadius: "24px",
+              boxShadow: "0 4px 12px rgba(230, 110, 95, 0.03)",
+              minHeight: "100px",
+            }}
+            className="p-5 flex items-center justify-between shadow-xs transition-all duration-300 relative overflow-hidden"
+          >
+            <div className="flex items-center gap-3 relative z-10 font-sans">
+              <div className="h-10 w-10 bg-white/50 backdrop-blur rounded-2xl flex items-center justify-center text-xl shrink-0">
+                🏡
+              </div>
+              <div className="space-y-1 text-left">
+                <h1 className="text-sm md:text-base font-black text-[#6B4B3E]">
+                  今天是 {dateLabel}
+                </h1>
+                <p className="text-[11px] md:text-xs text-[#8A5F4E] font-bold flex items-center gap-1.5 flex-wrap leading-tight">
+                  <span>{bannerText}</span>
+                  <span className="bg-white/40 px-2 py-0.5 rounded-full text-[10px] uppercase tracking-wider scale-95">
+                    {getSystemModeName(systemMode)}
+                  </span>
+                </p>
+                {activeModeConfig && (() => {
+                  const start = new Date(activeModeConfig.startDate);
+                  const end = new Date(activeModeConfig.endDate);
+                  const today = new Date(todayDateStr);
+                  start.setHours(0,0,0,0);
+                  end.setHours(0,0,0,0);
+                  today.setHours(0,0,0,0);
+                  const elapsedDays = Math.round((today.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+                  const remainingDays = Math.round((end.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+
+                  const emoji = activeModeConfig.type === SystemMode.TRAVEL ? "✈️"
+                    : activeModeConfig.type === SystemMode.EXAM ? "📚"
+                    : activeModeConfig.type === SystemMode.VACATION ? "🏕️" : "✨";
+
+                  const text = activeModeConfig.type === SystemMode.EXAM 
+                    ? `目前進行中：${activeModeConfig.name}（剩${remainingDays}天）`
+                    : `目前進行中：${activeModeConfig.name}（第${elapsedDays}天）`;
+
+                  return (
+                    <div className="mt-1 flex items-center gap-1.5 bg-white/40 border border-white/20 px-2.5 py-0.5 rounded-full text-[10px] font-black text-[#6B4B3E] shrink-0 w-fit">
+                      <span>{emoji}</span>
+                      <span>{text}</span>
+                    </div>
+                  );
+                })()}
+              </div>
+            </div>
+
+            {/* 🏡 {家庭名稱}的每一天 */}
+            <div className="hidden sm:flex bg-white/40 backdrop-blur-md px-4 py-2.5 rounded-xl text-center flex-col justify-center border border-white/20 select-none font-sans shrink-0">
+              <span className="text-[#6B4B3E] text-xs font-black tracking-tight flex items-center justify-center gap-1.5">
+                🏡 {activeFamily?.name ? activeFamily.name : "我們家"}的每一天
+              </span>
+            </div>
+          </div>
+
+          {/* 📢 家裡公告 */}
+          <section
+            id="home-announcements"
+            style={{
+              background: "#FFF6F4",
+              border: "1px solid #F3CDC4",
+              borderRadius: "24px",
+              boxShadow: "0 4px 12px rgba(230, 110, 95, 0.03)",
+              minHeight: "100px",
+            }}
+            className="p-4 font-sans relative flex flex-col justify-between"
+          >
+            <div className="flex justify-between items-center pb-2 border-b border-[#F5D8D0]/60 select-none">
+              <div className="flex items-center gap-2">
+                <span className="text-sm">📢</span>
+                <h3 className="text-xs font-black text-[#3C332D]">家裡公告</h3>
+              </div>
+              {isParent && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEditingAnnouncement(null);
+                    setNewAnnTitle("");
+                    setNewAnnContent("");
+                    setShowAddAnnModal(true);
+                  }}
+                  className="flex items-center gap-1 px-3.5 py-1 text-[10px] font-bold text-[#5B7283] bg-[#EAF0EB] rounded-lg hover:bg-[#DEE7E0] transition cursor-pointer"
+                >
+                  <Plus className="h-3 w-3" />
+                  <span>發佈</span>
+                </button>
+              )}
+            </div>
+
+            <div className="mt-3 flex-1 flex flex-col justify-center">
+              {announcements.length === 0 ? (
+                <div className="text-center py-4 bg-white/40 border border-dashed border-[#F3CDC4]/50 rounded-2xl">
+                  <p className="text-xs text-gray-400 font-bold">目前沒有公告事項</p>
+                </div>
+              ) : (
+                (() => {
+                  const ann = announcements[0];
+                  return (
+                    <div
+                      key={ann.id}
+                      onClick={() => setSelectedAnnouncement(ann)}
+                      className="relative block text-left cursor-pointer transition hover:scale-[1.002] flex-1 flex flex-col justify-between"
+                    >
+                      <div className="flex items-start gap-2.5 min-w-0 pr-16">
+                        <span className="text-lg shrink-0 mt-0.5">📌</span>
+                        <div className="min-w-0 flex-1">
+                          <h4 className="text-sm md:text-base font-black text-rose-955 leading-tight tracking-tight">
+                            {ann.title}
+                          </h4>
+                          {ann.content && (
+                            <p className="text-xs md:text-sm font-bold text-rose-900/90 mt-1 break-words whitespace-pre-wrap leading-snug">
+                              {ann.content}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                      
+                      {isParent && (
+                        <div className="flex items-center justify-end gap-1.5 mt-2" onClick={(e) => e.stopPropagation()}>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setEditingAnnouncement(ann);
+                              setNewAnnTitle(ann.title);
+                              setNewAnnContent(ann.content);
+                              setShowAddAnnModal(true);
+                            }}
+                            className="p-1 px-2 text-[10px] text-rose-500 hover:text-rose-800 bg-white/75 hover:bg-white border border-rose-200/50 rounded-lg cursor-pointer transition flex items-center gap-1 font-bold"
+                            title="修改公告"
+                          >
+                            <Edit3 className="h-3 w-3" />
+                            <span>修改</span>
+                          </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setAnnouncementToDelete(ann);
+                              setDeleteAnnError(null);
+                              setShowDeleteAnnConfirm(true);
+                            }}
+                            className="p-1 px-2 text-[10px] text-rose-500 hover:text-rose-800 bg-rose-100 hover:bg-rose-205 rounded-lg cursor-pointer transition flex items-center gap-1 font-bold"
+                            title="刪除"
+                          >
+                            <Trash2 className="h-3 w-3" />
+                            <span>刪除</span>
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()
+              )}
+            </div>
+          </section>
 
           {/* Kids-Only Dashboards for Stars and Wills Goal Progress */}
           {currentUser.role === UserRole.KID && (
@@ -1560,44 +1528,45 @@ export default function HomeDashboard({
           {/* 1. 🏡 今日重點 */}
           <section
             style={{
-              background: "#FFFFFF",
-              border: "1px solid #E8E2D8",
+              background: "#FFF6F4",
+              border: "1px solid #F3CDC4",
               borderRadius: "24px",
-              boxShadow: "0 4px 12px rgba(0,0,0,0.02)",
+              boxShadow: "0 4px 12px rgba(230, 110, 95, 0.03)",
+              minHeight: "100px",
             }}
-            className="p-5"
+            className="p-4"
           >
             <div 
               onClick={() => setIsTodayPointsExpanded(!isTodayPointsExpanded)}
-              className="flex items-center justify-between pb-3.5 border-b border-[#F7F3EB] cursor-pointer select-none"
+              className="flex items-center justify-between pb-2 border-b border-[#F5D8D0]/60 cursor-pointer select-none"
             >
               <div className="flex items-center gap-2">
-                <span className="text-base font-sans">🏡</span>
-                <h2 className="text-sm font-black text-[#3C332D]">今日重點</h2>
+                <span className="text-base font-sans font-black">🏡</span>
+                <h2 className="text-xs font-black text-[#3C332D]">今日重點</h2>
                 {isTodayPointsExpanded ? <ChevronUp className="h-4 w-4 text-gray-400" /> : <ChevronDown className="h-4 w-4 text-gray-400" />}
               </div>
-              <span className="text-[11px] font-bold text-gray-500 font-mono bg-amber-50 border border-amber-200/50 px-2.5 py-0.5 rounded-full">
+              <span className="text-[10px] font-bold text-gray-500 font-mono bg-amber-50 border border-amber-200/50 px-2 py-0.5 rounded-full">
                 {todayDateStr}
               </span>
             </div>
 
             {isTodayPointsExpanded && (
-              <div className="mt-4 space-y-4">
+              <div className="mt-3 space-y-3">
                 {/* Dynamic Holiday / Festival Banner Alert */}
                 {todayHoliday && (
-                  <div className={`p-4 rounded-2xl border flex items-center gap-3.5 select-none ${
+                  <div className={`p-3 rounded-xl border flex items-center gap-3 select-none ${
                     todayHoliday.isNational
                       ? "bg-gradient-to-r from-rose-50 to-rose-100/40 border-rose-200/80 text-[#D32F2F] shadow-sm"
                       : "bg-gradient-to-r from-purple-50 to-purple-100/40 border-purple-200/80 text-[#7B1FA2] shadow-sm"
                   }`}>
-                    <div className="text-3xl shrink-0 animate-bounce">
+                    <div className="text-2xl shrink-0">
                       {todayHoliday.emoji}
                     </div>
                     <div>
-                      <h3 className="text-sm font-black tracking-wide">
+                      <h3 className="text-xs font-black tracking-wide">
                         今天是 {todayHoliday.name}
                       </h3>
-                      <p className="text-[11px] font-bold opacity-85 mt-0.5">
+                      <p className="text-[10px] font-bold opacity-85 mt-0.5">
                         {todayHoliday.isNational
                           ? "🎉 國慶與放假節日，願你有一段美好快樂的時光！"
                           : "🎈 充滿歡樂的特別日子，和家人一同感受儀式感吧！"}
@@ -1609,96 +1578,75 @@ export default function HomeDashboard({
                 {dataLoaded && !dataLoaded.events ? (
                   <ShimmerSkeleton count={2} />
                 ) : todayEvents.length === 0 ? (
-                  (() => {
-                    const hr = new Date().getHours();
-                    const incompleteTasks = tasks && tasks.some((t) => t.status !== TaskStatus.APPROVED);
-                    
-                    let emoji = "🌞";
-                    let title = "新的一天開始囉！";
-                    let subtitle = "今天也一起加油吧！";
-
-                    if (hr >= 5 && hr < 12) {
-                      emoji = "🌞";
-                      title = "新的一天開始囉！今天也一起加油吧！";
-                      subtitle = "🌈 今天沒有特殊行程，記得保持好心情唷！";
-                    } else if (hr >= 12 && hr < 18) {
-                      emoji = "💪";
-                      title = "今天進行得如何呢？";
-                      subtitle = "繼續努力！";
-                    } else if (hr >= 18 && hr < 22) {
-                      if (!incompleteTasks) {
-                        emoji = "🎉";
-                        title = "今天的事情都完成囉！";
-                        subtitle = "好好休息一下吧～";
-                      } else {
-                        emoji = "🎯";
-                        title = "今天辛苦了";
-                        subtitle = "看看還有沒有未完成事項吧！";
-                      }
-                    } else {
-                      // hr >= 22 || hr < 5
-                      if (!incompleteTasks) {
-                        emoji = "🎉";
-                        title = "今天的事情都完成囉！";
-                        subtitle = "好好休息一下吧～";
-                      } else {
-                        emoji = "🌙";
-                        title = "今天差不多結束囉";
-                        subtitle = "早點休息，明天再加油！";
-                      }
-                    }
-
-                    return (
-                      <div className="text-center py-8 bg-[#FAF8F5] rounded-xl border border-dashed border-[#EFEAE2] flex flex-col items-center justify-center font-sans">
-                        <span className="text-2xl mb-1.5">{emoji}</span>
-                        <p className="text-sm font-black text-[#6B4B3E]">{title}</p>
-                        <p className="text-xs text-gray-400 font-bold mt-1 max-w-[90%]">{subtitle}</p>
-                      </div>
-                    );
-                  })()
+                  <div className="text-center py-5 bg-[#FAF8F5] rounded-2xl border border-dashed border-[#EFEAE2] flex flex-col items-center justify-center font-sans">
+                    <span className="text-[20px] mb-1">🎯</span>
+                    <p className="text-sm font-black text-[#6B4B3E]">今天辛苦了</p>
+                    <p className="text-xs text-gray-400 font-bold mt-0.5">看看還有沒有未完成事項吧！</p>
+                  </div>
                 ) : (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                     {todayEvents.map((evt) => {
                       const isBday = (evt as any).isBirthday;
                       const timeStatus = parseEventTime(evt.time);
+
+                      if (isBday) {
+                        return (
+                          <div
+                            key={evt.id}
+                            style={{
+                              background: "#FFF5F6",
+                              borderColor: "#F2D1D4",
+                            }}
+                            className="p-3 rounded-xl border flex items-center gap-3"
+                          >
+                            <div className="h-8 w-8 rounded-full flex items-center justify-center text-lg shrink-0 border bg-rose-100 border-rose-300">
+                              🎂
+                            </div>
+                            <div>
+                              <h4 className="text-xs font-black text-rose-800">
+                                {((evt as any).birthdayMemberName || evt.title.replace("🎂", "").trim().replace("生日", "")).trim()} 生日快樂！
+                              </h4>
+                            </div>
+                          </div>
+                        );
+                      }
+
                       return (
                         <div
                           key={evt.id}
                           style={{
-                            background: isBday ? "#FFF5F6" : "#FAF8F5",
-                            borderColor: isBday ? "#F2D1D4" : "#EFEAE2",
+                            background: "#FAF8F5",
+                            borderColor: "#EFEAE2",
                           }}
-                          className="p-4 rounded-2xl border flex items-center gap-3.5 hover:scale-[1.01] transition-transform"
+                          className="p-3 rounded-xl border flex items-center gap-3 hover:scale-[1.01] transition-transform"
                         >
-                          <div className={`h-10 w-10 rounded-full flex items-center justify-center text-xl shrink-0 border ${
-                            isBday ? "bg-rose-100 border-rose-300" : "bg-white border-[#E8E2D8]"
-                          }`}>
-                            {isBday ? "🎂" : getEventIcon(evt.title)}
+                          <div className="h-8 w-8 rounded-full flex items-center justify-center text-lg shrink-0 border bg-white border-[#E8E2D8]">
+                            {getEventIcon(evt.title)}
                           </div>
-                          <div className="min-w-0 flex-grow">
-                            <h4 className={`text-sm truncate font-black ${isBday ? "text-rose-800" : "text-[#3C332D]"}`}>
+                          <div className="min-w-0 flex-grow text-left">
+                            <h4 className="text-xs truncate font-black text-[#3C332D]">
                               {isMultiDayEvent(evt)
                                 ? `${getEventEmoji(evt.title)} ${evt.title} Day${getMultiDayLabel(evt.startDate!, evt.endDate!, todayDateStr).dayIndex}`
                                 : evt.title
                               }
                             </h4>
-                            <div className="flex flex-wrap items-center gap-1.5 mt-0.5">
-                              <p className={`text-xs font-mono ${isBday ? "text-rose-500" : "text-gray-500"} font-bold`}>
-                                {isBday ? "全天生日慶祝 🎉" : (evt.time || "全天時間")}
+                            <div className="flex flex-wrap items-center gap-1 mt-0.5">
+                              <p className="text-[10px] font-mono text-gray-500 font-bold">
+                                {evt.time || "全天時間"}
                               </p>
                               {timeStatus.hasTime && timeStatus.isOngoing && (
-                                <span className="text-emerald-755 bg-emerald-50 border border-emerald-200 rounded px-1.5 py-0.2 text-[9px] font-black tracking-wider flex items-center gap-0.5 animate-pulse">
+                                <span className="text-emerald-755 bg-emerald-50 border border-emerald-200 rounded px-1.5 py-0.2 text-[8px] font-black tracking-wider flex items-center gap-0.5 animate-pulse">
                                   🟢 進行中
                                 </span>
                               )}
                             </div>
                             {isMultiDayEvent(evt) && evt.dailyNotes?.[todayDateStr] && (
-                              <div className="text-[11px] text-[#004B8F] font-bold bg-[#E1F0FF]/60 px-2 py-0.5 rounded-lg border border-sky-200 mt-1 inline-block truncate max-w-full">
+                              <div className="text-[10px] text-[#004B8F] font-bold bg-[#E1F0FF]/60 px-1.5 py-0.5 rounded border border-sky-100 mt-1 inline-block truncate max-w-full">
                                 📘 {evt.dailyNotes[todayDateStr]}
                               </div>
                             )}
-                            {evt.isFixed && !isBday && (
-                              <span className="inline-block mt-1 text-[9px] font-bold text-rose-500 bg-rose-50 px-1.5 py-0.2 rounded border border-rose-100">
+                            {evt.isFixed && (
+                              <span className="inline-block mt-1 text-[8px] font-bold text-rose-500 bg-rose-50 px-1 py-0.2 rounded border border-rose-100">
                                 固定日常
                               </span>
                             )}
@@ -1799,9 +1747,12 @@ export default function HomeDashboard({
                                     {/* 名稱與細節 */}
                                     <div className="flex items-center gap-1.5 min-w-0 flex-wrap">
                                       <span className={`text-[13px] font-black leading-snug truncate ${isBday ? "text-rose-850" : "text-[#2D2926]"}`}>
-                                        {isBday ? "🎂" : ""} {evt.title}
+                                        {isBday 
+                                          ? `🎂 ${((evt as any).birthdayMemberName || evt.title.replace("🎂", "").trim().replace("生日", "")).trim()}生日快樂！` 
+                                          : evt.title
+                                        }
                                       </span>
-                                      {evt.isPublic === false && (
+                                      {evt.isPublic === false && !isBday && (
                                         <span className="bg-amber-50 text-amber-700 text-[9px] px-1 rounded border border-amber-100 font-bold shrink-0">
                                           🔒 私人
                                         </span>
@@ -1867,6 +1818,24 @@ export default function HomeDashboard({
                                 const involved = getInvolvedMembers(evt);
                                 const hasNote = evt.note && evt.note.trim().length > 0;
                                 
+                                if (isBday) {
+                                  return (
+                                    <div
+                                      key={evt.id}
+                                      className="p-4 rounded-2xl border border-rose-200 bg-rose-50/70 text-left flex items-center gap-3.5"
+                                    >
+                                      <div className="h-10 w-10 rounded-full flex items-center justify-center text-xl shrink-0 border bg-rose-100 border-rose-300">
+                                        🎂
+                                      </div>
+                                      <div>
+                                        <h4 className="text-sm font-black text-rose-800">
+                                          {((evt as any).birthdayMemberName || evt.title.replace("🎂", "").trim().replace("生日", "")).trim()} 生日快樂！
+                                        </h4>
+                                      </div>
+                                    </div>
+                                  );
+                                }
+
                                 return (
                                   <div
                                     key={evt.id}
@@ -1875,14 +1844,7 @@ export default function HomeDashboard({
                                         onNavigateToEvent(evt.id, evt.date || day.dateStr);
                                       }
                                     }}
-                                    className={`group p-4 rounded-2xl border transition-all duration-300 cursor-pointer text-left flex flex-col gap-2.5 shadow-sm
-                                      hover:shadow-md hover:scale-[1.01] hover:bg-[#FFFDFB] hover:border-amber-200
-                                      ${
-                                        isBday
-                                          ? "bg-rose-50/70 border-rose-200/80 hover:bg-rose-50"
-                                          : "bg-[#FCFBF9] border-[#EFEAE2]"
-                                      }
-                                    `}
+                                    className="group p-4 rounded-2xl border border-[#EFEAE2] bg-[#FCFBF9] transition-all duration-300 cursor-pointer text-left flex flex-col gap-2.5 shadow-sm hover:shadow-md hover:scale-[1.01] hover:bg-[#FFFDFB] hover:border-amber-200"
                                   >
                                     {/* 📅 Date & 🔒 Privacy info row */}
                                     <div className="flex items-center justify-between flex-wrap gap-1 text-[10px] text-gray-400 font-bold">
@@ -1912,12 +1874,10 @@ export default function HomeDashboard({
                                     {/* 🏷 Event title & category icon */}
                                     <div className="flex items-start gap-2">
                                       <span className="text-lg shrink-0">
-                                        {isBday ? "🎂" : getEventIcon(evt.title)}
+                                        {getEventIcon(evt.title)}
                                       </span>
                                       <div className="space-y-0.5 min-w-0">
-                                        <h4 className={`text-sm font-black leading-tight truncate ${
-                                          isBday ? "text-rose-900" : "text-[#3C332D]"
-                                        }`}>
+                                        <h4 className="text-sm font-black leading-tight truncate text-[#3C332D]">
                                           {isMultiDayEvent(evt)
                                             ? `${getEventEmoji(evt.title)} ${evt.title} Day${getMultiDayLabel(evt.startDate!, evt.endDate!, day.dateStr).dayIndex}`
                                             : evt.title
@@ -1928,25 +1888,18 @@ export default function HomeDashboard({
                                             📘 {evt.dailyNotes[day.dateStr]}
                                           </div>
                                         )}
-                                        {evt.isFixed && !isBday && (
-                                          <span className="inline-block text-[9px] font-bold text-rose-500 bg-rose-50 px-1.5 py-0.2 rounded border border-rose-100">
-                                            固定日常
-                                          </span>
-                                        )}
                                       </div>
                                     </div>
 
                                     {/* 🕒 Time info */}
                                     <div className="flex items-center gap-1.5 text-xs text-gray-500 font-bold font-sans">
                                       <span className="text-xs shrink-0 font-sans">🕒</span>
-                                      <span>{isBday ? "全天生日慶祝！ 🎉" : (evt.time || "無指定時間")}</span>
+                                      <span>{evt.time || "無指定時間"}</span>
                                     </div>
 
                                     {/* 📝 Note container */}
                                     {hasNote && (
-                                      <div className={`p-2.5 rounded-xl text-xs space-y-1 ${
-                                        isBday ? "bg-white/80 text-rose-800" : "bg-orange-50/50 text-gray-600 border border-orange-100/40"
-                                      }`}>
+                                      <div className="p-2.5 rounded-xl text-xs space-y-1 bg-orange-50/50 text-gray-600 border border-orange-100/40">
                                         <div className="font-extrabold flex items-center gap-1 text-[10px] text-gray-500">
                                           <span>📝</span>
                                           <span>備註內容</span>
@@ -2088,61 +2041,57 @@ export default function HomeDashboard({
         {/* Right Column (Sidebars / Widgets) */}
         <div className="lg:col-span-4 space-y-6">
 
-          {/* 1. 🎂 媽媽生日倒數 (Placed at the very top of the right column on PC version) */}
+          {/* 1. 🎂 生日倒數 (Render card directly, no category header/title or nesting) */}
           {(birthdayReminders.todayStars.length > 0 || birthdayReminders.countdownList.length > 0) && (
-            <section
-              style={{
-                background: "#FFF5F6",
-                border: "1px solid #FBCFE8",
-                borderRadius: "24px",
-                boxShadow: "0 4px 12px rgba(219, 39, 119, 0.05)",
-              }}
-              className="p-5 font-sans animate-fade-in text-left"
-            >
-              <div className="flex items-center gap-2 pb-4 mb-4 border-b border-[#FEE2E2] select-none">
-                <span className="text-lg">🎂</span>
-                <h3 className="text-sm font-black text-rose-950">今日生日與壽星倒數</h3>
-              </div>
+            <div className="space-y-3">
+              {/* Today's birthdays */}
+              {birthdayReminders.todayStars.map((star, idx) => (
+                <div
+                  key={`side-today-star-${idx}`}
+                  style={{
+                    background: "#FFF5F6",
+                    border: "1px solid #FBCFE8",
+                    borderRadius: "24px",
+                    boxShadow: "0 4px 12px rgba(219, 39, 119, 0.05)",
+                  }}
+                  className="p-5 font-sans animate-fade-in text-left flex items-start gap-3 select-none"
+                >
+                  <span className="text-2xl shrink-0 mt-0.5">🎂</span>
+                  <div>
+                    <h4 className="font-extrabold text-rose-955 text-sm leading-tight">
+                      {star.member.displayName} 今天生日！
+                    </h4>
+                    <p className="text-xs font-semibold text-rose-600 mt-1 leading-relaxed font-sans">
+                      記得幫 {star.member.displayName} 慶生唷！
+                    </p>
+                  </div>
+                </div>
+              ))}
               
-              <div className="space-y-3">
-                {/* Today's birthdays */}
-                {birthdayReminders.todayStars.map((star, idx) => (
-                  <div key={`side-today-star-${idx}`} className="bg-white border border-[#FBCFE8] text-[#9D174D] p-3.5 rounded-2xl flex items-center gap-3 shadow-none">
-                    <span className="text-2xl animate-bounce">🎂</span>
-                    <div>
-                      <h4 className="font-extrabold text-[#9D174D] text-xs flex items-center gap-1.5 flex-wrap">
-                        今天是 {star.member.displayName} 的生日！
-                        {!isMom(star.member.displayName) && (
-                          <span className="bg-[#FFF0F6] px-1.5 py-0.5 rounded-full border border-pink-200 text-[9.5px] font-black">
-                            {star.age} 歲
-                          </span>
-                        )}
-                      </h4>
-                      <p className="text-[10px] text-pink-700 font-semibold mt-1 leading-relaxed">
-                        💖 祝福 {star.member.displayName} 歲歲安全、心想事成！🎈
-                      </p>
-                    </div>
+              {/* Countdown list */}
+              {birthdayReminders.countdownList.map((notify, idx) => (
+                <div
+                  key={`side-countdown-${idx}`}
+                  style={{
+                    background: "#FFF5F6",
+                    border: "1px solid #FBCFE8",
+                    borderRadius: "24px",
+                    boxShadow: "0 4px 12px rgba(219, 39, 119, 0.05)",
+                  }}
+                  className="p-5 font-sans animate-fade-in text-left flex items-start gap-3 select-none"
+                >
+                  <span className="text-2xl shrink-0 mt-0.5">🎂</span>
+                  <div>
+                    <h4 className="font-extrabold text-rose-955 text-sm leading-tight">
+                      {notify.member.displayName}生日還有 {notify.diffDays} 天
+                    </h4>
+                    <p className="text-xs font-semibold text-rose-600 mt-1 leading-relaxed font-sans">
+                      記得幫 {notify.member.displayName} 慶生唷！
+                    </p>
                   </div>
-                ))}
-                
-                {/* Countdown list */}
-                {birthdayReminders.countdownList.map((notify, idx) => (
-                  <div key={`side-countdown-${idx}`} className="bg-white border border-rose-100 p-3.5 rounded-2xl flex items-center justify-between shadow-none">
-                    <div className="flex items-center gap-3 text-left">
-                      <span className="text-xl">🎈</span>
-                      <div>
-                        <h4 className="font-extrabold text-rose-850 text-xs">
-                          {notify.member.displayName} 生日倒數 {notify.diffDays} 天
-                        </h4>
-                        <p className="text-[10px] text-rose-600 font-semibold mt-0.5 leading-relaxed">
-                          再過幾天就是 {notify.member.displayName}{isMom(notify.member.displayName) ? "" : ` ${notify.age} 歲`}生日囉！
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </section>
+                </div>
+              ))}
+            </div>
           )}
 
           {/* 4. ⭐ 家庭星星中心 (Maintains equal focus without rank sorting) */}
@@ -2319,7 +2268,7 @@ export default function HomeDashboard({
             </div>
           </section>
 
-          {/* 6. 🎂 家族生日小幫手 (Pre-birthday 14/7/3/1 days interactive checklist and countdown summary, moved to the bottom of right column) */}
+          {/* 6. 🎂 家族生日小幫手 */}
           <section
             style={{
               background: "#FFFFFF",
@@ -2327,84 +2276,29 @@ export default function HomeDashboard({
               borderRadius: "24px",
               boxShadow: "0 4px 12px rgba(0,0,0,0.03)",
             }}
-            className="p-5 animate-fade-in text-left"
+            className="p-5 animate-fade-in text-left font-sans"
           >
-            <div className="flex items-center justify-between pb-4 mb-4 border-b border-[#F7F3EB] select-none">
-              <div className="flex items-center gap-2">
-                <span className="text-lg">🎂</span>
-                <h3 className="text-sm font-black text-[#3C332D]">家族生日小幫手</h3>
-              </div>
-              <label className="flex items-center gap-1.5 cursor-pointer bg-rose-50 border border-rose-200 text-rose-700 px-2 py-1 rounded-xl hover:bg-rose-100 transition-colors select-none text-[10px] font-black shrink-0">
-                <input
-                  type="checkbox"
-                  checked={disableMomBirthdayAlert}
-                  onChange={(e) => handleToggleMomBirthdayAlert(e.target.checked)}
-                  className="accent-pink-600 h-3 w-3 cursor-pointer"
-                />
-                <span>關閉媽媽生日提醒</span>
-              </label>
+            <div className="flex items-center gap-2 pb-4 mb-4 border-b border-[#F7F3EB] select-none">
+              <span className="text-lg">🎂</span>
+              <h3 className="text-sm font-black text-[#3C332D]">家族生日小幫手</h3>
             </div>
 
             <div className="space-y-4">
-              {/* 1. ⚠️ 重要生日準備清單 (Triggered on exactly 14, 7, 3, or 1 day before) */}
-              {birthdayReminders.warningCards.length > 0 && (
-                <div className="space-y-4 mb-5 border-b border-dashed border-gray-100 pb-5">
-                  {birthdayReminders.warningCards.map((card) => {
-                    const giftKey = `${card.member.uid}-${card.targetYear}-gift`;
-                    const cakeKey = `${card.member.uid}-${card.targetYear}-cake`;
-                    const mealKey = `${card.member.uid}-${card.targetYear}-meal`;
-
-                    return (
-                      <div
-                        key={`warn-${card.member.uid}`}
-                        className="p-4 bg-rose-50/60 border border-rose-100 rounded-2xl space-y-3 shadow-none text-left"
-                      >
-                        <h4 className="font-extrabold text-rose-900 text-xs flex items-center gap-1.5">
-                          🎂 {card.member.displayName}生日還有 {card.diffDays} 天
-                        </h4>
-                        <div className="space-y-2 text-xs">
-                          <p className="font-bold text-rose-700/90 text-[11px]">
-                            是否準備生日事宜：
-                          </p>
-                          <div className="grid grid-cols-3 gap-2">
-                            <label className="flex items-center gap-1.5 cursor-pointer bg-white px-2.5 py-1.5 rounded-xl border border-rose-200/50 hover:border-rose-300 transition-colors select-none">
-                              <input
-                               type="checkbox"
-                               checked={!!bdayChecklist[giftKey]}
-                               onChange={() => toggleBdayCheckItem(giftKey)}
-                               className="accent-pink-600 h-3.5 w-3.5"
-                              />
-                              <span className="font-extrabold text-[#9D174D] text-[11px]">禮物</span>
-                            </label>
-
-                            <label className="flex items-center gap-1.5 cursor-pointer bg-white px-2.5 py-1.5 rounded-xl border border-rose-200/50 hover:border-rose-300 transition-colors select-none">
-                              <input
-                               type="checkbox"
-                               checked={!!bdayChecklist[cakeKey]}
-                               onChange={() => toggleBdayCheckItem(cakeKey)}
-                               className="accent-pink-600 h-3.5 w-3.5"
-                              />
-                              <span className="font-extrabold text-[#9D174D] text-[11px]">蛋糕</span>
-                            </label>
-
-                            <label className="flex items-center gap-1.5 cursor-pointer bg-white px-2.5 py-1.5 rounded-xl border border-rose-200/50 hover:border-rose-300 transition-colors select-none">
-                              <input
-                               type="checkbox"
-                               checked={!!bdayChecklist[mealKey]}
-                               onChange={() => toggleBdayCheckItem(mealKey)}
-                               className="accent-pink-600 h-3.5 w-3.5"
-                              />
-                              <span className="font-extrabold text-[#9D174D] text-[11px]">聚餐</span>
-                            </label>
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })}
+              {/* Pre-birthday countdown alerts (e.g. 媽媽生日還有 3 天) */}
+              {birthdayReminders.countdownList.length > 0 && (
+                <div className="space-y-2 mb-4">
+                  {birthdayReminders.countdownList.map((notify) => (
+                    <div
+                      key={`alert-${notify.member.uid}`}
+                      className="bg-rose-50 border border-rose-100 text-rose-900 text-xs font-black p-3 rounded-xl flex items-center justify-between"
+                    >
+                      <span>🎂 {notify.member.displayName}生日還有 {notify.diffDays} 天</span>
+                    </div>
+                  ))}
                 </div>
               )}
 
-              {/* 2. 📅 即將到來生日列覽 (Sourced automatically from live profiles) */}
+              {/* 📅 即將到來生日列覽 (Sourced automatically from live profiles) */}
               <div className="space-y-2.5">
                 <p className="text-[10px] uppercase font-black text-gray-500 tracking-wider">
                   家庭成員生日排程 (自動每年更新)
@@ -2415,40 +2309,38 @@ export default function HomeDashboard({
                   </div>
                 ) : (
                   <div className="space-y-2">
-                    {birthdayReminders.allUpcoming.map((star) => (
-                      <div
-                        key={`item-${star.member.uid}`}
-                        className="flex justify-between items-center p-3 bg-[#FAF8F5] border border-gray-100 rounded-xl hover:bg-gray-50/80 transition-colors"
-                      >
-                        <div className="flex items-center gap-2">
-                          <span className="text-sm">🎂</span>
-                          <div>
-                            <h4 className="font-bold text-xs text-gray-800 flex items-center gap-1">
-                              {star.member.displayName}
-                              {!isMom(star.member.displayName) && (
-                                <span className="text-[9px] font-extrabold text-rose-600 bg-rose-50 border border-rose-100 px-1 rounded">
-                                  將滿 {star.age} 歲
-                                </span>
-                              )}
-                            </h4>
-                            <p className="text-[10px] text-gray-400 font-bold mt-0.5">
-                              每年 {star.birthdayStr}
-                            </p>
+                    {birthdayReminders.allUpcoming.map((star) => {
+                      const showAge = star.member.showAgeInCalendar !== false;
+                      return (
+                        <div
+                          key={`item-${star.member.uid}`}
+                          className="flex justify-between items-center p-3 bg-white border border-[#EFEAE2] rounded-xl hover:bg-[#FAF8F5] transition"
+                        >
+                          <div className="flex items-center gap-2.5">
+                            <span className="text-sm shrink-0">🎂</span>
+                            <div>
+                              <h4 className="font-extrabold text-[#3C332D] text-xs">
+                                {star.member.displayName}
+                              </h4>
+                              <p className="text-[10px] text-gray-550 font-bold mt-0.5">
+                                {showAge ? `將滿 ${star.age} 歲` : `每年 ${star.birthdayStr}`}
+                              </p>
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            {star.diffDays === 0 ? (
+                              <span className="text-[10px] font-black text-rose-700 bg-rose-50 border border-rose-200 px-2.5 py-1 rounded-full animate-pulse">
+                                🎉 今天生日
+                              </span>
+                            ) : (
+                              <span className="text-[10px] font-mono font-bold text-[#5C4533] bg-[#FFFDF8] border border-[#EFEAE2] px-2.5 py-1 rounded-full">
+                                倒數 {star.diffDays} 天
+                              </span>
+                            )}
                           </div>
                         </div>
-                        <div className="text-right">
-                          {star.diffDays === 0 ? (
-                            <span className="text-[10px] font-black text-rose-650 bg-rose-50 border border-rose-220 px-2 py-0.5 rounded-full animate-pulse shadow-sm">
-                              🎉 今天生日
-                            </span>
-                          ) : (
-                            <span className="text-[10px] font-bold text-gray-500 font-mono bg-white border border-gray-200/60 px-2 py-0.5 rounded-full">
-                              倒數 {star.diffDays} 天
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
               </div>
