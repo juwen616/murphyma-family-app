@@ -122,14 +122,17 @@ export default function App() {
   const [onboardingChoice, setOnboardingChoice] = useState<"none" | "create" | "join">("none");
   const [newFamilyName, setNewFamilyName] = useState("");
   const [joinFamilyId, setJoinFamilyId] = useState("");
+  const [joinInviteCode, setJoinInviteCode] = useState("");
   const [joinRole, setJoinRole] = useState<UserRole>(UserRole.PARENT);
   const [joinDisplayName, setJoinDisplayName] = useState("");
   const [isOnboardingBusy, setIsOnboardingBusy] = useState(false);
+  const [googleMatchInvite, setGoogleMatchInvite] = useState<any>(null);
 
   // Whitelisting & Requests
   const [isWhitelistedCreator, setIsWhitelistedCreator] = useState(false);
   const [myPendingRequest, setMyPendingRequest] = useState<any>(null);
   const [pendingRequests, setPendingRequests] = useState<any[]>([]);
+  const [hasRepairedBirthdays, setHasRepairedBirthdays] = useState(false);
 
   // Navigation page state
   const [activePage, setActivePage] = useState<"home" | "calendar" | "tasks" | "rewards" | "favorites" | "members" | "special-periods" | "admin-center" | "admin" | "notes" | "more">("home");
@@ -451,6 +454,41 @@ export default function App() {
     checkWhitelist();
   }, [user?.email]);
 
+  // One-time repair for missing birthday information/nested member alignment
+  useEffect(() => {
+    if (currentUserProfile?.familyId && !hasRepairedBirthdays) {
+      setHasRepairedBirthdays(true);
+      runAutoRepair(currentUserProfile.familyId);
+    }
+  }, [currentUserProfile?.familyId, hasRepairedBirthdays]);
+
+  // Helper to check and search invitations for Google accounts
+  const checkGoogleInvites = async (email: string | null) => {
+    if (!email) return;
+    try {
+      console.log("Checking Google match invite for:", email);
+      const q = query(
+        collection(db, "invites"),
+        where("email", "==", email.toLowerCase()),
+        where("status", "==", "pending")
+      );
+      const snap = await getDocs(q);
+      if (!snap.empty) {
+        const docSnap = snap.docs[0];
+        const invData = docSnap.data();
+        console.log("Automatic Google invite match found:", invData);
+        setGoogleMatchInvite({
+          id: docSnap.id,
+          ...invData
+        });
+      } else {
+        setGoogleMatchInvite(null);
+      }
+    } catch (err) {
+      console.error("Error checking direct Google invites:", err);
+    }
+  };
+
   // 1. Monitor Authentication State Change
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
@@ -462,199 +500,31 @@ export default function App() {
           const userDocRef = doc(db, "users", firebaseUser.uid);
           const userSnap = await getDoc(userDocRef);
 
-          // Check if there is a pending land-page join request in local storage
-          const pendingFamId = localStorage.getItem("pending_join_family_id");
-          const pendingName = localStorage.getItem("pending_join_display_name");
-          const pendingRole = (localStorage.getItem("pending_join_role") as UserRole) || UserRole.MEMBER;
-
-          if (pendingFamId && pendingName) {
-            // Yes, user just clicked "加入家庭" on the login landing page!
-            localStorage.removeItem("pending_join_family_id");
-            localStorage.removeItem("pending_join_display_name");
-            localStorage.removeItem("pending_join_role");
-            localStorage.removeItem("pending_join_bind_google");
-
-            const inputCode = pendingFamId.trim();
-            const joinedName = pendingName.trim();
-
-            const query = (await import("firebase/firestore")).query;
-            const collection = (await import("firebase/firestore")).collection;
-            const where = (await import("firebase/firestore")).where;
-            const getDocs = (await import("firebase/firestore")).getDocs;
-
-            // Find matching family or pre-determined invite code in invites collection
-            const qInvite = query(
-              collection(db, "invites"),
-              where("inviteCode", "==", inputCode.toUpperCase()),
-              where("status", "==", "pending")
-            );
-            const snapInvite = await getDocs(qInvite);
-
-            if (!snapInvite.empty) {
-              const inviteDoc = snapInvite.docs[0];
-              const inviteData = inviteDoc.data();
-              const targetFamilyId = inviteData.familyId;
-              const targetFamilyName = inviteData.familyName || "我的家庭";
-              const targetRole = inviteData.targetRole || pendingRole;
-
-              let placeholderData: any = {};
-              if (inviteData.memberId) {
-                const mSnap = await getDoc(doc(db, "users", inviteData.memberId));
-                if (mSnap.exists()) {
-                  placeholderData = mSnap.data();
-                  await deleteDoc(doc(db, "users", inviteData.memberId));
-                }
-                const oldMemberLinkId = `${targetFamilyId}_${inviteData.memberId}`;
-                await deleteDoc(doc(db, "family_members", oldMemberLinkId));
-              }
-
-              const mergedDisplayName = placeholderData.displayName || joinedName;
-              const mergedColor = placeholderData.color || "#B4C3B2";
-              const mergedPhotoURL = placeholderData.photoURL || "✿";
-              const mergedBirthday = placeholderData.birthday || "";
-              const mergedStars = placeholderData.stars || 0;
-
-              const updatedProfile: UserProfile = {
-                uid: firebaseUser.uid,
-                email: firebaseUser.email || "",
-                displayName: mergedDisplayName,
-                color: mergedColor,
-                photoURL: mergedPhotoURL,
-                birthday: mergedBirthday,
-                familyId: targetFamilyId,
-                role: targetRole,
-                stars: mergedStars,
-                createdAt: serverTimestamp(),
-              };
-
-              await setDoc(doc(db, "users", firebaseUser.uid), updatedProfile);
-
-              const memberId = `${targetFamilyId}_${firebaseUser.uid}`;
-              await setDoc(doc(db, "family_members", memberId), {
-                id: memberId,
-                familyId: targetFamilyId,
-                userId: firebaseUser.uid,
-                displayName: mergedDisplayName,
-                role: targetRole,
-                stars: mergedStars,
-                createdAt: serverTimestamp(),
-              });
-
-              await updateDoc(doc(db, "invites", inviteDoc.id), {
-                status: "accepted",
-                acceptedBy: firebaseUser.uid,
-                acceptedAt: new Date().toISOString(),
-                joinedUserId: firebaseUser.uid,
-                joinedEmail: firebaseUser.email || "",
-                joinedTime: new Date().toISOString(),
-              });
-
-              const auditId = `aud_${Date.now()}_join`;
-              await setDoc(doc(db, "audit_logs", auditId), {
-                id: auditId,
-                userId: firebaseUser.uid,
-                userName: `${mergedDisplayName} (${targetRole})`,
-                familyId: targetFamilyId,
-                action: `進入「${targetFamilyName}」：使用專屬邀請碼「${inputCode.toUpperCase()}」自動啟用 ${targetRole} 權限`,
-                targetId: targetFamilyId,
-                targetName: targetFamilyName,
-                createdAt: new Date().toISOString(),
-              });
-
-              setCurrentUserProfile(updatedProfile);
+          // Standard loading flow
+          if (userSnap.exists()) {
+            const profileData = userSnap.data() as UserProfile;
+            setCurrentUserProfile(profileData);
+            if (profileData.familyId) {
               setActivePage("home");
               setOnboardingChoice("none");
-              toast.success(`🎉 歡迎！您已使用專屬邀請碼成功進駐家庭「${targetFamilyName}」，並取得「${targetRole}」角色！`);
             } else {
-              // Direct family check or simple inviteCode on family node
-              let targetFamilyId = "";
-              let targetFamilyName = "";
-
-              const directSnap = await getDoc(doc(db, "families", inputCode));
-              if (directSnap.exists()) {
-                targetFamilyId = directSnap.id;
-                targetFamilyName = directSnap.data().name;
-              } else {
-                const qFam = query(collection(db, "families"), where("inviteCode", "==", inputCode.toUpperCase()));
-                const snapFam = await getDocs(qFam);
-                if (!snapFam.empty) {
-                  const docFam = snapFam.docs[0];
-                  targetFamilyId = docFam.id;
-                  targetFamilyName = docFam.data().name;
-                }
-              }
-
-              if (!targetFamilyId) {
-                toast.error("❌ 找不到此邀請碼或家庭，請重新確認代碼！");
-                const initProfile: UserProfile = {
-                  uid: firebaseUser.uid,
-                  email: firebaseUser.email || "",
-                  displayName: joinedName || firebaseUser.displayName || "家庭成員",
-                  photoURL: "✿",
-                  color: "#B4C3B2",
-                  familyId: null,
-                  role: pendingRole,
-                  stars: 0,
-                  createdAt: serverTimestamp(),
-                };
-                await setDoc(doc(db, "users", firebaseUser.uid), initProfile);
-                setCurrentUserProfile(initProfile);
-              } else {
-                const requestId = `req_${Date.now()}_${firebaseUser.uid.substr(0, 5)}`;
-                const requestData = {
-                  id: requestId,
-                  userId: firebaseUser.uid,
-                  userEmail: firebaseUser.email || "",
-                  userName: joinedName,
-                  familyId: targetFamilyId,
-                  familyName: targetFamilyName,
-                  role: pendingRole,
-                  status: "pending",
-                  createdAt: new Date().toISOString(),
-                };
-                await setDoc(doc(db, "join_requests", requestId), requestData);
-
-                const initProfile: UserProfile = {
-                  uid: firebaseUser.uid,
-                  email: firebaseUser.email || "",
-                  displayName: joinedName,
-                  photoURL: "✿",
-                  color: "#B4C3B2",
-                  familyId: null,
-                  role: pendingRole,
-                  stars: 0,
-                  createdAt: serverTimestamp(),
-                };
-                await setDoc(doc(db, "users", firebaseUser.uid), initProfile);
-                setCurrentUserProfile(initProfile);
-
-                toast.success(`🎉 申請已送出！請通知管理員媽媽前往「家庭成員 ➡️ 邀請與加入審核」面板按下核准！`);
-              }
+              await checkGoogleInvites(firebaseUser.email);
             }
           } else {
-            // Standard loading flow
-            if (userSnap.exists()) {
-              const profileData = userSnap.data() as UserProfile;
-              setCurrentUserProfile(profileData);
-              if (profileData.familyId) {
-                setActivePage("home");
-                setOnboardingChoice("none");
-              }
-            } else {
-              const initProfile: UserProfile = {
-                uid: firebaseUser.uid,
-                email: firebaseUser.email || "",
-                displayName: firebaseUser.displayName || "家庭成員",
-                photoURL: "✿",
-                color: "#B4C3B2",
-                familyId: null,
-                role: UserRole.MEMBER,
-                stars: 0,
-                createdAt: serverTimestamp(),
-              };
-              await setDoc(userDocRef, initProfile);
-              setCurrentUserProfile(initProfile);
-            }
+            const initProfile: UserProfile = {
+              uid: firebaseUser.uid,
+              email: firebaseUser.email || "",
+              displayName: firebaseUser.displayName || "家庭成員",
+              photoURL: "✿",
+              color: "#B4C3B2",
+              familyId: null,
+              role: UserRole.MEMBER,
+              stars: 0,
+              createdAt: serverTimestamp(),
+            };
+            await setDoc(userDocRef, initProfile);
+            setCurrentUserProfile(initProfile);
+            await checkGoogleInvites(firebaseUser.email);
           }
         } catch (err) {
           console.error("Auth state loading error:", err);
@@ -1174,91 +1044,354 @@ export default function App() {
     }
   };
 
-  const handleQueryInvite = async (code: string) => {
-    const uppercaseCode = code.trim().toUpperCase();
-    if (uppercaseCode.length < 4) {
+  const handleQueryInvite = async (familyIdParam: string, inviteCodeParam: string) => {
+    const cleanedFamilyId = familyIdParam.trim();
+    const cleanedInviteCode = inviteCodeParam.trim().toUpperCase();
+
+    if (!cleanedFamilyId || !cleanedInviteCode) {
       setFoundInvite(null);
+      setSearchInviteError("請同時輸入家庭代碼與邀請碼。");
       return;
     }
+
     setIsSearchingInvite(true);
     setSearchInviteError(null);
+    setFoundInvite(null);
+
     try {
-      console.log("invite code", uppercaseCode);
-      console.log("query path", "invites");
+      console.log("query invites under:", cleanedFamilyId, "code:", cleanedInviteCode);
 
-      // Clean Firestore-only query without any Firebase Authentication calls
-      // Query by code only to simplify index demands and perform status filtering in-memory
-      const q = query(
-        collection(db, "invites"),
-        where("inviteCode", "==", uppercaseCode)
-      );
-      const snap = await getDocs(q);
-      
-      console.log("invite result count", snap.size);
+      // Check family document existence first
+      const familyRef = doc(db, "families", cleanedFamilyId);
+      const familySnap = await getDoc(familyRef);
 
-      if (snap.empty) {
+      if (!familySnap.exists()) {
+        setSearchInviteError("找不到此家庭資料，請確認家庭代碼是否正確。");
         setFoundInvite(null);
-        setSearchInviteError("找不到邀請資料，或邀請碼已失效。");
+        return;
+      }
+
+      const familyData = familySnap.data();
+
+      // Read from families/{familyId}/invites/{inviteCode}
+      const inviteRef = doc(db, "families", cleanedFamilyId, "invites", cleanedInviteCode);
+
+      const queryPath = `families/${cleanedFamilyId}/invites/${cleanedInviteCode}`;
+      console.log(
+        "Query Path",
+        queryPath
+      );
+
+      console.log(
+        "Family Code",
+        cleanedFamilyId
+      );
+
+      console.log(
+        "Invite Code",
+        cleanedInviteCode
+      );
+
+      let inviteSnap = await getDoc(inviteRef);
+
+      console.log(
+        "Document Exists",
+        inviteSnap.exists()
+      );
+
+      let isFound = false;
+      let inviteData: any = null;
+      let finalInviteId = "";
+
+      if (inviteSnap.exists()) {
+        inviteData = inviteSnap.data();
+        finalInviteId = inviteSnap.id;
+        isFound = true;
+        console.log(
+          "Invite Data",
+          inviteData
+        );
       } else {
-        const inviteDoc = snap.docs[0];
-        const inviteData = inviteDoc.data();
+        // Step 3: if not found, check if it's stored as field where inviteCode == cleanedInviteCode
+        console.log("Not found as doc ID, trying query on 'inviteCode' field...");
+        const q = query(
+          collection(db, "families", cleanedFamilyId, "invites"),
+          where("inviteCode", "==", cleanedInviteCode)
+        );
+        const qSnap = await getDocs(q);
+        if (!qSnap.empty) {
+          inviteSnap = qSnap.docs[0];
+          inviteData = inviteSnap.data();
+          finalInviteId = inviteSnap.id;
+          isFound = true;
+          console.log(
+            "Document Exists",
+            true
+          );
+          console.log(
+            "Invite Data",
+            inviteData
+          );
+        }
+      }
+
+      if (!isFound) {
+        setFoundInvite(null);
+        setSearchInviteError("找不到邀請資料，請確認驗證資訊是否正確。");
+
+        // Fourth Step: print out all documents under families/{familyId}/invites
+        try {
+          const snapshot = await getDocs(
+            collection(
+              db,
+              "families",
+              cleanedFamilyId,
+              "invites"
+            )
+          );
+
+          console.log(
+            "All Invites",
+            snapshot.docs.map(d => ({
+              id: d.id,
+              ...d.data()
+            }))
+          );
+        } catch (subErr: any) {
+          console.error("Failed to query subcollection documents:", subErr);
+        }
+      } else {
         console.log("invite result", inviteData);
 
         if (inviteData.status === "used" || inviteData.status === "accepted") {
           setFoundInvite(null);
-          setSearchInviteError("此邀請碼已使用");
+          setSearchInviteError("此邀請碼已使用。");
         } else if (inviteData.status === "expired") {
           setFoundInvite(null);
-          setSearchInviteError("此邀請碼已失效");
+          setSearchInviteError("此邀請碼已失效。");
         } else if (inviteData.status === "cancelled") {
           setFoundInvite(null);
-          setSearchInviteError("此邀請碼已取消");
+          setSearchInviteError("此邀請碼已取消。");
         } else {
-          setFoundInvite({ id: inviteDoc.id, ...inviteData });
+          // Found it! Include familyName from family document if not present in inviteData
+          setFoundInvite({
+            id: finalInviteId,
+            ...inviteData,
+            inviteCode: cleanedInviteCode, // Ensure we preserve the code
+            familyName: familyData.name || inviteData.familyName || "我的家庭"
+          });
         }
       }
     } catch (err: any) {
-      console.error(
-        "invite query failed",
-        err.code || "unknown",
-        err.message || ""
-      );
-      if (err.code === "permission-denied") {
-        setSearchInviteError("邀請碼查詢權限設定錯誤，請聯絡系統管理員。");
+      console.error("invite query failed", err);
+      const isPermissionDenied = 
+        err?.code === "permission-denied" || 
+        err?.name === "PermissionDeniedError" ||
+        String(err).includes("permission-denied") ||
+        String(err).includes("Permission denied") ||
+        (err?.message && (err.message.includes("permission-denied") || err.message.includes("Permission denied")));
+
+      console.log("Is Blocked by Firestore Rules:", isPermissionDenied);
+
+      if (isPermissionDenied) {
+        setSearchInviteError("權限不足");
       } else {
-        setSearchInviteError("找不到邀請資料，或是此邀請碼已失效。");
+        setSearchInviteError("驗證失敗：請檢查代碼或與管理員確認網路。");
       }
     } finally {
       setIsSearchingInvite(false);
     }
   };
 
-  useEffect(() => {
-    const cleaned = joinFamilyId.trim();
-    if (cleaned.length === 6) {
-      handleQueryInvite(cleaned);
-    } else {
+  const processInviteAccept = async (invite: any, specialUid?: string, specialEmail?: string) => {
+    if (isOnboardingBusy) return;
+    setIsOnboardingBusy(true);
+
+    try {
+      const targetFamilyId = invite.familyId;
+      const targetFamilyName = invite.familyName || "我的家庭";
+      const targetRole = invite.role || invite.targetRole || UserRole.VIEWER;
+      const targetName = invite.name || invite.memberName || "新成員";
+      
+      const targetUid = specialUid || (user ? user.uid : `guest_${invite.inviteCode}_${Math.random().toString(36).substr(2, 9)}`);
+      const targetEmail = specialEmail || (user ? (user.email || "") : "");
+      const isLocalGuest = !specialUid && !user;
+
+      console.log("Accepting invite with data:", invite);
+
+      // Verify and delete placeholder user if needed
+      let placeholderData: any = {};
+      if (invite.memberId) {
+        const mSnap = await getDoc(doc(db, "users", invite.memberId));
+        if (mSnap.exists()) {
+          placeholderData = mSnap.data();
+          await deleteDoc(doc(db, "users", invite.memberId));
+        }
+        const oldMemberLinkId = `${targetFamilyId}_${invite.memberId}`;
+        await deleteDoc(doc(db, "family_members", oldMemberLinkId));
+      }
+
+      const finalDisplayName = targetName;
+      const finalRole = targetRole;
+      const finalColor = invite.color || placeholderData.color || "#B4C3B2";
+      const finalPhotoURL = invite.avatar || placeholderData.photoURL || "✿";
+      const finalBirthday = invite.birthday || placeholderData.birthday || null;
+      const finalGender = invite.gender || placeholderData.gender || "";
+      const finalShowAge = invite.showAge ?? true;
+      const mergedStars = placeholderData.stars || 0;
+
+      // Create/Update root user profile
+      const updatedProfile: UserProfile = {
+        uid: targetUid,
+        email: targetEmail,
+        displayName: finalDisplayName,
+        photoURL: finalPhotoURL,
+        color: finalColor,
+        familyId: targetFamilyId,
+        role: finalRole as UserRole,
+        stars: mergedStars,
+        birthday: finalBirthday || undefined,
+        showAgeInCalendar: finalShowAge,
+        gender: finalGender,
+        createdAt: serverTimestamp(),
+      };
+      await setDoc(doc(db, "users", targetUid), updatedProfile);
+
+      // Create the nested families/{familyId}/members/{userId} document
+      const memberRef = doc(db, "families", targetFamilyId, "members", targetUid);
+      const memberData = {
+        name: finalDisplayName,
+        role: finalRole,
+        birthday: finalBirthday || null,
+        showAge: finalShowAge,
+        avatar: finalPhotoURL,
+        gender: finalGender,
+        createdAt: serverTimestamp(),
+        joinedAt: serverTimestamp()
+      };
+      await setDoc(memberRef, memberData);
+
+      console.log(
+        "Member Created Success",
+        memberData
+      );
+      console.log(
+        "Member Created Path",
+        memberRef.path
+      );
+
+      // Validate database sync right away
+      try {
+        const verifyDoc = await getDoc(memberRef);
+        console.log("Invite Verify Exists", verifyDoc.exists());
+        console.log("Invite Verify Data", verifyDoc.data());
+        console.log("Invite Verify Path", memberRef.path);
+      } catch (subErr) {
+        console.warn("Auto verification check warning:", subErr);
+      }
+
+      // Auto Birthday Event
+      if (memberData.birthday) {
+        await createBirthdayEvent(targetUid, memberData.birthday, targetFamilyId, memberData.name);
+      }
+
+      // Create family_members link (legacy root sync)
+      const memberLinkId = `${targetFamilyId}_${targetUid}`;
+      await setDoc(doc(db, "family_members", memberLinkId), {
+        id: memberLinkId,
+        familyId: targetFamilyId,
+        userId: targetUid,
+        displayName: finalDisplayName,
+        role: finalRole as UserRole,
+        stars: mergedStars,
+        createdAt: serverTimestamp(),
+      });
+
+      // Mark invite as accepted in nest subcollection
+      const nestInviteRef = doc(db, "families", targetFamilyId, "invites", invite.inviteCode);
+      await updateDoc(nestInviteRef, {
+        status: "accepted",
+        acceptedBy: targetUid,
+        acceptedAt: new Date().toISOString(),
+        joinedUserId: targetUid,
+        joinedEmail: targetEmail,
+        joinedTime: new Date().toISOString(),
+      });
+
+      // Mark invite as accepted in root invites collection
+      if (invite.id) {
+        try {
+          await updateDoc(doc(db, "invites", invite.id), {
+            status: "accepted",
+            acceptedBy: targetUid,
+            acceptedAt: new Date().toISOString(),
+            joinedUserId: targetUid,
+            joinedEmail: targetEmail,
+            joinedTime: new Date().toISOString(),
+          });
+        } catch (ignored) {}
+      }
+
+      // Record Audit Log
+      const auditId = `aud_${Date.now()}_join`;
+      await setDoc(doc(db, "audit_logs", auditId), {
+        id: auditId,
+        userId: targetUid,
+        userName: `${finalDisplayName} (${getRoleLabel(finalRole)})`,
+        familyId: targetFamilyId,
+        action: `進入「${targetFamilyName}」：使用專屬邀請碼「${invite.inviteCode}」自動啟用 ${getRoleLabel(finalRole)} 權限並同步生命週期生日設定`,
+        targetId: targetFamilyId,
+        targetName: targetFamilyName,
+        createdAt: new Date().toISOString(),
+      });
+
+      if (isLocalGuest) {
+        localStorage.setItem("local_guest_profile", JSON.stringify(updatedProfile));
+        const mockUser = {
+          uid: targetUid,
+          email: targetEmail,
+          displayName: finalDisplayName,
+          isAnonymous: true,
+          photoURL: finalPhotoURL
+        } as any;
+        setUser(mockUser);
+      }
+
+      setCurrentUserProfile(updatedProfile);
       setFoundInvite(null);
-      setSearchInviteError(null);
+      setGoogleMatchInvite(null);
+      setJoinFamilyId("");
+      setJoinInviteCode("");
+      setActivePage("home");
+      setOnboardingChoice("none");
+
+      toast.success(`🎉 歡迎！您已成功進駐家庭「${targetFamilyName}」，系統已為您配置「${getRoleLabel(finalRole)}」角色權限！`);
+    } catch (err: any) {
+      console.error("Accept invite error:", err);
+      toast.error("❌ 接受邀請失敗：" + err.message);
+    } finally {
+      setIsOnboardingBusy(false);
     }
-  }, [joinFamilyId]);
+  };
 
   const handleConfirmInviteJoin = async () => {
     if (!foundInvite || isOnboardingBusy) return;
 
-    setIsOnboardingBusy(true);
     try {
-      const targetFamilyId = foundInvite.familyId;
-      const targetFamilyName = foundInvite.familyName || "我的家庭";
-      const targetRole = foundInvite.targetRole || UserRole.VIEWER;
-      const targetName = foundInvite.memberName || "新成員";
-
       let targetUid = "";
       let targetEmail = "";
-      let isLocalGuest = false;
 
-      if (foundInvite.email) {
+      if (user) {
+        // Already logged in with Google (Onboarding mode)
+        if (foundInvite.email && foundInvite.email.toLowerCase() !== user.email?.toLowerCase()) {
+          toast.error(`⚠️ 此邀請碼限制指定 Google 帳號 (${foundInvite.email}) 使用！目前您登入的帳戶為 (${user.email})！`);
+          return;
+        }
+        targetUid = user.uid;
+        targetEmail = user.email || "";
+      } else if (foundInvite.email) {
         // Requires specific Google login accounts
+        setIsOnboardingBusy(true);
         const provider = new GoogleAuthProvider();
         const res = await signInWithPopup(auth, provider);
         const firebaseUser = res.user;
@@ -1271,94 +1404,13 @@ export default function App() {
         }
         targetUid = firebaseUser.uid;
         targetEmail = firebaseUser.email || "";
-      } else {
-        // No Google login required! Completely bypass Firebase Auth.
-        // We retrieve or generate a unique persistent custom guest UID
-        let guestUid = localStorage.getItem("local_guest_uid");
-        if (!guestUid) {
-          guestUid = `guest_${foundInvite.inviteCode}_${Math.random().toString(36).substr(2, 9)}`;
-          localStorage.setItem("local_guest_uid", guestUid);
-        }
-        targetUid = guestUid;
-        targetEmail = "";
-        isLocalGuest = true;
+        setIsOnboardingBusy(false);
       }
 
-      if (!targetUid) throw new Error("無效的成員身份安全別名載入識別碼！");
-
-      // Write user profile to firestore
-      const updatedProfile: UserProfile = {
-        uid: targetUid,
-        email: targetEmail,
-        displayName: targetName,
-        photoURL: "✿",
-        color: "#B4C3B2",
-        familyId: targetFamilyId,
-        role: targetRole as UserRole,
-        stars: 0,
-        createdAt: serverTimestamp(),
-      };
-      await setDoc(doc(db, "users", targetUid), updatedProfile);
-
-      // Create family_members relation record
-      const memberLinkId = `${targetFamilyId}_${targetUid}`;
-      await setDoc(doc(db, "family_members", memberLinkId), {
-        id: memberLinkId,
-        familyId: targetFamilyId,
-        userId: targetUid,
-        displayName: targetName,
-        role: targetRole as UserRole,
-        stars: 0,
-        createdAt: serverTimestamp(),
-      });
-
-      // Update invitation document status to accepted
-      await updateDoc(doc(db, "invites", foundInvite.id), {
-        status: "accepted",
-        acceptedBy: targetUid,
-        acceptedAt: new Date().toISOString(),
-        joinedUserId: targetUid,
-        joinedEmail: targetEmail,
-        joinedTime: new Date().toISOString(),
-      });
-
-      // Create audit logs
-      const auditId = `aud_${Date.now()}_join_invited`;
-      await setDoc(doc(db, "audit_logs", auditId), {
-        id: auditId,
-        userId: targetUid,
-        userName: `${targetName} (${getRoleLabel(targetRole)})`,
-        familyId: targetFamilyId,
-        action: `進入「${targetFamilyName}」：使用專屬邀請碼「${foundInvite.inviteCode}」自動啟用 ${getRoleLabel(targetRole)} 權限`,
-        targetId: targetFamilyId,
-        targetName: targetFamilyName,
-        createdAt: new Date().toISOString(),
-      });
-
-      if (isLocalGuest) {
-        // Persist local guest session structure so page reload can preserve it instantly
-        localStorage.setItem("local_guest_profile", JSON.stringify(updatedProfile));
-        const mockUser = {
-          uid: targetUid,
-          email: targetEmail,
-          displayName: targetName,
-          isAnonymous: true,
-          photoURL: "✿"
-        } as any;
-        setUser(mockUser);
-      }
-
-      setCurrentUserProfile(updatedProfile);
-      setFoundInvite(null);
-      setJoinFamilyId("");
-      setActivePage("home");
-      setOnboardingChoice("none");
-
-      toast.success(`🎉 歡迎！您已成功進駐家庭「${targetFamilyName}」，系統已為您配置「${getRoleLabel(targetRole)}」角色權限！`);
+      await processInviteAccept(foundInvite, targetUid, targetEmail);
     } catch (err: any) {
       console.error(err);
       toast.error("❌ 加入家庭失敗：" + err.message);
-    } finally {
       setIsOnboardingBusy(false);
     }
   };
@@ -1535,6 +1587,144 @@ export default function App() {
     }
   };
 
+  const createBirthdayEvent = async (memberId: string, birthday: string, familyId: string, memberName: string) => {
+    if (!birthday) return;
+    try {
+      const cleanBday = birthday.replace(/\//g, "-");
+      const parts = cleanBday.split("-");
+      if (parts.length < 3) return;
+      const birthYear = parseInt(parts[0], 10);
+      const birthMonth = parseInt(parts[1], 10);
+      const birthDay = parseInt(parts[2], 10);
+      if (isNaN(birthYear) || isNaN(birthMonth) || isNaN(birthDay)) return;
+
+      const yearsToGen = [2025, 2026, 2027, 2028, 2029, 2030, 2031, 2032, 2033, 2034, 2035];
+      for (const year of yearsToGen) {
+        const age = year - birthYear;
+        const eventDateStr = `${year}-${String(birthMonth).padStart(2, "0")}-${String(birthDay).padStart(2, "0")}`;
+        const evtId = `birthday_${memberId}_${year}`;
+        
+        await setDoc(doc(db, "calendar_events", evtId), {
+          id: evtId,
+          familyId,
+          title: `🎂 ${memberName} ${age}歲生日`,
+          date: eventDateStr,
+          time: "",
+          isFixed: false,
+          isPublic: true,
+          note: `祝 ${memberName} 生日快樂！🎂🎉`,
+          creatorUid: "system",
+          creatorName: "系統",
+          createdAt: serverTimestamp(),
+          isBirthday: true,
+          birthdayMemberUid: memberId,
+          birthdayAge: age,
+          birthdayMemberName: memberName,
+          showAgeInCalendar: true
+        });
+      }
+      console.log(`Successfully created physical birthday calendar events for ${memberName} (${memberId}) from 2025 to 2035.`);
+    } catch (err) {
+      console.error("Error creating birthday events:", err);
+    }
+  };
+
+  const runAutoRepair = async (familyId: string) => {
+    try {
+      console.log("Running one-time birthday helper repair for family:", familyId);
+      
+      // 1. Get all members in families/{familyId}/members
+      const membersSnap = await getDocs(collection(db, "families", familyId, "members"));
+      const nestedMembersMap = new Map();
+      membersSnap.forEach(docSnap => {
+        nestedMembersMap.set(docSnap.id, { id: docSnap.id, ...docSnap.data() });
+      });
+
+      // 2. Get all invites in families/{familyId}/invites
+      const invitesSnap = await getDocs(collection(db, "families", familyId, "invites"));
+      const invitesList: any[] = [];
+      invitesSnap.forEach(docSnap => {
+        invitesList.push({ id: docSnap.id, ...docSnap.data() });
+      });
+
+      // 3. Get all active users in this family (from users collection)
+      const usersSnap = await getDocs(query(collection(db, "users"), where("familyId", "==", familyId)));
+      const usersList: any[] = [];
+      usersSnap.forEach(docSnap => {
+        usersList.push({ id: docSnap.id, ...docSnap.data() });
+      });
+
+      // 4. Ensure each active user has a corresponding member document in families/{familyId}/members
+      for (const u of usersList) {
+        let nestedMember = nestedMembersMap.get(u.id);
+        
+        let shouldCreateOrUpdate = false;
+        let updateData: any = {};
+
+        if (!nestedMember) {
+          // If no nested member document, create it!
+          shouldCreateOrUpdate = true;
+          nestedMember = {
+            name: u.displayName || u.name || "家庭成員",
+            role: u.role || "",
+            birthday: u.birthday || null,
+            showAge: u.showAge ?? u.showAgeInCalendar ?? true,
+            avatar: u.photoURL || u.avatar || "",
+            gender: u.gender || "",
+            createdAt: serverTimestamp(),
+            joinedAt: serverTimestamp()
+          };
+          updateData = { ...nestedMember };
+        }
+
+        // Now perform the specific repair comparison with invites if birthday is empty
+        if (!nestedMember.birthday) {
+          // Look up invite with same name/memberName
+          const matchingInvite = invitesList.find(inv => 
+            inv.memberName === nestedMember.name || 
+            inv.name === nestedMember.name || 
+            inv.memberName === u.displayName || 
+            inv.name === u.displayName
+          );
+
+          if (matchingInvite && matchingInvite.birthday) {
+            console.log("Found matching invite for empty birthday member:", nestedMember.name, matchingInvite.birthday);
+            shouldCreateOrUpdate = true;
+            updateData = {
+              ...updateData,
+              name: nestedMember.name || matchingInvite.name || matchingInvite.memberName,
+              role: nestedMember.role || matchingInvite.role || matchingInvite.targetRole,
+              birthday: matchingInvite.birthday,
+              showAge: matchingInvite.showAge ?? true,
+              avatar: matchingInvite.avatar || nestedMember.avatar || "",
+              gender: matchingInvite.gender || nestedMember.gender || ""
+            };
+            
+            // Sync it to the root user profile too to keep both in perfect sync
+            await updateDoc(doc(db, "users", u.id), {
+              birthday: matchingInvite.birthday,
+              showAgeInCalendar: matchingInvite.showAge ?? true,
+              gender: matchingInvite.gender || "",
+              photoURL: matchingInvite.avatar || u.photoURL || ""
+            });
+
+            // Re-create the birthday event
+            await createBirthdayEvent(u.id, matchingInvite.birthday, familyId, nestedMember.name || u.displayName);
+          }
+        }
+
+        if (shouldCreateOrUpdate) {
+          console.log("Writing nested member document for repair:", u.id, updateData);
+          await setDoc(doc(db, "families", familyId, "members", u.id), updateData, { merge: true });
+        }
+      }
+
+      console.log("Auto-repair completed successfully!");
+    } catch (err) {
+      console.error("Error during auto-repair:", err);
+    }
+  };
+
   // Onboarding action: Join Family (Transforms to request creation or direct automatic join if invite code matches!)
   const handleJoinFamily = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -1583,31 +1773,59 @@ export default function App() {
           await deleteDoc(doc(db, "family_members", oldMemberLinkId));
         }
 
-        const mergedDisplayName = placeholderData.displayName || joinDisplayName.trim() || currentUserProfile.displayName;
-        const mergedColor = placeholderData.color || currentUserProfile.color || "#B4C3B2";
-        const mergedPhotoURL = placeholderData.photoURL || currentUserProfile.photoURL || "✿";
-        const mergedBirthday = placeholderData.birthday || currentUserProfile.birthday || "";
+        const finalDisplayName = inviteData.name || inviteData.memberName || placeholderData.displayName || joinDisplayName.trim() || currentUserProfile.displayName;
+        const finalColor = placeholderData.color || currentUserProfile.color || "#B4C3B2";
+        const finalPhotoURL = inviteData.avatar || placeholderData.photoURL || currentUserProfile.photoURL || "✿";
+        const finalBirthday = inviteData.birthday || placeholderData.birthday || currentUserProfile.birthday || "";
+        const finalGender = inviteData.gender || placeholderData.gender || currentUserProfile.gender || "";
+        const finalShowAge = inviteData.showAge ?? true;
         const mergedStars = placeholderData.stars || 0;
 
-        // 1. Update the user document
+        // Create the nested families/{familyId}/members/{userId} document
+        const memberData = {
+          name: finalDisplayName,
+          role: inviteData.role || inviteData.targetRole || targetRole,
+          birthday: finalBirthday || null,
+          showAge: finalShowAge,
+          avatar: finalPhotoURL,
+          gender: finalGender,
+          createdAt: serverTimestamp(),
+          joinedAt: serverTimestamp()
+        };
+
+        await setDoc(doc(db, "families", targetFamilyId, "members", user.uid), memberData);
+
+        console.log(
+          "Member Created",
+          memberData
+        );
+
+        // Auto Birthday Event
+        if (memberData.birthday) {
+          await createBirthdayEvent(user.uid, memberData.birthday, targetFamilyId, memberData.name);
+        }
+
+        // 1. Update the root user document
         await updateDoc(doc(db, "users", user.uid), {
           familyId: targetFamilyId,
           role: targetRole,
-          displayName: mergedDisplayName,
-          color: mergedColor,
-          photoURL: mergedPhotoURL,
-          birthday: mergedBirthday,
+          displayName: finalDisplayName,
+          color: finalColor,
+          photoURL: finalPhotoURL,
+          birthday: finalBirthday,
+          showAgeInCalendar: finalShowAge,
+          gender: finalGender,
           stars: mergedStars,
           updatedAt: new Date().toISOString()
         });
 
-        // 2. Create family_members link
+        // 2. Create family_members link (for legacy sync)
         const memberId = `${targetFamilyId}_${user.uid}`;
         await setDoc(doc(db, "family_members", memberId), {
           id: memberId,
           familyId: targetFamilyId,
           userId: user.uid,
-          displayName: mergedDisplayName,
+          displayName: finalDisplayName,
           role: targetRole,
           stars: mergedStars,
           createdAt: serverTimestamp(),
@@ -1628,9 +1846,9 @@ export default function App() {
         await setDoc(doc(db, "audit_logs", auditId), {
           id: auditId,
           userId: user.uid,
-          userName: `${joinDisplayName.trim() || currentUserProfile.displayName} (${targetRole})`,
+          userName: `${finalDisplayName} (${targetRole})`,
           familyId: targetFamilyId,
-          action: `進入「${targetFamilyName}」：使用專屬邀請碼「${inputCode.toUpperCase()}」自動啟用 ${targetRole} 權限`,
+          action: `進入「${targetFamilyName}」：使用專屬邀請碼「${inputCode.toUpperCase()}」自動啟用 ${targetRole} 權限並同步生日設定`,
           targetId: targetFamilyId,
           targetName: targetFamilyName,
           createdAt: new Date().toISOString(),
@@ -1641,7 +1859,12 @@ export default function App() {
           ...currentUserProfile,
           familyId: targetFamilyId,
           role: targetRole,
-          displayName: joinDisplayName.trim() || currentUserProfile.displayName
+          displayName: finalDisplayName,
+          color: finalColor,
+          photoURL: finalPhotoURL,
+          birthday: finalBirthday,
+          showAgeInCalendar: finalShowAge,
+          gender: finalGender
         };
         setCurrentUserProfile(updatedProfile);
         setActivePage("home");
@@ -3107,11 +3330,9 @@ function generateTemplateDates(startDateStr: string, weekdays: number[], count: 
 
   const currentModeValue = activeModeDetails.modeValue;
   const activeModeConfig = activeModeDetails.config;
-
-  // 3. Render Loading screen
   if (isLoadingAuth) {
     return (
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center font-sans">
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center font-sans text-gray-800">
         <div className="text-center space-y-3">
           <div className="h-10 w-10 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin mx-auto"></div>
           <p className="text-sm text-gray-500 font-bold select-none">家庭生活管理系統啟動中...</p>
@@ -3120,7 +3341,7 @@ function generateTemplateDates(startDateStr: string, weekdays: number[], count: 
     );
   }
 
-  // 4. Render Google Login Portal
+  // 4. Render Google/Invite Login Portal (Landing screen)
   if (!user || !currentUserProfile) {
     return (
       <div className="min-h-screen bg-gradient-to-tr from-sky-50 via-indigo-50/20 to-pink-50 flex items-center justify-center p-4 font-sans text-gray-800">
@@ -3156,7 +3377,7 @@ function generateTemplateDates(startDateStr: string, weekdays: number[], count: 
                   : "text-gray-500 hover:text-gray-855"
               }`}
             >
-              ✉️ 家庭邀請碼加入
+              ✉️ 家庭邀請加入
             </button>
           </div>
 
@@ -3174,7 +3395,7 @@ function generateTemplateDates(startDateStr: string, weekdays: number[], count: 
               <button
                 onClick={handleGoogleLogin}
                 disabled={isLoggingIn || isOnboardingBusy}
-                className="w-full py-3.5 bg-indigo-600 hover:bg-indigo-700 active:translate-y-0.5 text-white font-extrabold rounded-2xl shadow-md cursor-pointer transition flex items-center justify-center gap-2.5 tracking-wide text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                className="w-full py-3.5 bg-indigo-600 hover:bg-indigo-700 active:translate-y-0.5 text-white font-extrabold rounded-2xl shadow-md cursor-pointer transition flex items-center justify-center gap-2.5 tracking-wide text-sm disabled:opacity-50"
               >
                 <Sparkles className="h-4.5 w-4.5 text-indigo-200" />
                 {isLoggingIn ? "正在啟動 Google 登入..." : "使用 Google 快速登入"}
@@ -3183,36 +3404,55 @@ function generateTemplateDates(startDateStr: string, weekdays: number[], count: 
           )}
 
           {loginTab === "invite" && (
-            <div className="space-y-4 animate-in fade-in duration-200">
+            <div className="space-y-4 text-left animate-in fade-in duration-200">
               {!foundInvite ? (
-                <div className="space-y-4 text-left">
+                <div className="space-y-4">
                   <div>
                     <label className="block text-xs font-extrabold text-gray-500 mb-1.5">
-                      家庭邀請碼
+                      家庭代碼 (Family Code)
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="請輸入家長設定的家庭代碼 (例如: fam_oqwzk5057)"
+                      value={joinFamilyId}
+                      onChange={(e) => setJoinFamilyId(e.target.value.trim())}
+                      className="w-full text-sm border font-sans text-gray-700 border-gray-205 rounded-xl px-3.5 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-[#FAF8F5]/50 font-bold"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-extrabold text-gray-500 mb-1.5">
+                      邀請碼 (Invite Code)
                     </label>
                     <input
                       type="text"
                       required
                       maxLength={6}
-                      placeholder="請輸入家長產製的 6 位邀請碼（例如：AB12CD）"
-                      value={joinFamilyId}
-                      onChange={(e) => setJoinFamilyId(e.target.value.toUpperCase())}
+                      placeholder="請輸入 6 位專屬邀請碼 (例如: AB12CD)"
+                      value={joinInviteCode}
+                      onChange={(e) => setJoinInviteCode(e.target.value.trim().toUpperCase())}
                       className="w-full text-sm border font-mono font-black tracking-widest text-[#4A6076] border-gray-205 rounded-xl px-3.5 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-[#FAF8F5]/50 text-center uppercase"
                     />
-                    <p className="text-[10px] text-gray-400 mt-1.5 font-medium leading-relaxed">
-                      請輸入 6 碼大寫英文與數字。系統將會即時為您查詢並帶出對應的受邀家庭角色資訊。
-                    </p>
                   </div>
 
-                  {isSearchingInvite && (
+                  {isSearchingInvite ? (
                     <div className="flex items-center gap-2 text-xs text-emerald-600 font-bold select-none p-1 shrink-0 animate-pulse justify-center">
                       <div className="h-3.5 w-3.5 border-2 border-emerald-600 border-t-transparent rounded-full animate-spin"></div>
-                      <span>正在查詢該邀請設定資訊...</span>
+                      <span>正在驗證邀請資訊...</span>
                     </div>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => handleQueryInvite(joinFamilyId, joinInviteCode)}
+                      className="w-full py-3 bg-[#4D6375] hover:bg-[#3d4f5e] text-white font-extrabold rounded-xl shadow-md transition flex items-center justify-center gap-2 text-sm cursor-pointer"
+                    >
+                      🔍 查詢邀請
+                    </button>
                   )}
 
                   {searchInviteError && (
-                    <div className="bg-rose-50 border border-rose-100 text-rose-600 rounded-xl p-3 text-2xs font-bold leading-relaxed">
+                    <div className="bg-rose-50 border border-rose-100 text-rose-600 rounded-xl p-3 text-xs font-semibold leading-relaxed">
                       ⚠️ {searchInviteError}
                     </div>
                   )}
@@ -3223,17 +3463,17 @@ function generateTemplateDates(startDateStr: string, weekdays: number[], count: 
                     <span className="text-sm font-black">✉️ 找到您專屬的家庭邀請通知</span>
                   </div>
 
-                  <div className="space-y-2 text-2xs md:text-xs">
+                  <div className="space-y-2 text-xs">
                     <div className="flex justify-between items-center bg-white border border-[#EFEAE2] rounded-xl px-3.5 py-2">
                       <span className="font-extrabold text-gray-500">🏡 受邀家庭</span>
                       <span className="font-black text-[#2D2926]">{foundInvite.familyName || "我的家庭"}</span>
                     </div>
                     <div className="flex justify-between items-center bg-white border border-[#EFEAE2] rounded-xl px-3.5 py-2">
-                      <span className="font-extrabold text-gray-500">👤 角色暱稱</span>
+                      <span className="font-extrabold text-gray-500">👤 受邀者</span>
                       <span className="font-black text-rose-950 bg-rose-50 px-2 py-0.5 rounded border border-rose-100">{foundInvite.memberName || "新成員"}</span>
                     </div>
                     <div className="flex justify-between items-center bg-white border border-[#EFEAE2] rounded-xl px-3.5 py-2">
-                      <span className="font-extrabold text-gray-500">🏷️ 被賦予權限</span>
+                      <span className="font-extrabold text-gray-500">👑 角色關係</span>
                       <span className="font-black text-indigo-700 bg-indigo-50 border border-indigo-150/40 px-2 py-0.5 rounded">{getRoleLabel(foundInvite.targetRole)}</span>
                     </div>
                     <div className="flex justify-between items-center bg-white border border-[#EFEAE2] rounded-xl px-3.5 py-2">
@@ -3252,11 +3492,11 @@ function generateTemplateDates(startDateStr: string, weekdays: number[], count: 
                       className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 active:translate-y-0.5 text-white font-extrabold rounded-xl shadow-md cursor-pointer transition flex items-center justify-center gap-2 text-xs md:text-sm disabled:opacity-50"
                     >
                       {isOnboardingBusy ? (
-                        <span>正在啟用並進駐家庭...</span>
+                        <span>正在啟用並加入家庭...</span>
                       ) : foundInvite.email ? (
                         <span>🔑 使用指定 Google 登入並加入</span>
                       ) : (
-                        <span>🚀 確認為本尊，直接加入家庭</span>
+                        <span>🚀 確認加入家庭</span>
                       )}
                     </button>
 
@@ -3267,7 +3507,7 @@ function generateTemplateDates(startDateStr: string, weekdays: number[], count: 
                         setJoinFamilyId("");
                       }}
                       disabled={isOnboardingBusy}
-                      className="w-full py-2 text-xs text-gray-400 hover:text-gray-600 font-bold transition text-center bg-white hover:bg-gray-50 border border-gray-150 rounded-xl"
+                      className="w-full py-2 text-xs text-gray-400 hover:text-gray-600 font-bold transition text-center bg-[#FAF8F5] hover:bg-gray-50 border border-gray-150 rounded-xl"
                     >
                       重新輸入 / 返回
                     </button>
@@ -3283,45 +3523,60 @@ function generateTemplateDates(startDateStr: string, weekdays: number[], count: 
 
   // 5. Render Family Onboarding Selector (if user has no familyId linked)
   if (!currentUserProfile.familyId && currentUserProfile.email !== "juwen616@gmail.com") {
-    if (myPendingRequest) {
+    // Check if we have an auto-matched invitation for this logged in email!
+    if (googleMatchInvite) {
       return (
-        <div className="min-h-screen bg-slate-50/60 flex items-center justify-center p-4 font-sans text-gray-800">
-          <div className="max-w-md w-full bg-white border border-[#E5E1DA] rounded-3xl p-8 shadow-xl text-center space-y-6">
-            <div className="mx-auto h-16 w-16 bg-amber-50 text-amber-600 border border-amber-100 rounded-2xl flex items-center justify-center text-3xl font-bold">
-              ⏱️
+        <div className="min-h-screen bg-slate-50/60 flex items-center justify-center p-4 font-sans text-gray-800 animate-in fade-in duration-200">
+          <div className="max-w-md w-full bg-white border border-gray-150 rounded-3xl p-8 shadow-2xl space-y-6 text-center animate-out duration-150">
+            <div className="mx-auto h-16 w-16 bg-indigo-50 text-indigo-600 rounded-2xl flex items-center justify-center text-3xl font-bold">
+              ✉️
             </div>
+            
             <div className="space-y-2">
-              <h2 className="text-base font-black text-gray-900 tracking-tight">⏱️ 申請已送出，正在等待家長審核...</h2>
-              <p className="text-xs text-gray-500 leading-normal">
-                您已申請進駐家庭：<span className="font-extrabold text-indigo-700">{myPendingRequest.familyName}</span>
-              </p>
-              <p className="text-[11px] text-gray-400 font-bold">
-                申請暱稱：{myPendingRequest.userName} ． 預設關係：{myPendingRequest.role === UserRole.PARENT ? "家長" : (myPendingRequest.role === UserRole.KID ? "小孩" : "家庭成員")}
-              </p>
+              <h1 className="text-xl font-black text-gray-900 tracking-tight">
+                歡迎加入「{googleMatchInvite.familyName || "我的家庭"}」🏠
+              </h1>
+              <p className="text-sm text-gray-500 font-medium">您的家庭成員邀請已就緒！系統登入資訊：</p>
             </div>
-            <div className="bg-[#FCFBF9] border border-[#FAF6EE] rounded-xl p-4 text-[11px] text-amber-800 leading-relaxed text-left">
-              ☕ <b>管理審查中：</b> 專案管理員媽媽（Owner 或 Parent）會在「家庭成員管理」中看到該筆待審核申請。審核「同意」後，系統會自動解鎖並導向您的首頁！
+
+            <div className="bg-[#FAF9F6] border border-gray-150 rounded-2xl p-4 text-left space-y-3 font-sans">
+              <div className="flex justify-between items-center bg-white border border-[#EFEAE2] rounded-xl px-3.5 py-2">
+                <span className="text-xs font-extrabold text-gray-500">👤 預設成員姓名</span>
+                <span className="text-xs font-black text-rose-950 bg-rose-50 px-2 py-0.5 rounded border border-rose-105">{googleMatchInvite.name || googleMatchInvite.memberName}</span>
+              </div>
+              <div className="flex justify-between items-center bg-white border border-[#EFEAE2] rounded-xl px-3.5 py-2">
+                <span className="text-xs font-extrabold text-gray-500">👑 角色身分</span>
+                <span className="text-xs font-black text-indigo-700 bg-indigo-50 border border-indigo-150/40 px-2 py-0.5 rounded">{getRoleLabel(googleMatchInvite.role || googleMatchInvite.targetRole)}</span>
+              </div>
+              <div className="flex justify-between items-center bg-white border border-[#EFEAE2] rounded-xl px-3.5 py-2">
+                <span className="text-xs font-extrabold text-gray-500">📧 綁定 Google 帳號</span>
+                <span className="text-xs font-bold text-gray-600 select-all font-mono">{googleMatchInvite.email}</span>
+              </div>
             </div>
-            <div className="pt-2 space-y-2">
+
+            <div className="text-xs text-[#4A6076] font-bold bg-[#FAF8F5] border border-gray-200 rounded-xl p-3 leading-relaxed text-left select-none">
+              ℹ️ 按下「立即加入」後，系統會直接同步您的生日、年齡以及角色權限，並為您建立行事曆。
+            </div>
+
+            <div className="flex gap-3 w-full">
               <button
+                type="button"
                 onClick={async () => {
-                  if (!confirm("確定要取消加入申請嗎？")) return;
-                  try {
-                    await deleteDoc(doc(db, "join_requests", myPendingRequest.id));
-                    toast.success("✓ 已撤回申請！");
-                  } catch (err: any) {
-                    toast.error("撤回失敗：" + err.message);
-                  }
+                  setGoogleMatchInvite(null);
+                  await handleLogout();
                 }}
-                className="w-full py-2.5 bg-rose-50 hover:bg-rose-100 border border-rose-200 text-rose-600 text-xs font-bold rounded-xl transition cursor-pointer"
+                disabled={isOnboardingBusy}
+                className="flex-1 py-3 text-xs bg-gray-100 hover:bg-gray-200 text-gray-600 font-bold rounded-xl transition cursor-pointer"
               >
-                撤回目前申請，重新選擇
+                取消 / 登出
               </button>
               <button
-                onClick={handleLogout}
-                className="w-full py-2.5 text-gray-400 hover:text-gray-600 text-xs font-bold transition cursor-pointer"
+                type="button"
+                onClick={() => processInviteAccept(googleMatchInvite)}
+                disabled={isOnboardingBusy}
+                className="flex-1 py-3 text-xs bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl shadow-md transition cursor-pointer"
               >
-                登出目前 Google 帳號
+                {isOnboardingBusy ? "加入中..." : "🚀 立即加入"}
               </button>
             </div>
           </div>
@@ -3427,64 +3682,118 @@ function generateTemplateDates(startDateStr: string, weekdays: number[], count: 
 
           {/* ONBOARDING: Join Family */}
           {onboardingChoice === "join" && (
-            <form onSubmit={handleJoinFamily} className="space-y-4">
-              <h3 className="font-bold text-gray-800 text-sm border-l-4 border-emerald-500 pl-2">
-                輸入加入邀請代碼＆指定角色
-              </h3>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-bold text-gray-500 mb-1">六位數家庭代碼 (Family Code / ID)</label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="請向媽媽索取：例如 XK8QW2"
-                    value={joinFamilyId}
-                    onChange={(e) => setJoinFamilyId(e.target.value)}
-                    className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2.5 focus:outline-none"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-gray-500 mb-1">您在家庭的暱稱顯示</label>
-                  <input
-                    type="text"
-                    required
-                    value={joinDisplayName}
-                    onChange={(e) => setJoinDisplayName(e.target.value)}
-                    className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2.5 focus:outline-none"
-                  />
-                </div>
-              </div>
+            <div className="space-y-4 text-left animate-in fade-in duration-200">
+              {!foundInvite ? (
+                <div className="space-y-4">
+                  <h3 className="font-extrabold text-gray-800 text-xs border-l-4 border-emerald-500 pl-2 select-none">
+                    🔑 輸入邀請與家庭代碼 verify 驗證，免審批直接加入
+                  </h3>
+                  <div>
+                    <label className="block text-xs font-bold text-gray-500 mb-1.5">
+                      家庭代碼 (Family Code / ID)
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="請輸入家長設定的家庭代碼 (例如: fam_oqwzk5057)"
+                      value={joinFamilyId}
+                      onChange={(e) => setJoinFamilyId(e.target.value.trim())}
+                      className="w-full text-sm border font-sans text-gray-700 border-gray-200 rounded-xl px-3.5 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-[#FAF8F5]/50 font-bold"
+                    />
+                  </div>
 
-              <div>
-                <label className="block text-xs font-bold text-gray-500 mb-1">選擇您的家庭角色關係</label>
-                <select
-                  value={joinRole}
-                  onChange={(e) => setJoinRole(e.target.value as UserRole)}
-                  className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 bg-white focus:outline-none"
-                >
-                  <option value={UserRole.PARENT}>爸爸媽媽（家長成員）- 可指派任務、與孩子進行確認並給予獎勵</option>
-                  <option value={UserRole.KID}>小孩成員 - 查看行事曆任務、回報完成通關、發送許願池</option>
-                  <option value={UserRole.MEMBER}>其他家庭成員 (外公外婆爺爺奶奶寵物等) - 唯讀檢視</option>
-                </select>
-              </div>
+                  <div>
+                    <label className="block text-xs font-bold text-gray-500 mb-1.5">
+                      邀請碼 (Invite Code)
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      maxLength={6}
+                      placeholder="請輸入 6 位專屬邀請碼 (例如: AB12CD)"
+                      value={joinInviteCode}
+                      onChange={(e) => setJoinInviteCode(e.target.value.trim().toUpperCase())}
+                      className="w-full text-sm border font-mono font-black tracking-widest text-[#4A6076] border-gray-205 rounded-xl px-3.5 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-[#FAF8F5]/50 text-center uppercase"
+                    />
+                  </div>
 
-              <div className="flex justify-end gap-2 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setOnboardingChoice("none")}
-                  className="px-4 py-2 text-xs font-bold text-gray-500 hover:bg-gray-50 border rounded-lg transition"
-                >
-                  返回
-                </button>
-                <button
-                  type="submit"
-                  disabled={isOnboardingBusy || !joinFamilyId.trim()}
-                  className="px-4 py-2 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg transition"
-                >
-                  {isOnboardingBusy ? "正在核實進入中..." : "送出申請"}
-                </button>
-              </div>
-            </form>
+                  {isSearchingInvite ? (
+                    <div className="flex items-center gap-2 text-xs text-emerald-600 font-bold select-none p-1 shrink-0 animate-pulse justify-center">
+                      <div className="h-3.5 w-3.5 border-2 border-emerald-600 border-t-transparent rounded-full animate-spin"></div>
+                      <span>正在驗證邀請資訊...</span>
+                    </div>
+                  ) : (
+                    <div className="flex gap-2.5 pt-2">
+                      <button
+                        type="button"
+                        onClick={() => setOnboardingChoice("none")}
+                        className="px-4 py-3 text-xs font-bold text-gray-500 hover:bg-gray-50 border rounded-xl transition"
+                      >
+                        返回
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleQueryInvite(joinFamilyId, joinInviteCode)}
+                        className="flex-1 py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold rounded-xl shadow-md transition flex items-center justify-center gap-2 text-xs"
+                      >
+                        🔍 查詢邀請
+                      </button>
+                    </div>
+                  )}
+
+                  {searchInviteError && (
+                    <div className="bg-rose-50 border border-rose-100 text-rose-600 rounded-xl p-3 text-xs font-semibold leading-relaxed">
+                      ⚠️ {searchInviteError}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="bg-[#FAF9F6] border border-gray-200 rounded-2xl p-5 space-y-4 shadow-xs text-left animate-in fade-in zoom-in-95 duration-200">
+                  <div className="text-center font-bold text-emerald-800 border-b border-gray-100 pb-3 flex items-center justify-center gap-1.5">
+                    <span className="text-xs font-black">✉️ 找到您專屬的家庭邀請通知</span>
+                  </div>
+
+                  <div className="space-y-2 text-xs font-sans">
+                    <div className="flex justify-between items-center bg-white border border-[#EFEAE2] rounded-xl px-3.5 py-2">
+                      <span className="font-extrabold text-gray-500">🏡 受邀家庭</span>
+                      <span className="font-black text-[#2D2926]">{foundInvite.familyName || "我的家庭"}</span>
+                    </div>
+                    <div className="flex justify-between items-center bg-white border border-[#EFEAE2] rounded-xl px-3.5 py-2">
+                       <span className="font-extrabold text-gray-500">👤 受邀者</span>
+                       <span className="font-black text-rose-950 bg-rose-50 px-2 py-0.5 rounded border border-rose-100">{foundInvite.name || foundInvite.memberName || "新成員"}</span>
+                    </div>
+                    <div className="flex justify-between items-center bg-white border border-[#EFEAE2] rounded-xl px-3.5 py-2">
+                      <span className="font-extrabold text-gray-500">👑 角色關係</span>
+                      <span className="font-black text-indigo-700 bg-indigo-50 border border-indigo-150/40 px-2 py-0.5 rounded">{getRoleLabel(foundInvite.targetRole || foundInvite.role)}</span>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2 pt-2">
+                    <button
+                      type="button"
+                      onClick={() => handleConfirmInviteJoin()}
+                      disabled={isOnboardingBusy}
+                      className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 active:translate-y-0.5 text-white font-extrabold rounded-xl shadow-md cursor-pointer transition flex items-center justify-center gap-2 text-xs"
+                    >
+                      {isOnboardingBusy ? "正在核實啟用中..." : "🚀 確認加入家庭"}
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setFoundInvite(null);
+                        setJoinFamilyId("");
+                        setJoinInviteCode("");
+                      }}
+                      disabled={isOnboardingBusy}
+                      className="w-full py-2.5 text-xs text-gray-400 hover:text-gray-600 font-bold transition text-center bg-[#FAF8F5] hover:bg-gray-50 border border-gray-150 rounded-xl"
+                    >
+                      重新輸入 / 返回
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
           )}
 
           <div className="border-t border-gray-50 pt-4 text-center">

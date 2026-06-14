@@ -44,6 +44,7 @@ export interface UserProfile {
   inviteCode?: string;
   inviteStatus?: string;
   showAgeInCalendar?: boolean;
+  showAge?: boolean;
 }
 
 export interface Family {

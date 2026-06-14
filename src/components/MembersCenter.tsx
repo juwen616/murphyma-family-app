@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect } from "react";
 import { UserProfile, UserRole, SystemMode, Task, Redemption, ConfiguredMode, getLocalToday } from "../types";
 import { db } from "../firebase";
-import { collection, onSnapshot, query, where, setDoc, doc, deleteDoc } from "firebase/firestore";
+import { collection, onSnapshot, query, where, setDoc, doc, deleteDoc, updateDoc, getDoc, getDocs } from "firebase/firestore";
 import toast from "react-hot-toast";
 import { 
   Users, BadgeInfo, Settings2, Trash2, Edit3, Plus, X, Calendar, Sparkles, 
@@ -149,6 +149,15 @@ export default function MembersCenter({
   const [inviteEmailConstraint, setInviteEmailConstraint] = useState("");
   const [submittingInvite, setSubmittingInvite] = useState(false);
 
+  const [editingInvite, setEditingInvite] = useState<any | null>(null);
+  const [inviteSuccessData, setInviteSuccessData] = useState<{
+    isOpen: boolean;
+    memberName: string;
+    role: string;
+    inviteCode: string;
+    email: string;
+  } | null>(null);
+
   // Listen to family invitation codes from firestore
   useEffect(() => {
     if (!familyId) return;
@@ -181,18 +190,75 @@ export default function MembersCenter({
     try {
       const inviteCode = generateInviteCode();
       const inviteId = `invite_${Math.random().toString(36).substr(2, 9)}`;
-      await setDoc(doc(db, "invites", inviteId), {
+      const inviteData = {
         id: inviteId,
         familyId,
         familyName,
         inviterUid: currentUser.uid,
         status: "pending",
         targetRole: targetInviteRole,
+        role: targetInviteRole,
         inviteCode,
         email: inviteEmailConstraint.trim().toLowerCase(),
         createdAt: new Date().toISOString(),
-        createdBy: currentUser.displayName || currentUser.email || "Owner"
-      });
+        createdBy: currentUser.displayName || currentUser.email || "Owner",
+        memberName: "一般受邀者"
+      };
+      
+      const docRef = doc(db, "families", familyId, "invites", inviteCode);
+      console.log("Create Invite Data", inviteData);
+      
+      await setDoc(docRef, inviteData);
+      await setDoc(doc(db, "invites", inviteId), inviteData);
+
+      console.log(
+        "Invite Created Path",
+        docRef.path
+      );
+      console.log(
+        "Invite Created Data",
+        inviteData
+      );
+
+      // Verify the write immediately
+      const verifyDoc = await getDoc(docRef);
+      console.log(
+        "Invite Verify Exists",
+        verifyDoc.exists()
+      );
+      console.log(
+        "Invite Verify Data",
+        verifyDoc.data()
+      );
+      console.log(
+        "Invite Verify Path",
+        docRef.path
+      );
+
+      if (!verifyDoc.exists()) {
+        throw new Error("Firebase contains no record at Path: " + docRef.path);
+      }
+
+      // Read back all invites of this family
+      const snapshot = await getDocs(
+        collection(
+          db,
+          "families",
+          familyId,
+          "invites"
+        )
+      );
+
+      console.log(
+        "Invites After Create",
+        snapshot.docs.length
+      );
+      console.log(
+        snapshot.docs.map(d => ({
+          id: d.id,
+          ...d.data()
+        }))
+      );
       
       // Auto-log audit record
       const auditId = `aud_${Date.now()}_invite`;
@@ -210,6 +276,7 @@ export default function MembersCenter({
       toast.success(`🎉 成功生成 ${targetInviteRole} 專屬邀請碼：${inviteCode}`);
       setInviteEmailConstraint("");
     } catch (err: any) {
+      console.error("Invite creation failed:", err);
       toast.error("❌ 生成邀請失敗：" + err.message);
     } finally {
       setSubmittingInvite(false);
@@ -300,6 +367,7 @@ export default function MembersCenter({
   const [color, setColor] = useState("#B4C3B2");
   const [photoURL, setPhotoURL] = useState("✿");
   const [showAgeInCalendar, setShowAgeInCalendar] = useState(true);
+  const [gender, setGender] = useState("");
   const [isSubmittingForm, setIsSubmittingForm] = useState(false);
 
   // Deletion Confirm Modal states
@@ -598,13 +666,16 @@ export default function MembersCenter({
 
   const handleOpenAdd = () => {
     setEditingMember(null);
+    setEditingInvite(null);
     setDisplayName("");
     setRole(UserRole.KID);
     setBirthday("2015-04-18");
     setColor("#B4C3B2");
     setPhotoURL("✿");
     setAutoCreateInvite(true);
+    setInviteEmailConstraint("");
     setShowAgeInCalendar(true);
+    setGender("");
     setShowFormModal(true);
   };
 
@@ -616,6 +687,7 @@ export default function MembersCenter({
     setColor(member.color || "#B4C3B2");
     setPhotoURL(member.photoURL || "✿");
     setShowAgeInCalendar(member.showAgeInCalendar !== false);
+    setGender(member.gender || "");
     setShowFormModal(true);
   };
 
@@ -643,12 +715,112 @@ export default function MembersCenter({
     );
   }, [redemptions, viewingRecordMember]);
 
+  const generateInvitationMsg = (member: {
+    memberName: string;
+    targetRole: string;
+    inviteCode: string;
+    email?: string;
+  }) => {
+    const roleLabel = getRoleChineseName(member.targetRole);
+    const hasGmail = !!(member.email && member.email.trim());
+    
+    if (hasGmail) {
+      return `歡迎加入「${familyName}」🏠
+
+您的家庭身份：
+${member.memberName}（${roleLabel}）
+
+此邀請已綁定 Gmail：
+${member.email.trim()}
+
+請開啟家庭生活管理中心：
+https://murphyma-family-app.vercel.app/
+
+請直接使用：
+${member.email.trim()}
+進行 Google 登入。
+
+登入後系統將自動驗證邀請資格。
+
+家庭代碼：
+${familyId}
+
+邀請代碼：
+${member.inviteCode}
+
+登入成功後即可進入家庭。
+
+期待一起建立溫暖的${familyName} ❤️`;
+    } else {
+      return `歡迎加入「${familyName}」🏠
+
+您的家庭身份：
+${member.memberName}（${roleLabel}）
+
+請開啟家庭生活管理中心：
+https://murphyma-family-app.vercel.app/
+
+選擇：
+📨 家庭邀請碼加入
+
+並輸入以下資訊：
+家庭代碼：
+${familyId}
+
+邀請代碼：
+${member.inviteCode}
+
+加入成功後即可進入家庭系統。
+如無 Gmail 帳號也可直接加入。
+
+期待一起建立溫慢的${familyName} ❤️`;
+    }
+  };
+
   const handleFormSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!displayName.trim()) return;
     setIsSubmittingForm(true);
     try {
-      if (editingMember) {
+      if (editingInvite) {
+        // Update both top-level and families subcollection
+        const updatedInviteData = {
+          memberName: displayName.trim(),
+          name: displayName.trim(),
+          targetRole: role,
+          role: role,
+          email: inviteEmailConstraint.trim().toLowerCase(),
+          birthday: birthday || null,
+          showAge: showAgeInCalendar ?? true,
+          avatar: photoURL || "",
+          gender: gender || ""
+        };
+
+        await updateDoc(doc(db, "invites", editingInvite.id), updatedInviteData);
+
+        const nestInviteRef = doc(db, "families", familyId, "invites", editingInvite.inviteCode);
+        await updateDoc(nestInviteRef, updatedInviteData);
+
+        // Audit trace
+        const auditId = `aud_${Date.now()}_invite_update`;
+        await setDoc(doc(db, "audit_logs", auditId), {
+          id: auditId,
+          userId: currentUser.uid,
+          userName: currentUser.displayName || currentUser.email || "Owner",
+          familyId,
+          action: `修改受邀成員「${displayName.trim()}」的邀請條件與設定`,
+          targetId: editingInvite.id,
+          targetName: `邀請碼 ${editingInvite.inviteCode}`,
+          createdAt: new Date().toISOString()
+        });
+
+        toast.success(`✓ 邀請設定已成功同步更新！`);
+        setShowFormModal(false);
+        setEditingInvite(null);
+        setInviteEmailConstraint("");
+        setDisplayName("");
+        setGender("");
+      } else if (editingMember) {
         if (onEditMember) {
           await onEditMember(editingMember.uid, {
             displayName: displayName.trim(),
@@ -657,26 +829,89 @@ export default function MembersCenter({
             color,
             photoURL,
             showAgeInCalendar,
-          });
+            gender,
+          } as any);
         }
+        setShowFormModal(false);
       } else {
         // Create only an invitation code in database, do NOT call onAddMember
         const inviteCode = generateInviteCode();
         const inviteId = `invite_${Math.random().toString(36).substr(2, 9)}`;
 
-        await setDoc(doc(db, "invites", inviteId), {
+        const newInvite = {
           id: inviteId,
           familyId,
           familyName,
           inviterUid: currentUser.uid,
           status: "pending",
           targetRole: role,
+          role,
           inviteCode,
           email: inviteEmailConstraint.trim().toLowerCase(),
           createdAt: new Date().toISOString(),
           createdBy: currentUser.displayName || currentUser.email || "Owner",
-          memberName: displayName.trim()
-        });
+          memberName: displayName.trim(),
+          name: displayName.trim(),
+          birthday: birthday || null,
+          showAge: showAgeInCalendar ?? true,
+          avatar: photoURL || "",
+          gender: gender || ""
+        };
+
+        const docRef = doc(db, "families", familyId, "invites", inviteCode);
+        console.log("Create Invite Data", newInvite);
+
+        await setDoc(doc(db, "invites", inviteId), newInvite);
+        await setDoc(docRef, newInvite);
+
+        console.log(
+          "Invite Created Path",
+          docRef.path
+        );
+        console.log(
+          "Invite Created Data",
+          newInvite
+        );
+
+        // Verify the write immediately
+        const verifyDoc = await getDoc(docRef);
+        console.log(
+          "Invite Verify Exists",
+          verifyDoc.exists()
+        );
+        console.log(
+          "Invite Verify Data",
+          verifyDoc.data()
+        );
+        console.log(
+          "Invite Verify Path",
+          docRef.path
+        );
+
+        if (!verifyDoc.exists()) {
+          throw new Error("邀請資料未能成功寫入 Firebase，驗證失敗！ 路徑：" + docRef.path);
+        }
+
+        // Read and list all invites under families/{familyId}/invites
+        const snapshot = await getDocs(
+          collection(
+            db,
+            "families",
+            familyId,
+            "invites"
+          )
+        );
+
+        console.log(
+          "Invites After Create",
+          snapshot.docs.length
+        );
+        console.log(
+          snapshot.docs.map(d => ({
+            id: d.id,
+            ...d.data()
+          }))
+        );
 
         // Create audit trace
         const auditId = `aud_${Date.now()}_invite_manual`;
@@ -691,11 +926,23 @@ export default function MembersCenter({
           createdAt: new Date().toISOString()
         });
 
-        toast.success(`🎉 邀請建立成功！專屬邀請碼：${inviteCode}`);
+        // Trigger Success Dialog
+        setInviteSuccessData({
+          isOpen: true,
+          memberName: displayName.trim(),
+          role: role,
+          inviteCode: inviteCode,
+          email: inviteEmailConstraint.trim().toLowerCase(),
+        });
+
+        toast.success(`🎉 邀請建立成功！`);
+        setShowFormModal(false);
+        setInviteEmailConstraint("");
+        setDisplayName("");
       }
-      setShowFormModal(false);
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
+      toast.error("❌ 建立邀請失敗：" + err.message);
     } finally {
       setIsSubmittingForm(false);
     }
@@ -959,6 +1206,7 @@ export default function MembersCenter({
                     <th className="p-3">角色</th>
                     <th className="p-3">邀請碼</th>
                     <th className="p-3">限定 Email</th>
+                    <th className="p-3 text-center">分享</th>
                     <th className="p-3">狀態</th>
                     <th className="p-3">產製日期</th>
                     <th className="p-3 text-center">操作</th>
@@ -1010,6 +1258,25 @@ export default function MembersCenter({
                           <td className="p-3 font-sans text-gray-500 truncate max-w-[150px]">
                             {inv.email || "無"}
                           </td>
+                          <td className="p-3 text-center">
+                            <button
+                              onClick={() => {
+                                const msg = generateInvitationMsg({
+                                  memberName: inv.memberName || "新成員",
+                                  targetRole: inv.targetRole,
+                                  inviteCode: inv.inviteCode,
+                                  email: inv.email
+                                });
+                                navigator.clipboard.writeText(msg);
+                                toast.success("✓ 完整邀請訊息已複製！");
+                              }}
+                              className="inline-flex items-center gap-1 px-2 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 hover:text-emerald-800 border border-emerald-200 rounded-lg text-[11px] font-bold transition cursor-pointer select-none"
+                              title="複製完整邀請訊息"
+                            >
+                              <Copy className="h-3 w-3" />
+                              <span>📋 複製訊息</span>
+                            </button>
+                          </td>
                           <td className="p-3">
                             <span className={`px-1.5 py-0.5 rounded border text-[10px] font-bold ${statusColor}`}>
                               {statusLabel}
@@ -1019,19 +1286,36 @@ export default function MembersCenter({
                             {inv.createdAt ? new Date(inv.createdAt).toLocaleDateString() : "-"}
                           </td>
                           <td className="p-3 text-center">
-                            <button
-                              onClick={() => handleDeleteInvite(inv.id, inv.inviteCode)}
-                              className="text-rose-500 hover:text-[#E28F83] font-bold hover:bg-rose-50 px-2 py-1 rounded text-[10px] border border-transparent hover:border-rose-100 transition cursor-pointer"
-                            >
-                              刪除邀請
-                            </button>
+                            <div className="flex items-center justify-center gap-1.5">
+                              {inv.status === "pending" && (
+                                <button
+                                  onClick={() => {
+                                    setEditingInvite(inv);
+                                    setEditingMember(null);
+                                    setDisplayName(inv.memberName || "");
+                                    setRole(inv.targetRole);
+                                    setInviteEmailConstraint(inv.email || "");
+                                    setShowFormModal(true);
+                                  }}
+                                  className="text-indigo-600 hover:text-indigo-850 font-bold hover:bg-indigo-50 px-2 py-1 rounded text-[10px] border border-transparent hover:border-indigo-100 transition cursor-pointer"
+                                >
+                                  編輯
+                                </button>
+                              )}
+                              <button
+                                onClick={() => handleDeleteInvite(inv.id, inv.inviteCode)}
+                                className="text-rose-500 hover:text-[#E28F83] font-bold hover:bg-rose-50 px-2 py-1 rounded text-[10px] border border-transparent hover:border-rose-100 transition cursor-pointer"
+                              >
+                                刪除邀請
+                              </button>
+                            </div>
                           </td>
                         </tr>
                       );
                     })}
                   {invites.filter(inv => inv.status === "pending" || inv.status === "expired" || inv.status === "cancelled").length === 0 && (
                     <tr>
-                      <td colSpan={7} className="p-8 text-center text-gray-400">目前尚無任何受邀請中的名單。隨時點擊右上角新增成員！</td>
+                      <td colSpan={8} className="p-8 text-center text-gray-400">目前尚無任何受邀請中的名單。隨時點擊右上角新增成員！</td>
                     </tr>
                   )}
                 </tbody>
@@ -1595,7 +1879,13 @@ export default function MembersCenter({
         <div className="fixed inset-0 bg-[#2D2926]/40 backdrop-blur-sm flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-2xl border border-[#E5E1DA] p-6 max-w-sm w-full shadow-xl relative animate-in fade-in zoom-in-95 duration-150">
             <button
-              onClick={() => setShowFormModal(false)}
+              onClick={() => {
+                setShowFormModal(false);
+                setEditingInvite(null);
+                setEditingMember(null);
+                setInviteEmailConstraint("");
+                setDisplayName("");
+              }}
               className="absolute right-4 top-4 text-gray-400 hover:text-gray-700 transition cursor-pointer animate-none"
             >
               <X className="h-5 w-5" />
@@ -1603,7 +1893,7 @@ export default function MembersCenter({
 
             <h3 className="text-md font-black text-[#2D2926] mb-4 flex items-center gap-2">
               <Sparkles className="h-5 w-5 text-amber-500 fill-amber-200" />
-              <span>{editingMember ? `編輯家庭成員「${editingMember.displayName}」` : "新增家庭成員名冊"}</span>
+              <span>{editingInvite ? `編輯家庭邀請設定` : editingMember ? `編輯家庭成員「${editingMember.displayName}」` : "新增家庭成員名冊"}</span>
             </h3>
 
             <form onSubmit={handleFormSubmit} className="space-y-4">
@@ -1647,6 +1937,19 @@ export default function MembersCenter({
                       onChange={(e) => setBirthday(e.target.value)}
                       className="w-full text-sm border border-[#E5E1DA] rounded-lg px-3 py-1.5 bg-[#F9F8F6] font-mono font-bold text-gray-800"
                     />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-[#4A6076] mb-1">成員性別</label>
+                    <select
+                      value={gender}
+                      onChange={(e) => setGender(e.target.value)}
+                      className="w-full text-sm border border-[#E5E1DA] rounded-lg px-3 py-2 bg-[#F9F8F6] text-gray-800"
+                    >
+                      <option value="">未指定</option>
+                      <option value="male">👦 男生 (Male)</option>
+                      <option value="female">👧 女生 (Female)</option>
+                    </select>
                   </div>
 
                   <div className="flex items-center gap-2 pt-1 bg-[#FAF8F4]/50 p-2.5 rounded-xl border border-[#E5E1DA]/40">
@@ -1748,6 +2051,90 @@ export default function MembersCenter({
                     />
                     <p className="text-[10px] text-gray-400 mt-1 font-medium">留白表示：免帳號模式（適合長輩與小孩，只需輸入邀請碼即可直接加入）</p>
                   </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-[#4A6076] mb-1 flex items-center gap-1">
+                      <Calendar className="h-3.5 w-3.5" />
+                      受邀者生日 (非必填)
+                    </label>
+                    <input
+                      type="date"
+                      value={birthday}
+                      onChange={(e) => setBirthday(e.target.value)}
+                      className="w-full text-sm border border-[#E5E1DA] rounded-lg px-3 py-1.5 bg-[#F9F8F6] font-mono font-bold text-gray-800"
+                    />
+                  </div>
+
+                  <div className="flex items-center gap-2 pt-1 bg-[#FAF8F4]/50 p-2.5 rounded-xl border border-[#E5E1DA]/40">
+                    <input
+                      type="checkbox"
+                      id="show-age-invite"
+                      checked={showAgeInCalendar}
+                      onChange={(e) => setShowAgeInCalendar(e.target.checked)}
+                      className="rounded border-[#E5E1DA] text-[#4A6076] focus:ring-[#4A6076] h-4 w-4 cursor-pointer"
+                    />
+                    <label htmlFor="show-age-invite" className="text-xs font-bold text-[#4A6076] cursor-pointer select-none">
+                      🎂 行事曆中顯示年齡 (勾選顯示 / 取消不顯示)
+                    </label>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-[#4A6076] mb-1">受邀者性別</label>
+                    <select
+                      value={gender}
+                      onChange={(e) => setGender(e.target.value)}
+                      className="w-full text-sm border border-[#E5E1DA] rounded-lg px-3 py-2 bg-[#F9F8F6] text-gray-800"
+                    >
+                      <option value="">未指定</option>
+                      <option value="male">👦 男生 (Male)</option>
+                      <option value="female">👧 女生 (Female)</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-[#4A6076] mb-1">專屬代表主題色</label>
+                    <div className="flex items-center gap-2 mt-1">
+                      {MORANDI_COLORS.map((col) => {
+                        const isSelected = color === col.value;
+                        return (
+                          <button
+                            type="button"
+                            key={col.value}
+                            onClick={() => setColor(col.value)}
+                            style={{ backgroundColor: col.value }}
+                            className={`h-7 w-7 rounded-full border transition cursor-pointer relative ${
+                              isSelected ? "ring-2 ring-offset-2 ring-[#4A6076] scale-110" : "border-gray-200"
+                            }`}
+                            title={col.name}
+                          >
+                            {isSelected && <span className="absolute inset-0 flex items-center justify-center text-[10px] text-white">✓</span>}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-[#4A6076] mb-1.5">選擇代表圖示 (手帳簡約風格)</label>
+                    <div className="grid grid-cols-7 gap-1.5 mt-1 bg-[#FAF8F4] p-3 rounded-xl border border-[#E5E1DA]">
+                      {JAPANESE_SYMBOLS.map((sym) => {
+                        const isSelected = photoURL === sym.value;
+                        return (
+                          <button
+                            title={sym.name}
+                            type="button"
+                            key={sym.value}
+                            onClick={() => setPhotoURL(sym.value)}
+                            className={`h-8 w-8 text-sm flex items-center justify-center rounded bg-white border cursor-pointer select-none ${
+                              isSelected ? "border-[#4A6076] ring-2 ring-[#4A6076]/15 font-bold scale-110" : "border-[#E5E1DA] text-gray-500"
+                            }`}
+                          >
+                            {sym.value}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
                 </>
               )}
 
@@ -1781,17 +2168,23 @@ export default function MembersCenter({
                 <div className="flex gap-2">
                   <button
                     type="button"
-                    onClick={() => setShowFormModal(false)}
-                    className="px-3.5 py-1.5 text-xs text-gray-600 hover:bg-gray-150 border border-gray-250 rounded-lg transition"
+                    onClick={() => {
+                      setShowFormModal(false);
+                      setEditingInvite(null);
+                      setEditingMember(null);
+                      setInviteEmailConstraint("");
+                      setDisplayName("");
+                    }}
+                    className="px-3.5 py-1.5 text-xs text-gray-600 hover:bg-gray-150 border border-gray-250 rounded-lg transition cursor-pointer"
                   >
                     取消
                   </button>
                   <button
                     type="submit"
                     disabled={isSubmittingForm}
-                    className="px-4 py-1.5 text-xs font-bold text-white bg-[#4A6076] hover:bg-[#3b4c5e] rounded-lg transition disabled:opacity-50"
+                    className="px-4 py-1.5 text-xs font-bold text-white bg-[#4A6076] hover:bg-[#3b4c5e] rounded-lg transition disabled:opacity-50 cursor-pointer"
                   >
-                    {isSubmittingForm ? "執行中..." : editingMember ? "儲存修改" : "建立邀請"}
+                    {isSubmittingForm ? "執行中..." : editingInvite ? "儲存修改" : editingMember ? "儲存修改" : "建立邀請"}
                   </button>
                 </div>
               </div>
@@ -2447,6 +2840,80 @@ export default function MembersCenter({
                 className="px-4 py-2 text-xs font-black text-white bg-[#EAA59E] hover:bg-[#D98E85] rounded-xl shadow-xs transition active:scale-97 cursor-pointer"
               >
                 確定
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 🟢 成員邀請建立成功 Modal */}
+      {inviteSuccessData?.isOpen && (
+        <div className="fixed inset-0 bg-[#2D2926]/40 backdrop-blur-sm flex items-center justify-center p-4 z-[9999] animate-in fade-in zoom-in-95 duration-150">
+          <div className="bg-white rounded-2xl border border-[#E5E1DA] p-6 max-w-md w-full shadow-2xl relative flex flex-col font-sans select-none">
+            
+            <div className="text-center pb-4 border-b border-gray-100">
+              <div className="h-12 w-12 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center mx-auto mb-2 text-xl font-bold">
+                ✓
+              </div>
+              <h3 className="text-md font-black text-gray-800">成員邀請建立成功</h3>
+              
+              <div className="mt-3 bg-[#FCFBF9] border border-dashed border-[#E5E1DA] rounded-xl p-3 inline-block min-w-[200px]">
+                <p className="text-sm font-black text-gray-700">{inviteSuccessData.memberName}</p>
+                <p className="text-xs font-bold text-gray-500 mt-0.5">
+                  {getRoleChineseName(inviteSuccessData.role)}（{inviteSuccessData.role}）
+                </p>
+                {inviteSuccessData.email && (
+                  <p className="text-[10px] text-[#4A6076] font-mono mt-1 bg-white px-2 py-0.5 rounded border border-gray-150 inline-block font-bold">
+                    📧 {inviteSuccessData.email}
+                  </p>
+                )}
+              </div>
+            </div>
+
+            <div className="mt-4 flex-grow">
+              <span className="block text-[11px] font-black text-[#4A6076] mb-1.5 flex items-center gap-1">
+                📋 邀請訊息
+              </span>
+              <textarea
+                readOnly
+                value={generateInvitationMsg({
+                  memberName: inviteSuccessData.memberName,
+                  targetRole: inviteSuccessData.role,
+                  inviteCode: inviteSuccessData.inviteCode,
+                  email: inviteSuccessData.email
+                })}
+                rows={9}
+                className="w-full text-xs font-mono font-medium p-3 bg-[#FAF9F6] border border-[#E5E1DA] rounded-xl text-gray-600 focus:outline-none focus:ring-0 select-all leading-relaxed"
+              />
+            </div>
+
+            <div className="mt-5 flex gap-2 w-full">
+              <button
+                type="button"
+                onClick={() => {
+                  const msg = generateInvitationMsg({
+                    memberName: inviteSuccessData.memberName,
+                    targetRole: inviteSuccessData.role,
+                    inviteCode: inviteSuccessData.inviteCode,
+                    email: inviteSuccessData.email
+                  });
+                  navigator.clipboard.writeText(msg);
+                  toast.success("📋 邀請訊息已成功複製！");
+                }}
+                className="flex-1 py-2.5 px-4 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs rounded-xl shadow-sm transition active:scale-97 cursor-pointer flex items-center justify-center gap-2"
+              >
+                <Copy className="h-4 w-4" />
+                <span>複製邀請訊息</span>
+              </button>
+              
+              <button
+                type="button"
+                onClick={() => {
+                  setInviteSuccessData(null);
+                }}
+                className="py-2.5 px-4 bg-gray-100 hover:bg-gray-200 text-gray-600 font-extrabold text-xs rounded-xl transition cursor-pointer"
+              >
+                關閉
               </button>
             </div>
           </div>

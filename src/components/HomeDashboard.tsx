@@ -1,5 +1,7 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import toast from "react-hot-toast";
+import { db } from "../firebase";
+import { collection, query, where, onSnapshot } from "firebase/firestore";
 import {
   CalendarEvent,
   Announcement,
@@ -241,6 +243,40 @@ export default function HomeDashboard({
   const [showAddAnnModal, setShowAddAnnModal] = useState(false);
   const [editingAnnouncement, setEditingAnnouncement] = useState<Announcement | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const [nestedBirthdayMembers, setNestedBirthdayMembers] = useState<any[]>([]);
+
+  useEffect(() => {
+    if (!currentUser?.familyId) return;
+    
+    const membersRef = collection(db, "families", currentUser.familyId, "members");
+    const q = query(membersRef, where("birthday", "!=", null));
+    
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const list: any[] = [];
+      snapshot.forEach((docSnap) => {
+        const data = docSnap.data();
+        list.push({
+          id: docSnap.id,
+          uid: docSnap.id,
+          displayName: data.name || data.displayName || "家庭成員",
+          birthday: data.birthday,
+          showAge: data.showAge ?? true,
+          showAgeInCalendar: data.showAge ?? true,
+          avatar: data.avatar || "",
+          photoURL: data.avatar || "✿",
+          gender: data.gender || "",
+          ...data
+        });
+      });
+      console.log("Loaded nestedBirthdayMembers for Birthday Helper:", list);
+      setNestedBirthdayMembers(list);
+    }, (err) => {
+      console.error("Error loading nestedBirthdayMembers:", err);
+    });
+
+    return unsubscribe;
+  }, [currentUser?.familyId]);
 
   // States for announcement deletion confirmation & debugging
   const [announcementToDelete, setAnnouncementToDelete] = useState<Announcement | null>(null);
@@ -664,7 +700,7 @@ export default function HomeDashboard({
     const countdownList: any[] = [];
     const allUpcoming: any[] = [];
 
-    if (!familyMembers || familyMembers.length === 0) {
+    if (!nestedBirthdayMembers || nestedBirthdayMembers.length === 0) {
       return { todayStars, warningCards, countdownList, allUpcoming };
     }
 
@@ -673,7 +709,7 @@ export default function HomeDashboard({
     const todayPartD = parseInt(todayDateStr.split("-")[2], 10) || 6;
     const todayDateOnly = new Date(todayPartY, todayPartM - 1, todayPartD);
 
-    familyMembers.forEach((member) => {
+    nestedBirthdayMembers.forEach((member) => {
       if (!member.birthday) return;
       const cleanBday = member.birthday.replace(/\//g, "-");
       const parts = cleanBday.split("-");
@@ -732,7 +768,7 @@ export default function HomeDashboard({
     allUpcoming.sort((a, b) => a.diffDays - b.diffDays);
 
     return { todayStars, warningCards, countdownList, allUpcoming };
-  }, [familyMembers, todayDateStr]);
+  }, [nestedBirthdayMembers, todayDateStr]);
 
   const getInvolvedMembers = (evt: CalendarEvent) => {
     const list: string[] = [];
@@ -1253,7 +1289,7 @@ export default function HomeDashboard({
             id="home-announcements"
             style={{
               background: "#FFFFFF",
-              border: "1px solid #F3CDC4",
+              border: "3px solid #F3CDC4",
               borderRadius: "24px",
               boxShadow: "0 4px 12px rgba(230, 110, 95, 0.03)",
               minHeight: "100px",
@@ -2287,14 +2323,19 @@ export default function HomeDashboard({
               {/* Pre-birthday countdown alerts (e.g. 媽媽生日還有 3 天) */}
               {birthdayReminders.countdownList.length > 0 && (
                 <div className="space-y-2 mb-4">
-                  {birthdayReminders.countdownList.map((notify) => (
-                    <div
-                      key={`alert-${notify.member.uid}`}
-                      className="bg-rose-50 border border-rose-100 text-rose-900 text-xs font-black p-3 rounded-xl flex items-center justify-between"
-                    >
-                      <span>🎂 {notify.member.displayName}生日還有 {notify.diffDays} 天</span>
-                    </div>
-                  ))}
+                  {birthdayReminders.countdownList.map((notify) => {
+                    const showAge = notify.member.showAge !== false;
+                    return (
+                      <div
+                        key={`alert-${notify.member.uid}`}
+                        className="bg-rose-50 border border-rose-100 text-rose-900 text-xs font-black p-3 rounded-xl flex items-center justify-between"
+                      >
+                        <span>
+                          🎂 {showAge ? `${notify.member.displayName}（${notify.age}歲）` : `${notify.member.displayName}生日`} 還有 {notify.diffDays} 天
+                        </span>
+                      </div>
+                    );
+                  })}
                 </div>
               )}
 
@@ -2310,7 +2351,7 @@ export default function HomeDashboard({
                 ) : (
                   <div className="space-y-2">
                     {birthdayReminders.allUpcoming.map((star) => {
-                      const showAge = star.member.showAgeInCalendar !== false;
+                      const showAge = star.member.showAge !== false;
                       return (
                         <div
                           key={`item-${star.member.uid}`}
@@ -2320,7 +2361,7 @@ export default function HomeDashboard({
                             <span className="text-sm shrink-0">🎂</span>
                             <div>
                               <h4 className="font-extrabold text-[#3C332D] text-xs">
-                                {star.member.displayName}
+                                {showAge ? `${star.member.displayName}（${star.age}歲）` : `${star.member.displayName}生日`}
                               </h4>
                               <p className="text-[10px] text-gray-550 font-bold mt-0.5">
                                 {showAge ? `將滿 ${star.age} 歲` : `每年 ${star.birthdayStr}`}

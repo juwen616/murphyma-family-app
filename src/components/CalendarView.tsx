@@ -87,8 +87,8 @@ const getMultiDayLabel = (startDateStr: string, endDateStr: string, currentDateS
 
 const getEventTitleWithPrefix = (evt: CalendarEvent, isBday: boolean, currentDateStr?: string) => {
   if (isBday) {
-    const showAge = (evt as any).showAgeInCalendar !== false;
-    return showAge ? `🎂 ${(evt as any).birthdayMemberName} ${(evt as any).birthdayAge}歲生日` : `🎂 ${(evt as any).birthdayMemberName}生日`;
+    const showAge = (evt as any).showAgeInCalendar !== false && (evt as any).showAge !== false;
+    return showAge ? `🎂 ${(evt as any).birthdayMemberName}（${(evt as any).birthdayAge}歲）` : `🎂 ${(evt as any).birthdayMemberName}生日`;
   }
   
   const emoji = getEventEmoji(evt.title);
@@ -469,11 +469,11 @@ export default function CalendarView({
         const age = genYear - birthYear;
         const eventDateStr = `${genYear}-${String(birthMonth).padStart(2, "0")}-${String(birthDay).padStart(2, "0")}`;
 
-        const showAge = member.showAgeInCalendar !== false;
+        const showAge = member.showAgeInCalendar !== false && member.showAge !== false;
         list.push({
           id: `birthday-${member.uid || Math.random()}-${genYear}`,
           familyId: member.familyId || "",
-          title: showAge ? `🎂 ${member.displayName} ${age}歲生日` : `🎂 ${member.displayName}生日`,
+          title: showAge ? `🎂 ${member.displayName}（${age}歲）` : `🎂 ${member.displayName}生日`,
           date: eventDateStr,
           time: "",
           isFixed: false,
