@@ -244,39 +244,76 @@ export default function HomeDashboard({
   const [editingAnnouncement, setEditingAnnouncement] = useState<Announcement | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const [nestedBirthdayMembers, setNestedBirthdayMembers] = useState<any[]>([]);
+  const nestedBirthdayMembers = useMemo(() => {
+    if (!familyMembers) return [];
 
-  useEffect(() => {
-    if (!currentUser?.familyId) return;
-    
-    const membersRef = collection(db, "families", currentUser.familyId, "members");
-    const q = query(membersRef, where("birthday", "!=", null));
-    
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const list: any[] = [];
-      snapshot.forEach((docSnap) => {
-        const data = docSnap.data();
-        list.push({
-          id: docSnap.id,
-          uid: docSnap.id,
-          displayName: data.name || data.displayName || "家庭成員",
-          birthday: data.birthday,
-          showAge: data.showAge ?? true,
-          showAgeInCalendar: data.showAge ?? true,
-          avatar: data.avatar || "",
-          photoURL: data.avatar || "✿",
-          gender: data.gender || "",
-          ...data
-        });
-      });
-      console.log("Loaded nestedBirthdayMembers for Birthday Helper:", list);
-      setNestedBirthdayMembers(list);
-    }, (err) => {
-      console.error("Error loading nestedBirthdayMembers:", err);
+    const rawList = familyMembers.map((member) => ({
+      id: member.uid || (member as any).id || (member as any).memberId,
+      uid: member.uid,
+      memberId: (member as any).memberId || member.uid,
+      displayName: member.displayName || "家庭成員",
+      birthday: member.birthday,
+      showAge: member.showAgeInCalendar ?? (member as any).showAge ?? true,
+      showAgeInCalendar: member.showAgeInCalendar ?? (member as any).showAge ?? true,
+      avatar: member.photoURL || "",
+      photoURL: member.photoURL || "🙂",
+      gender: member.gender || "",
+      source: "familyMembers (users)"
+    }));
+
+    const uniqueList: any[] = [];
+    const seenUids = new Set<string>();
+    const seenMemberIds = new Set<string>();
+    const seenNamesAndBirthdays = new Set<string>();
+
+    rawList.forEach((item) => {
+      if (!item.birthday) return;
+
+      const itemUid = item.uid;
+      const itemMemberId = item.memberId;
+      const itemName = (item.displayName || "").trim();
+      const itemBirthday = item.birthday.trim().replace(/\//g, "-");
+
+      // 1. Check Name + Birthday first to ensure no duplicate individuals exist under separate login accounts or profiles
+      const combinedKey = `${itemName.toLowerCase()}_${itemBirthday}`;
+      if (seenNamesAndBirthdays.has(combinedKey)) {
+        console.log("Deduplicator skipped duplicated member by name+birthday:", combinedKey, itemUid);
+        return;
+      }
+
+      // 2. Check Uid / MemberId
+      if (itemUid) {
+        if (seenUids.has(itemUid)) {
+          console.log("Deduplicator skipped duplicated member by uid:", itemUid, itemName);
+          return;
+        }
+        seenUids.add(itemUid);
+      } else if (itemMemberId) {
+        if (seenMemberIds.has(itemMemberId)) {
+          console.log("Deduplicator skipped duplicated member by memberId:", itemMemberId, itemName);
+          return;
+        }
+        seenMemberIds.add(itemMemberId);
+      }
+
+      seenNamesAndBirthdays.add(combinedKey);
+      uniqueList.push(item);
     });
 
-    return unsubscribe;
-  }, [currentUser?.familyId]);
+    console.log("======= 🎂 生日小幫手使用資料來源除錯紀錄 =======");
+    uniqueList.forEach((member) => {
+      console.log({
+        "member uid": member.uid,
+        "memberId": member.memberId,
+        "member name": member.displayName,
+        "birthday": member.birthday,
+        "source": member.source || "familyMembers"
+      });
+    });
+    console.log(`================ 正式家庭成員總數: ${familyMembers.length} 筆 | 生日小幫手顯示總數: ${uniqueList.length} 筆 =================`);
+
+    return uniqueList;
+  }, [familyMembers]);
 
   // States for announcement deletion confirmation & debugging
   const [announcementToDelete, setAnnouncementToDelete] = useState<Announcement | null>(null);
@@ -377,6 +414,20 @@ export default function HomeDashboard({
   const [isRecentlyCompletedExpanded, setIsRecentlyCompletedExpanded] = useState(false);
 
   const isParent = currentUser.role === UserRole.ADMIN || currentUser.role === UserRole.PARENT;
+
+  // Helper roles for announcements permissions
+  const currentUserRoleLower = (currentUser.role || "").toLowerCase();
+  const isOwner = currentUserRoleLower === "owner" || currentUserRoleLower === "admin" || currentUserRoleLower === "superadmin" || (currentUser.role as any) === "Admin" || (currentUser.role as any) === UserRole.OWNER;
+  const isParentRole = currentUserRoleLower === "parent" || currentUser.role === UserRole.PARENT;
+  const isChildRole = currentUserRoleLower === "child" || currentUserRoleLower === "kid" || currentUser.role === UserRole.CHILD || (currentUser.role as any) === "Kid";
+
+  const canCreateAnnouncement = isOwner || isParentRole || isChildRole;
+  const canEditAnnouncement = (ann: any) => {
+    if (!ann) return false;
+    if (isOwner || isParentRole) return true;
+    if (isChildRole && ann.creatorUid === currentUser.uid) return true;
+    return false;
+  };
 
   // Mobile Dashboard specific states
   const [mobileSelectedDate, setMobileSelectedDate] = useState<string>("");
@@ -761,7 +812,9 @@ export default function HomeDashboard({
         }
       }
 
-      allUpcoming.push(item);
+      if (diffDays <= 60) {
+        allUpcoming.push(item);
+      }
     });
 
     // Sort all upcoming birthdays by days remaining
@@ -769,6 +822,44 @@ export default function HomeDashboard({
 
     return { todayStars, warningCards, countdownList, allUpcoming };
   }, [nestedBirthdayMembers, todayDateStr]);
+
+  const monthlyFestivals = useMemo(() => {
+    const list: any[] = [];
+    const parts = todayDateStr.split("-");
+    if (parts.length < 3) return list;
+    const year = parseInt(parts[0], 10);
+    const month = parseInt(parts[1], 10);
+    const day = parseInt(parts[2], 10);
+    const todayDateOnly = new Date(year, month - 1, day);
+
+    const daysInMonth = new Date(year, month, 0).getDate();
+
+    for (let d = 1; d <= daysInMonth; d++) {
+      const dStr = `${year}-${String(month).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+      const holiday = getHolidayForDate(dStr);
+      if (holiday) {
+        const currentBDate = new Date(year, month - 1, d);
+        const diffMs = currentBDate.getTime() - todayDateOnly.getTime();
+        const diffDays = Math.round(diffMs / (1000 * 60 * 60 * 24));
+
+        list.push({
+          name: holiday.name,
+          emoji: holiday.emoji,
+          isNational: holiday.isNational,
+          dateStr: `${month}/${d}`,
+          rawDateStr: dStr,
+          isToday: diffDays === 0,
+          diffDays,
+        });
+      }
+    }
+
+    return list.sort((a, b) => {
+      if (a.isToday) return -1;
+      if (b.isToday) return 1;
+      return a.rawDateStr.localeCompare(b.rawDateStr);
+    });
+  }, [todayDateStr]);
 
   const getInvolvedMembers = (evt: CalendarEvent) => {
     const list: string[] = [];
@@ -803,9 +894,9 @@ export default function HomeDashboard({
   // Compute all events including birthdays to inject automatically
   const allEvents = useMemo(() => {
     const list = [...events];
-    if (!familyMembers) return list;
+    if (!nestedBirthdayMembers) return list;
 
-    familyMembers.forEach((member) => {
+    nestedBirthdayMembers.forEach((member) => {
       if (!member.birthday) return;
       const birthdayClean = member.birthday.replace(/\//g, "-");
       const parts = birthdayClean.split("-");
@@ -842,7 +933,7 @@ export default function HomeDashboard({
     });
 
     return list;
-  }, [events, familyMembers]);
+  }, [events, nestedBirthdayMembers]);
 
   // Filter today's events dynamically
   const todayEvents = useMemo(() => {
@@ -966,12 +1057,14 @@ export default function HomeDashboard({
       });
 
       const dayOfWeek = ["星期日", "星期一", "星期二", "星期三", "星期四", "星期五", "星期六"][dow];
+      const holiday = getHolidayForDate(dateStr);
 
       list.push({
         dateStr,
         displayDate: `${mm}月${dd}日（${dayOfWeek}）`,
         isToday: i === 0,
         events: dayEvents,
+        holiday,
       });
     }
     return list;
@@ -1013,7 +1106,7 @@ export default function HomeDashboard({
   }, [familyMembers]);
 
   const getClosestGiftInfoForKid = (kidStars: number) => {
-    const availableGifts = (rewards || []).filter(r => r.status === RewardStatus.AVAILABLE);
+    const availableGifts = (rewards || []).filter(r => r.status === RewardStatus.AVAILABLE || r.status === RewardStatus.APPROVED);
     if (availableGifts.length === 0) return null;
     
     // Find closest positive gap
@@ -1084,7 +1177,7 @@ export default function HomeDashboard({
   // Upcoming completed rewards for each kid member
   const kidRewardProgressList = useMemo(() => {
     const availablePool = rewards.filter(
-      (r) => r.status === RewardStatus.AVAILABLE && r.stock > 0
+      (r) => (r.status === RewardStatus.AVAILABLE || r.status === RewardStatus.APPROVED) && r.stock > 0
     );
     if (availablePool.length === 0) return [];
 
@@ -1118,7 +1211,7 @@ export default function HomeDashboard({
 
   // June birthdays highlight
   const juneBirthdays = useMemo(() => {
-    return familyMembers
+    return nestedBirthdayMembers
       .filter((m) => {
         if (!m.birthday) return false;
         const b = m.birthday.replace(/\//g, "-");
@@ -1138,7 +1231,7 @@ export default function HomeDashboard({
         };
       })
       .sort((a, b) => a.dateNum - b.dateNum);
-  }, [familyMembers]);
+  }, [nestedBirthdayMembers]);
 
   const handleCreateAnnouncement = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -1301,7 +1394,7 @@ export default function HomeDashboard({
                 <span className="text-sm">📢</span>
                 <h3 className="text-xs font-black text-[#3C332D]">家裡公告</h3>
               </div>
-              {isParent && (
+              {canCreateAnnouncement && (
                 <button
                   type="button"
                   onClick={() => {
@@ -1346,7 +1439,7 @@ export default function HomeDashboard({
                         </div>
                       </div>
                       
-                      {isParent && (
+                      {canEditAnnouncement(ann) && (
                         <div className="flex items-center justify-end gap-1.5 mt-2" onClick={(e) => e.stopPropagation()}>
                           <button
                             onClick={(e) => {
@@ -1424,7 +1517,7 @@ export default function HomeDashboard({
 
                   {/* Motivational Distance Info */}
                   {(() => {
-                    const availableGifts = (rewards || []).filter(r => r.status === RewardStatus.AVAILABLE);
+                    const availableGifts = (rewards || []).filter(r => r.status === RewardStatus.AVAILABLE || r.status === RewardStatus.APPROVED);
                     const currentStars = kidStats.currentStars;
                     
                     const lockedGifts = availableGifts
@@ -1488,7 +1581,7 @@ export default function HomeDashboard({
                 </div>
 
                 {(() => {
-                  const availableGifts = (rewards || []).filter(r => r.status === RewardStatus.AVAILABLE);
+                  const availableGifts = (rewards || []).filter(r => r.status === RewardStatus.AVAILABLE || r.status === RewardStatus.APPROVED);
                   if (availableGifts.length === 0) {
                     return (
                       <div className="text-center py-8 bg-[#FAF8F5] rounded-xl border border-dashed border-[#EFEAE2]">
@@ -1729,14 +1822,23 @@ export default function HomeDashboard({
                   <div className="md:hidden block space-y-0 text-[#3C332D]">
                     {nextSevenDays.map((day, dIdx) => (
                       <div key={day.dateStr} className="border-b border-[#F5F2EB] last:border-0 pb-3 mb-3">
-                        {/* 日期列：🌱 06/10（三），高度約 40px */}
-                        <div className="flex items-center justify-between h-10 select-none">
-                          <div className="flex items-center gap-1.5">
-                            <span className="text-[14px] font-black text-[#7C6354] tracking-tight">
+                        {/* 日期列：🌱 06/10（三） */}
+                        <div className="flex items-center justify-between h-auto py-1 select-none">
+                          <div className="flex items-center gap-1.5 flex-wrap min-w-0">
+                            <span className="text-[14px] font-black text-[#7C6354] tracking-tight shrink-0">
                               🌱 {day.displayDate.replace(/^\d+年/, "")}
                             </span>
+                            {day.holiday && (
+                              <span className={`text-[10.5px] font-black px-1.5 py-0.5 rounded-md shrink-0 scale-95 ${
+                                day.holiday.isNational 
+                                  ? "bg-rose-50 text-[#C71585] border border-rose-150" 
+                                  : "bg-purple-50 text-[#8E24AA] border border-purple-150"
+                              }`}>
+                                {day.holiday.emoji} {day.holiday.isNational ? "國定節日" : "重要節日"}：{day.holiday.name}
+                              </span>
+                            )}
                             {day.isToday && (
-                              <span className="bg-[#EAA59E] text-white text-[9px] px-1.5 py-0.5 rounded-md font-extrabold shrink-0 scale-95">
+                              <span className="bg-[#EAA59E] text-white text-[9px] px-1.5 py-0.5 rounded-md font-extrabold shrink-0 scale-95 font-sans">
                                 今天
                               </span>
                             )}
@@ -1828,13 +1930,23 @@ export default function HomeDashboard({
                           </span>
                           <div>
                             <span
-                              className={`text-sm font-black flex items-center gap-1.5 ${
+                              className={`text-sm font-black flex items-center gap-1.5 flex-wrap ${
                                 day.isToday ? "text-[#C76A5A]" : "text-[#7C6354]"
                               }`}
                             >
-                              {day.displayDate}
+                              <span>{day.displayDate}</span>
+                              {day.holiday && (
+                                <span className={`text-[11px] font-black px-2.5 py-0.5 rounded-full flex items-center gap-1 border shrink-0 ${
+                                  day.holiday.isNational 
+                                    ? "bg-rose-50 text-[#C71585] border-rose-200" 
+                                    : "bg-purple-50 text-[#8E24AA] border-purple-200"
+                                }`}>
+                                  <span>{day.holiday.emoji}</span>
+                                  <span>{day.holiday.isNational ? "國定節日" : "重要節日"}：{day.holiday.name}</span>
+                                </span>
+                              )}
                               {day.isToday && (
-                                <span className="bg-[#EAA59E] text-white text-[9px] px-2 py-0.5 rounded-full font-black animate-pulse">
+                                <span className="bg-[#EAA59E] text-white text-[9px] px-2 py-0.5 rounded-full font-black animate-pulse font-sans">
                                   今天
                                 </span>
                               )}
@@ -2035,7 +2147,9 @@ export default function HomeDashboard({
                   <div className="flex items-center justify-between py-2 border-t border-[#F7F3EB]">
                     <div className="flex flex-col">
                       <span className="text-[11px] font-black text-[#3C332D]">家庭公開</span>
-                      <span className="text-[9px] text-gray-400 mt-0.5">全體家庭成員皆能瀏覽</span>
+                      <span className="text-[9px] text-gray-400 mt-0.5">
+                        {quickAddPublic ? "全體家庭成員皆能瀏覽" : "🔒 私人行程 (僅自己與家庭管理員可見)"}
+                      </span>
                     </div>
                     <label className="relative inline-flex items-center cursor-pointer select-none">
                       <input
@@ -2047,6 +2161,12 @@ export default function HomeDashboard({
                       <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-amber-600"></div>
                     </label>
                   </div>
+
+                  {!quickAddPublic && (
+                    <p className="text-[10px] text-amber-600 bg-amber-50/50 rounded-lg p-2 border border-amber-100 font-medium leading-normal mb-1">
+                      🔒 私人行程說明：不公開狀態下僅建立者本人與家庭管理員可查看。其他家庭成員將完全無法看到此行程。
+                    </p>
+                  )}
 
                   {/* 提交按鈕 */}
                   <div className="flex gap-2 pt-2">
@@ -2339,14 +2459,15 @@ export default function HomeDashboard({
                 </div>
               )}
 
-              {/* 📅 即將到來生日列覽 (Sourced automatically from live profiles) */}
+              {/* 📅 即將到來生日列覽 (Sourced automatically from live profiles, filtered to max 60 days) */}
               <div className="space-y-2.5">
                 <p className="text-[10px] uppercase font-black text-gray-500 tracking-wider">
-                  家庭成員生日排程 (自動每年更新)
+                  家庭成員生日排程 (近 60 天內)
                 </p>
                 {birthdayReminders.allUpcoming.length === 0 ? (
-                  <div className="text-center py-4 text-gray-400 bg-[#FAF8F5] rounded-xl text-[11px] font-bold border border-dashed border-gray-100">
-                    尚無成員生日欄位資訊 ☕
+                  <div className="text-center py-6 text-gray-400 bg-[#FAF8F5] rounded-xl text-[11px] font-bold border border-dashed border-gray-100 flex flex-col items-center justify-center gap-1">
+                    <span className="text-lg">🎂</span>
+                    <span>未來 60 天內無成員生日提醒</span>
                   </div>
                 ) : (
                   <div className="space-y-2">
@@ -2361,10 +2482,10 @@ export default function HomeDashboard({
                             <span className="text-sm shrink-0">🎂</span>
                             <div>
                               <h4 className="font-extrabold text-[#3C332D] text-xs">
-                                {showAge ? `${star.member.displayName}（${star.age}歲）` : `${star.member.displayName}生日`}
+                                {star.member.displayName}
                               </h4>
                               <p className="text-[10px] text-gray-550 font-bold mt-0.5">
-                                {showAge ? `將滿 ${star.age} 歲` : `每年 ${star.birthdayStr}`}
+                                生日：{star.birthdayStr} {showAge && `(將滿 ${star.age} 歲)`}
                               </p>
                             </div>
                           </div>
@@ -3016,7 +3137,7 @@ export default function HomeDashboard({
               <span>📢</span> 家庭公布欄
             </h3>
             <div className="flex items-center gap-1.5">
-              {isParent && (
+              {canCreateAnnouncement && (
                 <button
                   onClick={() => {
                     setEditingAnnouncement(null);
@@ -3326,7 +3447,7 @@ export default function HomeDashboard({
 
           {/* Horizontal scroll rewards progress */}
           {(() => {
-            const availableGifts = (rewards || []).filter(r => r.status === RewardStatus.AVAILABLE);
+            const availableGifts = (rewards || []).filter(r => r.status === RewardStatus.AVAILABLE || r.status === RewardStatus.APPROVED);
             const kidsOfFamily = familyMembers.filter(m => m.role === UserRole.KID);
             const primaryKid = kidsOfFamily[0] || currentUser;
             const currentKidStars = primaryKid?.stars || 0;
@@ -3590,7 +3711,7 @@ export default function HomeDashboard({
                       key={ann.id}
                       className="p-3 bg-[#FCFBF9] border border-[#EFEAE2] rounded-xl relative space-y-1"
                     >
-                      {isParent && (
+                      {canEditAnnouncement(ann) && (
                         <div className="absolute right-2 top-2 flex items-center gap-1 z-10">
                           <button
                             onClick={() => {

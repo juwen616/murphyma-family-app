@@ -119,6 +119,9 @@ export enum RewardStatus {
   AVAILABLE = "available",
   PAUSED = "paused",
   ARCHIVED = "archived",
+  PENDING = "pending",
+  REJECTED = "rejected",
+  APPROVED = "approved",
 }
 
 export interface Reward {

@@ -64,6 +64,11 @@ const isMultiDayEvent = (evt: CalendarEvent): boolean => {
   return !evt.isFixed && !!evt.startDate && !!evt.endDate && evt.startDate !== evt.endDate;
 };
 
+const isTravelEvent = (title: string): boolean => {
+  const t = (title || "").toLowerCase();
+  return t.includes("旅行") || t.includes("旅遊") || t.includes("出國") || t.includes("行程") || t.includes("travel");
+};
+
 const getMultiDayLabel = (startDateStr: string, endDateStr: string, currentDateStr: string): { dayIndex: number; totalDays: number } => {
   try {
     const parseDateStr = (str: string) => {
@@ -91,12 +96,71 @@ const getEventTitleWithPrefix = (evt: CalendarEvent, isBday: boolean, currentDat
     return showAge ? `🎂 ${(evt as any).birthdayMemberName}（${(evt as any).birthdayAge}歲）` : `🎂 ${(evt as any).birthdayMemberName}生日`;
   }
   
+  if (isTravelEvent(evt.title)) {
+    if (isMultiDayEvent(evt) && currentDateStr && evt.startDate && evt.endDate) {
+      const info = getMultiDayLabel(evt.startDate, evt.endDate, currentDateStr);
+      return `${evt.title} Day${info.dayIndex}`;
+    }
+    return evt.title;
+  }
+  
   const emoji = getEventEmoji(evt.title);
   if (isMultiDayEvent(evt) && currentDateStr && evt.startDate && evt.endDate) {
     const info = getMultiDayLabel(evt.startDate, evt.endDate, currentDateStr);
     return `${emoji} ${evt.title} Day${info.dayIndex}`;
   }
   return `${emoji} ${evt.title}`;
+};
+
+const getEventColorByTitleForStyle = (title: string): { bg: string; border: string; text: string; hover: string; fullClass: string } => {
+  if (!title) {
+    return {
+      bg: "bg-[#F7F5F0]",
+      border: "border-[#E7E2D8]",
+      text: "text-[#3C332D]",
+      hover: "hover:bg-[#F2ECE0]",
+      fullClass: "bg-[#F7F5F0] border-[#E7E2D8] text-[#3C332D] hover:bg-[#F2ECE0]"
+    };
+  }
+  
+  const cleanTitle = title.trim();
+  let hash = 0;
+  for (let i = 0; i < cleanTitle.length; i++) {
+    hash = cleanTitle.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  
+  const colors = [
+    // 1. 溫柔粉紅
+    { bg: "bg-[#FFF2F4]", border: "border-[#F2CBD2]", text: "text-[#A22E42]", hover: "hover:bg-[#FFE5E9]" },
+    // 2. 舒爽晨藍
+    { bg: "bg-[#F1F6FA]", border: "border-[#CBD9E5]", text: "text-[#245D8C]", hover: "hover:bg-[#E2EDF4]" },
+    // 3. 柔美霧綠
+    { bg: "bg-[#F2FBF4]", border: "border-[#C1DEC5]", text: "text-[#2D7336]", hover: "hover:bg-[#E3F6E7]" },
+    // 4. 暖心暖橘
+    { bg: "bg-[#FFF6F1]", border: "border-[#F2CFBD]", text: "text-[#AE5B28]", hover: "hover:bg-[#FFE9DC]" },
+    // 5. 琥珀蜜黃
+    { bg: "bg-[#FFF9F1]", border: "border-[#ECD1AE]", text: "text-[#935F1D]", hover: "hover:bg-[#FFEECD]" },
+    // 6. 雅緻薰紫
+    { bg: "bg-[#FAF3FC]", border: "border-[#DFCEE5]", text: "text-[#713D8B]", hover: "hover:bg-[#F3E2F7]" },
+    // 7. 恬靜奶茶
+    { bg: "bg-[#FAF6F3]", border: "border-[#DACBBF]", text: "text-[#794E2E]", hover: "hover:bg-[#F4EBE3]" },
+    // 8. 溫和草綠
+    { bg: "bg-[#F7FBF2]", border: "border-[#CADFB5]", text: "text-[#477329]", hover: "hover:bg-[#ECF6E1]" },
+    // 9. 優雅灰藍
+    { bg: "bg-[#F4F7FB]", border: "border-[#C1CCDB]", text: "text-[#344865]", hover: "hover:bg-[#E7EDF5]" },
+    // 10. 迷迭香綠
+    { bg: "bg-[#F4FAF7]", border: "border-[#CCDDD7]", text: "text-[#286050]", hover: "hover:bg-[#E5F3EE]" }
+  ];
+  
+  const index = Math.abs(hash) % colors.length;
+  const c = colors[index];
+  return {
+    bg: c.bg,
+    border: c.border,
+    text: c.text,
+    hover: c.hover,
+    fullClass: `${c.bg} ${c.border} ${c.text} ${c.hover}`
+  };
 };
 
 const getAppletEventStyleClasses = (evt: CalendarEvent, isBday: boolean, dateStr?: string, viewType?: "month" | "week"): string => {
@@ -128,35 +192,8 @@ const getAppletEventStyleClasses = (evt: CalendarEvent, isBday: boolean, dateStr
     return `${borders} bg-[#F0F8FF] text-[#004B8F] hover:bg-[#E1F0FF] shadow-sm ring-1 ring-sky-100/50 ${rounding}${margins} relative z-[5]`;
   }
   
-  const title = evt.title || "";
-  const matchesSpecialPeriod =
-    title.includes("旅行") || title.includes("旅遊") || title.includes("模式") ||
-    title.includes("出遊") || title.includes("考試") || title.includes("期中考") ||
-    title.includes("期末考") || title.includes("寒假") || title.includes("暑假") ||
-    title.includes("放假");
-    
-  if (matchesSpecialPeriod) {
-    if (title.includes("旅") || title.includes("出遊")) {
-      return "border border-orange-200 bg-[#FFF9F5] text-[#D35400] hover:bg-orange-50/80 shadow-sm rounded-xl";
-    } else if (title.includes("考") || title.includes("試")) {
-      return "border border-amber-300 bg-[#FFFDF5] text-[#825615] hover:bg-amber-50/80 shadow-sm rounded-xl";
-    } else if (title.includes("寒假") || title.includes("暑假") || title.includes("放") || title.includes("假")) {
-      return "border border-emerald-200 bg-[#F7FCF9] text-emerald-850 hover:bg-emerald-50/80 shadow-sm rounded-xl";
-    }
-  }
-
-  // 1. 每週重複行程 (isFixed == true): 【晨霧藍色】
-  if (evt.isFixed) {
-    return "border border-[#D2E2EC] bg-[#F4F8FA] hover:bg-[#EAF3F7] text-[#1E3A54] shadow-sm rounded-xl";
-  }
-
-  // 2. 私人專屬行程 (!isPublic): 【柔粉橘色】
-  if (!evt.isPublic) {
-    return "border border-[#FAD6C5] bg-[#FFF5F0] hover:bg-[#FFEAE0] text-[#7A3A23] shadow-sm rounded-xl";
-  }
-
-  // 3. 家庭公共事項 / 其他 (isPublic && !isFixed): 【淺米香檳色】
-  return "border border-[#E7E2D8] bg-[#F7F5F0] hover:bg-[#F2ECE0] text-[#3C332D] rounded-xl";
+  const colorObj = getEventColorByTitleForStyle(evt.title || "");
+  return `border ${colorObj.fullClass} shadow-sm rounded-xl`;
 };
 
 export default function CalendarView({
@@ -1167,12 +1204,24 @@ export default function CalendarView({
     }
   };
 
+  const userRoleLower = (currentUser.role || "").toLowerCase();
+  const isOwner = userRoleLower === "owner" || userRoleLower === "admin" || userRoleLower === "superadmin" || (currentUser.role as any) === "Admin" || (currentUser.role as any) === UserRole.OWNER;
+  const isParentRole = userRoleLower === "parent" || currentUser.role === UserRole.PARENT;
+  const isChildRole = userRoleLower === "child" || userRoleLower === "kid" || currentUser.role === UserRole.CHILD || (currentUser.role as any) === "Kid";
+
+  const canCreateCalendar = isOwner || isParentRole || isChildRole;
+
   const isUserAllowedToDelete = (evt: CalendarEvent) => {
-    if (currentUser.role === UserRole.ADMIN || currentUser.role === UserRole.PARENT) {
+    if (isOwner || isParentRole) {
       return true;
     }
-    return currentUser.role === UserRole.KID && !evt.isPublic && evt.creatorUid === currentUser.uid;
+    if (isChildRole) {
+      return evt.creatorUid === currentUser.uid;
+    }
+    return false;
   };
+
+  const isReadOnlyForm = editingEvent ? !isUserAllowedToDelete(editingEvent) : !canCreateCalendar;
 
   const handleApplyRecurringUpdate = async (updateFuture: boolean) => {
     if (!updatingRecurringEvent) return;
@@ -1191,7 +1240,7 @@ export default function CalendarView({
     <div id="calendar-module" onTouchStart={handleTouchStart} onTouchMove={handleTouchMove} onTouchEnd={handleTouchEnd} className="w-full max-w-full bg-transparent md:bg-white md:rounded-[24px] md:border md:border-[#EFEAE2] p-0 md:p-6 lg:p-8 md:soft-journal-shadow space-y-3 md:space-y-6">
       
       {/* Calendar header controls - Sticky top below primary app navigation bar */}
-      <div className="sticky top-[48px] md:top-[74px] bg-white z-30 py-2.5 md:py-3 border-b border-[#EFEAE2]/60 flex flex-col md:flex-row justify-between items-center gap-3">
+      <div className="sticky top-[71px] md:top-[104px] bg-white z-30 py-2.5 md:py-3 border-b border-[#EFEAE2]/60 flex flex-col md:flex-row justify-between items-center gap-3">
         <div className="flex items-center justify-between w-full md:w-auto gap-3">
           <div className="flex items-center gap-2">
             <button
@@ -1276,12 +1325,14 @@ export default function CalendarView({
             <h3 className="text-xs font-black text-[#5B7283]">
               {year}年{month + 1}月行程清單
             </h3>
-            <button
-              onClick={() => setShowAddTypeSelection({ show: true, dateStr: todayDateStr })}
-              className="text-xs font-black bg-[#EAA59E] hover:bg-[#D98E85] text-white px-4 py-2 rounded-full transition shadow-xs"
-            >
-              + 新增本日行程
-            </button>
+            {canCreateCalendar && (
+              <button
+                onClick={() => setShowAddTypeSelection({ show: true, dateStr: todayDateStr })}
+                className="text-xs font-black bg-[#EAA59E] hover:bg-[#D98E85] text-white px-4 py-2 rounded-full transition shadow-xs"
+              >
+                + 新增本日行程
+              </button>
+            )}
           </div>
 
           <div className="space-y-6 select-none">
@@ -1299,12 +1350,14 @@ export default function CalendarView({
                   <div className="text-center py-12 border border-dashed border-[#EFEAE2] rounded-2xl bg-[#FFFDFB]">
                     <span className="text-3xl block mb-2">🍵</span>
                     <p className="text-xs text-gray-400 font-bold">這個月目前還沒有任何行程安排喔！</p>
-                    <button
-                      onClick={() => setShowAddTypeSelection({ show: true, dateStr: todayDateStr })}
-                      className="mt-3 text-xs bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-200 px-4 py-2 rounded-full transition font-black"
-                    >
-                      ＋ 建立第一個行程
-                    </button>
+                    {canCreateCalendar && (
+                      <button
+                        onClick={() => setShowAddTypeSelection({ show: true, dateStr: todayDateStr })}
+                        className="mt-3 text-xs bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-200 px-4 py-2 rounded-full transition font-black"
+                      >
+                        ＋ 建立第一個行程
+                      </button>
+                    )}
                   </div>
                 );
               }
@@ -1488,22 +1541,31 @@ export default function CalendarView({
                       }
                     }
                   }}
-                  className={`min-h-[105px] h-[105px] md:min-h-[160px] md:h-auto p-1 md:p-2.5 border-r border-b border-[#A59D84] flex flex-col justify-start md:justify-between gap-1 md:gap-0 transition group hover:bg-[#FFFDF8]/90 cursor-pointer overflow-hidden ${cellBg}`}
+                  className={`min-h-[105px] h-[105px] md:min-h-[160px] md:h-auto p-1 md:p-2.5 border-r border-b border-[#A59D84] flex flex-col justify-start md:justify-between gap-1 md:gap-0 transition group hover:bg-[#FFFDF8]/90 cursor-pointer overflow-hidden ${cellBg} ${
+                    isToday ? "shadow-[0_0_18px_rgba(255,255,255,1.0),inset_0_0_10px_rgba(255,255,255,0.7)] relative z-25 border-white border-[3px] scale-[1.01]" : ""
+                  }`}
                 >
                   {/* MOBILE VIEW COMPACT CELL */}
                   <div className="block md:hidden text-left flex flex-col justify-start h-full w-full overflow-hidden font-sans">
                     <div className="flex justify-between items-center select-none mb-0.5 pb-[2px] border-b border-gray-100/50">
-                      <span
-                        className={`text-[10px] font-black rounded-full h-5 w-5 flex items-center justify-center font-mono ${
-                          isToday
-                            ? "bg-rose-100 text-rose-600 font-extrabold"
-                            : cell.isWeekend
-                            ? "text-[#3C332D]/70"
-                            : "text-[#3C332D]"
-                        }`}
-                      >
-                        {cell.day}
-                      </span>
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <span
+                          className={`text-[10px] font-black rounded-full h-5 w-5 flex items-center justify-center font-mono shrink-0 ${
+                            isToday
+                              ? "bg-rose-150 text-rose-700 font-extrabold"
+                              : cell.isWeekend
+                              ? "text-[#3C332D]/70"
+                              : "text-[#3C332D]"
+                          }`}
+                        >
+                          {cell.day}
+                        </span>
+                        {isToday && (
+                          <span className="text-[9px] font-black text-rose-700 bg-white border border-rose-250 px-1 rounded scale-90 origin-left shrink-0">
+                            今天
+                          </span>
+                        )}
+                      </div>
                       {holiday && (
                         <span className="text-[10px]" title={holiday.name}>
                           {holiday.emoji}
@@ -1515,7 +1577,11 @@ export default function CalendarView({
                     <div className="flex-1 flex flex-col justify-start overflow-hidden space-y-1 mt-0.5 pb-0.5 select-none">
                       {activeMode && (
                         <div 
-                          className="font-black text-white px-1 py-[1.5px] rounded truncate text-[8.5px] leading-tight mb-0.5 animate-pulse select-none cursor-pointer"
+                          className={`font-black text-white rounded leading-tight mb-0.5 select-none cursor-pointer ${
+                            activeMode.type === "travel"
+                              ? "text-[10px] px-1 py-[2px]"
+                              : "truncate text-[8.5px] px-1 py-[1.5px] animate-pulse"
+                          }`}
                           style={{
                             backgroundColor:
                               activeMode.type === "travel"
@@ -1525,10 +1591,17 @@ export default function CalendarView({
                                 : activeMode.type === "vacation"
                                 ? "#16A34A"
                                 : "#4F46E5",
+                            display: activeMode.type === "travel" ? "-webkit-box" : undefined,
+                            WebkitLineClamp: activeMode.type === "travel" ? 2 : undefined,
+                            WebkitBoxOrient: activeMode.type === "travel" ? "vertical" : undefined,
+                            overflow: activeMode.type === "travel" ? "hidden" : undefined,
+                            textOverflow: activeMode.type === "travel" ? "ellipsis" : undefined,
+                            whiteSpace: activeMode.type === "travel" ? "normal" : "nowrap",
+                            wordBreak: activeMode.type === "travel" ? "break-all" : undefined,
                           }}
                           title={activeMode.name}
                         >
-                          🏕 {activeMode.name}
+                          {activeMode.type === "travel" ? "" : "🏕 "}{activeMode.name}
                         </div>
                       )}
                       {(() => {
@@ -1539,25 +1612,25 @@ export default function CalendarView({
                           <>
                             {displayedEvents.map((evt) => {
                               const cleanTitle = cleanTitleForMobileCell(evt, cell.dateStr);
-                              // Assign lovely high-contrast pastel background to meet user requests
-                              let bgStyle = "bg-[#F7F5F0] border-[#E7E2D8] text-[#3C332D]"; // milktea
+                              const isBday = (evt as any).isBirthday || evt.title.includes("生日") || evt.title.includes("慶生");
+                              let bgStyle = "";
                               
-                              if ((evt as any).isBirthday || evt.title.includes("生日") || evt.title.includes("慶生")) {
+                              if (isBday) {
                                 bgStyle = "bg-[#FFF0F5] border-[#FFB6C1] text-[#C71585]"; // 淺粉
-                              } else if (evt.isFixed) {
-                                bgStyle = "bg-[#EBF5FF] border-[#ADCFFF] text-[#0052A3]"; // 淺藍
-                              } else if (evt.title.includes("玩") || evt.title.includes("游泳") || evt.title.includes("課") || evt.title.includes("旅行") || evt.title.includes("出遊")) {
-                                bgStyle = "bg-[#EEFBF0] border-[#C2ECCD] text-[#1E7134]"; // 淺綠
                               } else {
-                                bgStyle = "bg-[#FAF1EC] border-[#ECD5C8] text-[#7A3E23]"; // 暖橘 / 奶茶
+                                const cObj = getEventColorByTitleForStyle(evt.title || "");
+                                bgStyle = `${cObj.bg} ${cObj.border} ${cObj.text}`;
                               }
+                              
+                              const isTravel = isTravelEvent(evt.title);
                               
                               return (
                                 <div
                                   key={evt.id}
-                                  className={`text-[10px] font-black rounded border ${bgStyle} tracking-tight`}
+                                  className={`font-black rounded border ${bgStyle} tracking-tight`}
                                   style={{
                                     padding: "2px 2.5px",
+                                    fontSize: "10px",
                                     lineHeight: "1.15",
                                     display: "-webkit-box",
                                     WebkitLineClamp: 2,
@@ -1586,19 +1659,26 @@ export default function CalendarView({
                   {/* DESKTOP VIEW DETAILED BLOCK */}
                   <div className="hidden md:block w-full">
                     <div className="flex justify-between items-start">
-                      <span
-                        className={`text-sm font-black rounded-full h-7.5 w-7.5 flex items-center justify-center font-mono ${
-                          isToday
-                            ? "bg-[#EAA59E] text-white shadow-xs font-extrabold"
-                            : cell.isWeekend
-                            ? holiday
-                               ? "text-amber-800 font-extrabold"
-                               : "text-[#3C332D]/74"
-                            : "text-[#3C332D]"
-                        }`}
-                      >
-                        {cell.day}
-                      </span>
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <span
+                          className={`text-sm font-black rounded-full h-7.5 w-7.5 flex items-center justify-center font-mono shrink-0 ${
+                            isToday
+                              ? "bg-[#EAA59E] text-white shadow-xs font-extrabold"
+                              : cell.isWeekend
+                              ? holiday
+                                 ? "text-amber-800 font-extrabold"
+                                 : "text-[#3C332D]/74"
+                              : "text-[#3C332D]"
+                          }`}
+                        >
+                          {cell.day}
+                        </span>
+                        {isToday && (
+                          <span className="text-[10.5px] font-black text-rose-700 bg-rose-50 px-1.5 py-0.5 rounded border border-rose-200 shadow-xs select-none shrink-0">
+                            今天
+                          </span>
+                        )}
+                      </div>
 
                       {activeMode && (
                         <span className="text-[9px] uppercase font-black px-1.5 py-0.5 rounded shadow-none flex items-center gap-0.5 shrink-0 select-none scale-90 translate-x-1"
@@ -1641,7 +1721,11 @@ export default function CalendarView({
                     )}
 
                     {activeMode && (
-                      <div className="text-[10.5px] font-semibold py-1 px-2 rounded-xl truncate shrink-0 font-sans flex items-center gap-1.5 mt-1.5"
+                      <div className={`rounded-xl truncate shrink-0 font-sans flex items-center gap-1.5 mt-1.5 whitespace-nowrap overflow-hidden ${
+                        activeMode.type === "travel"
+                          ? "text-[12.6px] py-1.5 md:py-2 px-3 font-extrabold shadow-sm border border-sky-200"
+                          : "text-[10.5px] font-semibold py-1 px-2"
+                      }`}
                         style={{
                           backgroundColor:
                             activeMode.type === "travel"
@@ -1661,15 +1745,15 @@ export default function CalendarView({
                               : "#1E1B4B",
                         }}
                       >
-                        <span>
-                          {activeMode.type === "travel"
-                            ? "✈️"
-                            : activeMode.type === "exam"
-                            ? "📚"
-                            : activeMode.type === "vacation"
-                            ? "🏕️"
-                            : "🏠"}
-                        </span>
+                        {activeMode.type !== "travel" && (
+                          <span>
+                            {activeMode.type === "exam"
+                              ? "📚"
+                              : activeMode.type === "vacation"
+                              ? "🏕️"
+                              : "🏠"}
+                          </span>
+                        )}
                         <span className="truncate font-black">{activeMode.name}</span>
                       </div>
                     )}
@@ -1677,6 +1761,7 @@ export default function CalendarView({
                     <div className="flex-grow space-y-1.5 mt-2.5 overflow-hidden">
                       {sortedDayEvents.map((evt) => {
                         const isBday = (evt as any).isBirthday;
+                        const isTravel = isTravelEvent(evt.title);
                         return (
                           <div
                             key={evt.id}
@@ -1684,10 +1769,14 @@ export default function CalendarView({
                               e.stopPropagation();
                               handleOpenEdit(evt, cell.dateStr);
                             }}
-                            className={`relative flex flex-col p-2 transition hover:translate-y-[-1px] group/item cursor-pointer text-sm md:text-[13.5px] font-black leading-tight ${getAppletEventStyleClasses(evt, isBday, cell.dateStr, "month")}`}
+                            className={`relative flex flex-col transition hover:translate-y-[-1px] group/item cursor-pointer font-black leading-tight ${
+                              isTravel ? "p-2.5 text-base md:text-[16.2px]" : "p-2 text-sm md:text-[13.5px]"
+                            } ${getAppletEventStyleClasses(evt, isBday, cell.dateStr, "month")}`}
                           >
                             <div className="flex items-center justify-between gap-1 overflow-hidden">
-                              <span className="truncate whitespace-nowrap overflow-hidden block max-w-[85%] font-sans font-black text-sm md:text-[14px] text-[#3C332D]">
+                              <span className={`truncate whitespace-nowrap overflow-hidden block max-w-[85%] font-sans font-black text-[#3C332D] ${
+                                isTravel ? "text-base md:text-[16.8px]" : "text-sm md:text-[14px]"
+                              }`}>
                                 {getEventTitleWithPrefix(evt, isBday, cell.dateStr)}
                               </span>
                               {isUserAllowedToDelete(evt) && (
@@ -1864,7 +1953,7 @@ export default function CalendarView({
                     } else {
                       if (activeMode) {
                         setSelectedModeForDetail({ mode: activeMode, dateStr: cell.dateStr });
-                      } else {
+                      } else if (canCreateCalendar) {
                         setShowAddTypeSelection({ show: true, dateStr: cell.dateStr });
                       }
                     }
@@ -2006,12 +2095,14 @@ export default function CalendarView({
                       )}
                     </div>
 
-                    <button
-                      onClick={() => setShowAddTypeSelection({ show: true, dateStr: wd.dateStr })}
-                      className="text-[10px] font-bold text-[#5B7283] hover:text-[#3C332D] px-2.5 py-1 bg-gray-50 hover:bg-gray-100 rounded-lg border border-[#EFEAE2] transition"
-                    >
-                      + 新增行程
-                    </button>
+                    {canCreateCalendar && (
+                      <button
+                        onClick={() => setShowAddTypeSelection({ show: true, dateStr: wd.dateStr })}
+                        className="text-[10px] font-bold text-[#5B7283] hover:text-[#3C332D] px-2.5 py-1 bg-gray-50 hover:bg-gray-100 rounded-lg border border-[#EFEAE2] transition"
+                      >
+                        + 新增行程
+                      </button>
+                    )}
                   </div>
 
                   {dayEvents.length === 0 ? (
@@ -2024,9 +2115,7 @@ export default function CalendarView({
                           <div
                             key={evt.id}
                             onClick={() => handleOpenEdit(evt, wd.dateStr)}
-                            className={`p-3.5 rounded-xl border flex flex-col gap-1.5 text-left relative cursor-pointer hover:bg-gray-55 transition-all duration-200 ${
-                              isBday ? "bg-rose-50/40 border-rose-150 text-rose-700" : "bg-[#FFFDFB]/80 border-[#EFEAE2]"
-                            }`}
+                            className={`p-3.5 border flex flex-col gap-1.5 text-left relative cursor-pointer hover:opacity-90 transition-all duration-200 ${getAppletEventStyleClasses(evt, isBday, wd.dateStr, "month")}`}
                           >
                             <div className="flex items-center justify-between gap-1.5">
                               <span className="font-extrabold text-xs text-[#3C332D] truncate block max-w-[85%]">
@@ -2286,7 +2375,7 @@ export default function CalendarView({
             <div className="p-4 md:p-6 pb-3 md:pb-4 border-b border-[#EFEAE2] flex items-center justify-between shrink-0 bg-[#FFFDF8]">
               <h3 className="text-lg font-black text-[#3C332D] flex items-center gap-2">
                 <CalendarDays className="h-5.5 w-5.5 text-[#5B7283]" />
-                {editingEvent ? "編輯/查看行程" : "新增行事曆行程"}
+                {editingEvent ? (isReadOnlyForm ? "查看行程細節" : "編輯/查看行程") : "新增行事曆行程"}
               </h3>
               <button
                 type="button"
@@ -2346,8 +2435,9 @@ export default function CalendarView({
                     </label>
                     <select
                       value={selectedFavId}
+                      disabled={isReadOnlyForm}
                       onChange={(e) => handleSelectFavItem(e.target.value)}
-                      className="w-full text-xs font-bold border border-[#EFEAE2] bg-white rounded-xl px-3 py-2.5 focus:outline-none"
+                      className="w-full text-xs font-bold border border-[#EFEAE2] bg-white rounded-xl px-3 py-2.5 focus:outline-none disabled:opacity-75"
                     >
                       <option value="">-- 點擊選擇載入常用事項 --</option>
                       {calendarTemplates.map((fav) => (
@@ -2365,10 +2455,11 @@ export default function CalendarView({
                 <input
                   type="text"
                   required
+                  disabled={isReadOnlyForm}
                   placeholder="請輸入活動名稱... (例如：畫畫課)"
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
-                  className="w-full text-sm border border-[#EFEAE2] rounded-xl px-3.5 py-2.5 bg-[#FFFDF8] focus:outline-none focus:ring-2 focus:ring-[#5B7283]"
+                  className="w-full text-sm border border-[#EFEAE2] rounded-xl px-3.5 py-2.5 bg-[#FFFDF8] focus:outline-none focus:ring-2 focus:ring-[#5B7283] disabled:bg-gray-50/50"
                 />
               </div>
 
@@ -2377,8 +2468,9 @@ export default function CalendarView({
                   type="checkbox"
                   id="isFixed"
                   checked={isFixed}
+                  disabled={isReadOnlyForm}
                   onChange={(e) => setIsFixed(e.target.checked)}
-                  className="h-5 w-5 bg-[#FFFDF8] border-[#EFEAE2] text-[#5B7283] rounded-lg cursor-pointer"
+                  className="h-5 w-5 bg-[#FFFDF8] border-[#EFEAE2] text-[#5B7283] rounded-lg cursor-pointer disabled:opacity-55"
                 />
                 <label htmlFor="isFixed" className="text-xs font-bold text-[#3C332D] select-none cursor-pointer">
                   🔄 固定活動 / 週課表 (每週重複)
@@ -2486,11 +2578,12 @@ export default function CalendarView({
                           type="checkbox"
                           id="isCrossDay"
                           checked={isCrossDay}
+                          disabled={isReadOnlyForm}
                           onChange={(e) => {
                             setIsCrossDay(e.target.checked);
                             if (!e.target.checked) setEndDate(selectedDate);
                           }}
-                          className="h-4 w-4 bg-[#FFFDF8] border-[#EFEAE2] text-[#5B7283] rounded cursor-pointer"
+                          className="h-4 w-4 bg-[#FFFDF8] border-[#EFEAE2] text-[#5B7283] rounded cursor-pointer disabled:opacity-55"
                         />
                         <label htmlFor="isCrossDay" className="text-xs font-bold text-[#5B7283] select-none cursor-pointer">
                           📅 跨日行程（多天行程）
@@ -2504,6 +2597,7 @@ export default function CalendarView({
                         <input
                           type="date"
                           required
+                          disabled={isReadOnlyForm}
                           value={selectedDate}
                           onChange={(e) => {
                             setSelectedDate(e.target.value);
@@ -2511,7 +2605,7 @@ export default function CalendarView({
                             setTempRangeStart(e.target.value);
                             setTempRangeEnd(e.target.value);
                           }}
-                          className="w-full text-sm border border-[#EFEAE2] rounded-xl px-3.5 py-2.5 bg-[#FFFDF8] focus:outline-none focus:ring-2 focus:ring-[#5B7283] font-mono"
+                          className="w-full text-sm border border-[#EFEAE2] rounded-xl px-3.5 py-2.5 bg-[#FFFDF8] focus:outline-none focus:ring-2 focus:ring-[#5B7283] font-mono disabled:bg-gray-50/50"
                         />
                       </div>
 
@@ -2520,6 +2614,7 @@ export default function CalendarView({
                           type="checkbox"
                           id="isCrossDay"
                           checked={isCrossDay}
+                          disabled={isReadOnlyForm}
                           onChange={(e) => {
                             const checked = e.target.checked;
                             setIsCrossDay(checked);
@@ -2538,7 +2633,7 @@ export default function CalendarView({
                               } catch (_) {}
                             }
                           }}
-                          className="h-4 w-4 bg-[#FFFDF8] border-[#EFEAE2] text-[#5B7283] rounded cursor-pointer"
+                          className="h-4 w-4 bg-[#FFFDF8] border-[#EFEAE2] text-[#5B7283] rounded cursor-pointer disabled:opacity-55"
                         />
                         <label htmlFor="isCrossDay" className="text-xs font-bold text-[#5B7283] select-none cursor-pointer">
                           📅 跨日行程（多天行程）
@@ -2552,13 +2647,15 @@ export default function CalendarView({
                       <div className="text-[11px] leading-relaxed text-[#846A55] font-medium">
                         💡 跨日行程已超過 2 天（共 <span className="font-bold text-[#A87243]">{calcDurationDays(selectedDate, endDate)}</span> 天），建議將其快速轉換為「特別期間安排（旅遊/考試/放假）」，享受專屬一鍵管理！
                       </div>
-                      <button
-                        type="button"
-                        onClick={handleQuickConvertToSpecialPeriod}
-                        className="w-full text-center py-1.5 px-3 bg-[#E7DCD0] hover:bg-[#D9CDBF] text-[#5C4535] rounded-xl text-xs font-bold transition cursor-pointer"
-                      >
-                        ⚡ 快速建立為「特別期間安排」
-                      </button>
+                      {!isReadOnlyForm && (
+                        <button
+                          type="button"
+                          onClick={handleQuickConvertToSpecialPeriod}
+                          className="w-full text-center py-1.5 px-3 bg-[#E7DCD0] hover:bg-[#D9CDBF] text-[#5C4535] rounded-xl text-xs font-bold transition cursor-pointer"
+                        >
+                          ⚡ 快速建立為「特別期間安排」
+                        </button>
+                      )}
                     </div>
                   )}
                 </div>
@@ -2572,8 +2669,9 @@ export default function CalendarView({
                         <button
                           type="button"
                           key={wd.value}
+                          disabled={isReadOnlyForm}
                           onClick={() => toggleWeekday(wd.value)}
-                          className={`px-3 py-1.5 text-xs font-bold border rounded-lg transition cursor-pointer ${
+                          className={`px-3 py-1.5 text-xs font-bold border rounded-lg transition cursor-pointer disabled:opacity-75 ${
                             isActive
                               ? "bg-[#5B7283] text-white border-[#5B7283]"
                               : "bg-[#FFFDF8] text-gray-500 border-[#EFEAE2] hover:bg-[#F7F3EB]"
@@ -2592,8 +2690,9 @@ export default function CalendarView({
                   <label className="block text-xs font-bold text-[#5B7283] mb-1.5">開始時間（選填）</label>
                   <select
                     value={startTime}
+                    disabled={isReadOnlyForm}
                     onChange={(e) => setStartTime(e.target.value)}
-                    className="w-full text-xs border border-[#EFEAE2] rounded-xl px-3.5 py-2.5 bg-[#FFFDF8] focus:outline-none font-mono cursor-pointer"
+                    className="w-full text-xs border border-[#EFEAE2] rounded-xl px-3.5 py-2.5 bg-[#FFFDF8] focus:outline-none font-mono cursor-pointer disabled:opacity-75"
                   >
                     <option value="">請選擇或無</option>
                     {TIME_CHOICES.map((tc) => (
@@ -2607,8 +2706,9 @@ export default function CalendarView({
                   <label className="block text-xs font-bold text-[#5B7283] mb-1.5">結束時間（選填）</label>
                   <select
                     value={endTime}
+                    disabled={isReadOnlyForm}
                     onChange={(e) => setEndTime(e.target.value)}
-                    className="w-full text-xs border border-[#EFEAE2] rounded-xl px-3.5 py-2.5 bg-[#FFFDF8] focus:outline-none font-mono cursor-pointer"
+                    className="w-full text-xs border border-[#EFEAE2] rounded-xl px-3.5 py-2.5 bg-[#FFFDF8] focus:outline-none font-mono cursor-pointer disabled:opacity-75"
                   >
                     <option value="">請選擇或無</option>
                     {TIME_CHOICES.map((tc) => (
@@ -2624,10 +2724,11 @@ export default function CalendarView({
                 <label className="block text-xs font-bold text-[#5B7283] mb-1.5">備註說明</label>
                 <textarea
                   rows={2}
+                  disabled={isReadOnlyForm}
                   placeholder="可在此輸入事項備註細節..."
                   value={note}
                   onChange={(e) => setNote(e.target.value)}
-                  className="w-full text-sm border border-[#EFEAE2] rounded-xl px-3.5 py-2.5 bg-[#FFFDF8] focus:outline-none focus:ring-2 focus:ring-[#5B7283] resize-none"
+                  className="w-full text-sm border border-[#EFEAE2] rounded-xl px-3.5 py-2.5 bg-[#FFFDF8] focus:outline-none focus:ring-2 focus:ring-[#5B7283] resize-none disabled:bg-gray-50/50"
                 />
               </div>
 
@@ -2659,6 +2760,7 @@ export default function CalendarView({
                             </div>
                             <input
                               type="text"
+                              disabled={isReadOnlyForm}
                               placeholder={`例如：期末考 Day${dayNum} 考科/自訂安排...`}
                               value={formDailyNotes[dateStr] || ""}
                               onChange={(e) => {
@@ -2667,7 +2769,7 @@ export default function CalendarView({
                                   [dateStr]: e.target.value,
                                 });
                               }}
-                              className="w-full text-xs border border-sky-200 rounded-lg px-2.5 py-1.5 bg-[#FFFDF8] focus:outline-none focus:ring-1 focus:ring-sky-300 font-bold"
+                              className="w-full text-xs border border-sky-200 rounded-lg px-2.5 py-1.5 bg-[#FFFDF8] focus:outline-none focus:ring-1 focus:ring-sky-300 font-bold disabled:bg-gray-50/50"
                             />
                           </div>
                         );
@@ -2681,12 +2783,18 @@ export default function CalendarView({
                 <label className="block text-xs font-bold text-[#5B7283] mb-1.5">隱私限制</label>
                 <select
                   value={isPublic ? "true" : "false"}
+                  disabled={isReadOnlyForm}
                   onChange={(e) => setIsPublic(e.target.value === "true")}
-                  className="w-full text-sm border border-[#EFEAE2] rounded-xl px-3.5 py-2.5 bg-[#FFFDF8] focus:outline-none cursor-pointer"
+                  className="w-full text-sm border border-[#EFEAE2] rounded-xl px-3.5 py-2.5 bg-[#FFFDF8] focus:outline-none cursor-pointer disabled:opacity-75"
                 >
                   <option value="true">🔓 公開 (家庭全員皆可見)</option>
-                  <option value="false">🔒 私人 (僅自己以及管理員媽媽可見)</option>
+                  <option value="false">🔒 私人 (僅自己與家庭管理員可見)</option>
                 </select>
+                {!isPublic && (
+                  <p className="mt-1.5 text-xs text-amber-600 bg-amber-50/50 rounded-lg p-2 border border-amber-100 font-medium leading-relaxed">
+                    🔒 私人行程說明：勾選後僅建立者本人與家庭管理員可查看。其他家庭成員將完全無法看到此行程。
+                  </p>
+                )}
               </div>
 
               {!editingEvent && onAddFavorite && (
@@ -2696,8 +2804,9 @@ export default function CalendarView({
                       type="checkbox"
                       id="saveAsFav"
                       checked={saveAsFav}
+                      disabled={isReadOnlyForm}
                       onChange={(e) => setSaveAsFav(e.target.checked)}
-                      className="h-5 w-5 bg-[#FFFDF8] border-[#EFEAE2] text-[#5B7283] rounded-lg cursor-pointer"
+                      className="h-5 w-5 bg-[#FFFDF8] border-[#EFEAE2] text-[#5B7283] rounded-lg cursor-pointer disabled:opacity-55"
                     />
                     <label htmlFor="saveAsFav" className="text-xs font-bold text-[#5B7283] select-none cursor-pointer">
                       ⭐ 順便存入常用事項清單
@@ -2709,7 +2818,7 @@ export default function CalendarView({
 
             {/* Footer (Fixed) */}
             <div className="p-4 md:p-6 border-t border-[#EFEAE2] flex justify-between items-center bg-[#FFFDF8] shrink-0 rounded-b-[24px]">
-              {editingEvent && isUserAllowedToDelete(editingEvent) ? (
+              {editingEvent && isUserAllowedToDelete(editingEvent) && !isReadOnlyForm ? (
                 <button
                   type="button"
                   onClick={() => triggerDeleteConfirm(editingEvent)}
@@ -2722,20 +2831,32 @@ export default function CalendarView({
                 <div />
               )}
               <div className="flex gap-2">
-                <button
-                  type="button"
-                  onClick={() => setShowAddForm(false)}
-                  className="px-5 py-2.5 text-xs font-bold text-gray-500 hover:bg-gray-100 border border-[#EFEAE2] rounded-full transition cursor-pointer"
-                >
-                  取消
-                </button>
-                <button
-                  type="submit"
-                  disabled={isSubmitting}
-                  className="px-5 py-2.5 text-xs font-black text-white bg-[#5B7283] hover:bg-[#4E6170] rounded-full transition disabled:opacity-50 cursor-pointer soft-journal-shadow"
-                >
-                  {isSubmitting ? "正在儲存..." : editingEvent ? "確認修改" : "新增事項"}
-                </button>
+                {!isReadOnlyForm ? (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => setShowAddForm(false)}
+                      className="px-5 py-2.5 text-xs font-bold text-gray-500 hover:bg-gray-100 border border-[#EFEAE2] rounded-full transition cursor-pointer"
+                    >
+                      取消
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={isSubmitting}
+                      className="px-5 py-2.5 text-xs font-black text-white bg-[#5B7283] hover:bg-[#4E6170] rounded-full transition disabled:opacity-50 cursor-pointer soft-journal-shadow"
+                    >
+                      {isSubmitting ? "正在儲存..." : editingEvent ? "確認修改" : "新增事項"}
+                    </button>
+                  </>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setShowAddForm(false)}
+                    className="px-6 py-2.5 text-xs font-black text-white bg-[#5B7283] hover:bg-[#4E6170] rounded-full transition cursor-pointer soft-journal-shadow font-bold"
+                  >
+                    關閉
+                  </button>
+                )}
               </div>
             </div>
           </form>
@@ -3422,9 +3543,7 @@ export default function CalendarView({
                           setIsDrawerOpen(false); // Close first to prevent overlap
                           handleOpenEdit(evt, selectedMobileDate);
                         }}
-                        className={`p-3.5 rounded-xl border text-left flex flex-col gap-1.5 shadow-xs relative cursor-pointer hover:bg-[#FFFDFB] transition-all ${
-                          isBday ? "bg-rose-50/50 border-rose-200 text-rose-700" : "bg-[#FFFDFB]/80 border-[#EFEAE2]"
-                        }`}
+                        className={`p-3.5 text-left flex flex-col gap-1.5 shadow-xs relative cursor-pointer hover:opacity-90 transition-all ${getAppletEventStyleClasses(evt, isBday, selectedMobileDate, "month")}`}
                       >
                         <div className="flex items-center justify-between gap-2 overflow-hidden">
                           <span className="font-black text-sm md:text-base text-[#3C332D] truncate block max-w-[85%]">
@@ -3469,19 +3588,21 @@ export default function CalendarView({
             </div>
 
             {/* ➕ Sticky Footer for Adding Event */}
-            <div 
-              className="shrink-0 border-t border-[#F2ECE5] bg-[#FFFDF8] px-5 py-4 z-30 shadow-sm relative rounded-b-[24px]"
-            >
-              <button
-                onClick={() => {
-                  setIsDrawerOpen(false);
-                  handleOpenAdd(selectedMobileDate);
-                }}
-                className="w-full py-3.5 bg-[#EAA59E] hover:bg-[#D98E85] text-white text-sm font-black rounded-2xl shadow-sm transition active:scale-97 flex items-center justify-center gap-2 cursor-pointer"
+            {canCreateCalendar && (
+              <div 
+                className="shrink-0 border-t border-[#F2ECE5] bg-[#FFFDF8] px-5 py-4 z-30 shadow-sm relative rounded-b-[24px]"
               >
-                <span>➕</span> 新增行程
-              </button>
-            </div>
+                <button
+                  onClick={() => {
+                    setIsDrawerOpen(false);
+                    handleOpenAdd(selectedMobileDate);
+                  }}
+                  className="w-full py-3.5 bg-[#EAA59E] hover:bg-[#D98E85] text-white text-sm font-black rounded-2xl shadow-sm transition active:scale-97 flex items-center justify-center gap-2 cursor-pointer"
+                >
+                  <span>➕</span> 新增行程
+                </button>
+              </div>
+            )}
           </div>
         </div>
       )}

@@ -84,6 +84,7 @@ export default function RewardCenter({
   const [editCreatorName, setEditCreatorName] = useState("");
   const [editSortOrder, setEditSortOrder] = useState<number>(10);
   const [editStatus, setEditStatus] = useState<RewardStatus>(RewardStatus.AVAILABLE);
+  const [editImageUrl, setEditImageUrl] = useState("");
 
   // --- NEW: SELECTED CHILD TRANSITION LOGIC FOR REAL-TIME DISPLAY ---
   const kidsOfFamily = useMemo(() => {
@@ -125,7 +126,9 @@ export default function RewardCenter({
   }, [pendingRedemptions, selectedKidObj]);
 
   // --- NEW: MOM ADMINISTRATIVE CONTROL MODE ---
-  const isParent = canManageFamily(currentUser, activeFamily);
+  const isParent = canManageFamily(currentUser, activeFamily) || String(currentUser.role).toLowerCase() === "parent" || currentUser.role === UserRole.PARENT;
+  const isKid = (currentUser.role as string) === UserRole.KID || (currentUser.role as string) === UserRole.CHILD || String(currentUser.role).toLowerCase() === "child" || String(currentUser.role).toLowerCase() === "kid";
+  const isViewer = String(currentUser.role).toLowerCase() === "viewer" || String(currentUser.role).toLowerCase() === "member";
   const [momAdminMode, setMomAdminMode] = useState<boolean>(false);
 
   // Correction variables
@@ -212,26 +215,13 @@ export default function RewardCenter({
 
   // Filter rewards based on role and statusFilter
   const filteredStoreItems = useMemo(() => {
-    const rawItems = rewards.filter((r) => {
-      if (isParent) {
-        return r.status === RewardStatus.AVAILABLE || r.status === RewardStatus.PAUSED || r.status === RewardStatus.ARCHIVED;
-      } else {
-        return r.status === RewardStatus.AVAILABLE;
-      }
-    });
+    const rawItems = rewards.filter((r) => 
+      r.status !== RewardStatus.WISHED &&
+      r.status !== RewardStatus.PENDING &&
+      r.status !== RewardStatus.REJECTED
+    );
 
-    let items = rawItems;
-    if (isParent) {
-      if (statusFilter === "available") {
-        items = rawItems.filter(r => r.status === RewardStatus.AVAILABLE);
-      } else if (statusFilter === "paused") {
-        items = rawItems.filter(r => r.status === RewardStatus.PAUSED);
-      } else if (statusFilter === "archived") {
-        items = rawItems.filter(r => r.status === RewardStatus.ARCHIVED);
-      }
-    }
-
-    return [...items].sort((a, b) => {
+    return [...rawItems].sort((a, b) => {
       const orderA = a.sortOrder !== undefined ? a.sortOrder : 9999;
       const orderB = b.sortOrder !== undefined ? b.sortOrder : 9999;
       if (orderA !== orderB) {
@@ -241,11 +231,20 @@ export default function RewardCenter({
       const timeB = b.createdAt?.seconds || 0;
       return timeB - timeA;
     });
-  }, [rewards, isParent, statusFilter]);
+  }, [rewards]);
 
   const wishListItems = useMemo(() => {
-    return rewards.filter((r) => r.status === RewardStatus.WISHED);
-  }, [rewards]);
+    const list = rewards.filter((r) => 
+      r.status === RewardStatus.PENDING || 
+      r.status === RewardStatus.REJECTED || 
+      r.status === RewardStatus.WISHED
+    );
+    if (isParent) {
+      return list;
+    }
+    // Child can only see their own wishes
+    return list.filter((r) => r.creatorUid === currentUser.uid);
+  }, [rewards, isParent, currentUser.uid]);
 
   // Filter transactions based on selection
   const filteredTransactions = useMemo(() => {
@@ -302,7 +301,7 @@ export default function RewardCenter({
         title: rewardTitle.trim(),
         starsCost,
         stock: 999999,
-        status: isParent ? RewardStatus.AVAILABLE : RewardStatus.WISHED,
+        status: isParent ? RewardStatus.AVAILABLE : RewardStatus.PENDING,
         description: description.trim(),
         imageUrl: imageUrl.trim(),
         note: "",
@@ -329,6 +328,7 @@ export default function RewardCenter({
     setEditCreatorName(item.creatorName || "");
     setEditSortOrder(item.sortOrder !== undefined ? item.sortOrder : 10);
     setEditStatus(item.status);
+    setEditImageUrl(item.imageUrl || "");
   };
 
   const handleSaveUpdate = async (e: React.FormEvent) => {
@@ -343,7 +343,8 @@ export default function RewardCenter({
         note: editNote.trim(),
         creatorName: editCreatorName.trim(),
         sortOrder: editSortOrder,
-        status: editStatus,
+        status: editStatus || editingReward.status || RewardStatus.AVAILABLE,
+        imageUrl: editImageUrl.trim(),
       });
       setEditingReward(null);
     } catch (err) {
@@ -449,13 +450,27 @@ export default function RewardCenter({
           </div>
         </div>
 
-        <button
-          onClick={() => setShowAddForm(true)}
-          className="flex items-center gap-1 text-xs font-black text-white bg-[#EAA59E] hover:bg-[#df938c] px-4 py-2.5 rounded-full transition cursor-pointer shadow-xs max-h-[38px] active:scale-95"
-        >
-          <Plus className="h-4 w-4" />
-          <span>{isParent ? "新增商品" : "提出許願"}</span>
-        </button>
+        {!isViewer && (
+          <button
+            onClick={() => {
+              setRewardTitle("");
+              setStarsCost(15);
+              setDescription("");
+              setImageUrl("");
+              setShowAddForm(true);
+            }}
+            className="flex items-center gap-1 text-xs font-black text-white bg-[#EAA59E] hover:bg-[#df938c] px-4 py-2.5 rounded-full transition cursor-pointer shadow-xs max-h-[38px] active:scale-95"
+          >
+            {isKid ? (
+              <span>🌟 我要許願</span>
+            ) : (
+              <>
+                <Plus className="h-4 w-4" />
+                <span>新增商品</span>
+              </>
+            )}
+          </button>
+        )}
       </div>
 
       {/* 👦 孩子星星小卡橫向滑動列表 (Horizontal scrolling kid cards) */}
@@ -890,36 +905,6 @@ export default function RewardCenter({
             <h3 className="text-md font-extrabold text-[#3C332D] tracking-wide flex items-center gap-1.5 border-l-4 border-[#5B7283] pl-2">
                現貨大禮上架中心
             </h3>
-
-            {/* Parent only Status Filter */}
-            {isParent && (
-              <div className="flex flex-wrap gap-1 bg-[#F2EDE5]/40 border border-[#EFEAE2] p-0.5 rounded-lg text-[10px] font-black select-none">
-                <button
-                  onClick={() => setStatusFilter("all")}
-                  className={`px-2 py-1 rounded transition ${statusFilter === "all" ? "bg-[#3C332D] text-white" : "text-gray-500 hover:text-gray-900"}`}
-                >
-                  全部
-                </button>
-                <button
-                  onClick={() => setStatusFilter("available")}
-                  className={`px-2 py-1 rounded transition ${statusFilter === "available" ? "bg-[#3C332D] text-white" : "text-gray-500 hover:text-gray-900"}`}
-                >
-                  上架中
-                </button>
-                <button
-                  onClick={() => setStatusFilter("paused")}
-                  className={`px-2 py-1 rounded transition ${statusFilter === "paused" ? "bg-[#3C332D] text-white" : "text-gray-500 hover:text-gray-900"}`}
-                >
-                  暫停中
-                </button>
-                <button
-                  onClick={() => setStatusFilter("archived")}
-                  className={`px-2 py-1 rounded transition ${statusFilter === "archived" ? "bg-[#3C332D] text-white" : "text-gray-500 hover:text-gray-900"}`}
-                >
-                  已下架
-                </button>
-              </div>
-            )}
           </div>
 
           {filteredStoreItems.length === 0 ? (
@@ -950,10 +935,10 @@ export default function RewardCenter({
                       style={{
                         border: "1px solid #E9E2DB",
                         borderRadius: "16px",
-                        background: item.status === RewardStatus.PAUSED ? "#FCFBF3" : item.status === RewardStatus.ARCHIVED ? "#F2F2F2" : "#FFFFFF",
+                        background: "#FFFFFF",
                         boxShadow: "0 2px 10px rgba(0,0,0,0.02)"
                       }}
-                      className={`p-4 relative flex flex-col justify-between min-h-[210px] hover:-translate-y-0.5 transition ${item.status === RewardStatus.ARCHIVED ? "opacity-75" : ""}`}
+                      className="p-4 relative flex flex-col justify-between min-h-[210px] hover:-translate-y-0.5 transition"
                     >
                       {/* Parent controls */}
                       {isParent && (
@@ -977,19 +962,6 @@ export default function RewardCenter({
 
                       <div className="space-y-3">
                         <div className="flex flex-wrap gap-1 leading-none">
-                          {item.status === RewardStatus.PAUSED ? (
-                            <span className="text-[8px] font-black bg-amber-50 text-amber-800 border border-amber-250 rounded px-1.5 py-0.5">
-                              ⏸ 暫停中
-                            </span>
-                          ) : item.status === RewardStatus.ARCHIVED ? (
-                            <span className="text-[8px] font-black bg-gray-100 text-gray-650 border border-gray-250 rounded px-1.5 py-0.5">
-                              📦 已下架
-                            </span>
-                          ) : (
-                            <span className="text-[8px] font-black bg-emerald-50 text-emerald-800 border border-emerald-200 rounded px-1.5 py-0.5">
-                              🟢 上架中
-                            </span>
-                          )}
                           {item.sortOrder !== undefined && (
                             <span className="text-[8px] font-bold bg-sky-50 text-sky-800 border border-sky-100 rounded px-1.5 py-0.5">
                               排序: {item.sortOrder}
@@ -1043,7 +1015,7 @@ export default function RewardCenter({
                           建立者：{item.creatorName || "全家官網"}
                         </span>
 
-                        {isKid && item.status === RewardStatus.AVAILABLE && (
+                        {isKid && (
                           <button
                             onClick={() => handleRedeemClick(item)}
                             disabled={isRequested}
@@ -1080,7 +1052,7 @@ export default function RewardCenter({
                       style={{
                         border: "1px solid #E9E2DB",
                         borderRadius: "14px",
-                        background: item.status === RewardStatus.PAUSED ? "#FCFBF3" : item.status === RewardStatus.ARCHIVED ? "#F6F6F6" : "#FFFFFF"
+                        background: "#FFFFFF"
                       }}
                       className="p-2.5 flex items-center justify-between gap-3 relative"
                     >
@@ -1130,7 +1102,7 @@ export default function RewardCenter({
                             </button>
                           </div>
                         ) : (
-                          isKid && item.status === RewardStatus.AVAILABLE && (
+                          isKid && (
                             <button
                               onClick={() => handleRedeemClick(item)}
                               disabled={isRequested}
@@ -1169,53 +1141,136 @@ export default function RewardCenter({
               </p>
             </div>
           ) : (
-            <div className="space-y-3">
-              {wishListItems.map((wish) => (
-                <div
-                  key={wish.id}
-                  className="p-4 rounded-xl border border-gray-200 bg-white relative shadow-3xs"
-                >
-                  {isParent && (
-                    <button
-                      onClick={() => handleDeleteRewardClick(wish)}
-                      className="absolute right-2 top-2 text-gray-400 hover:text-red-500 p-1 cursor-pointer"
-                      title="駁回許願"
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </button>
-                  )}
+            <div className="space-y-3 font-sans">
+              {wishListItems.map((wish) => {
+                const dateStr = wish.createdAt
+                  ? (wish.createdAt.seconds 
+                      ? new Date(wish.createdAt.seconds * 1000).toLocaleDateString() 
+                      : new Date(wish.createdAt).toLocaleDateString())
+                  : new Date().toLocaleDateString();
 
-                  <div className="space-y-2">
-                    <span className="inline-block text-[9px] font-sans font-bold bg-[#FAF8F4] text-amber-800 px-2 py-0.5 rounded-full border border-amber-200/40">
-                      📍 寶貝夢想心願
-                    </span>
-                    <h4 className="font-extrabold text-[#3C332D] text-xs pr-6 break-all">💭 {wish.title}</h4>
-                    {wish.description && (
-                      <p className="text-[10.5px] text-gray-400 font-semibold line-clamp-2">
-                        {wish.description}
-                      </p>
-                    )}
-                    <span className="inline-block text-[10px] font-sans font-bold bg-amber-50 text-amber-900 border border-amber-200 px-2 py-0.5 rounded">
-                      單價: {wish.starsCost} ★
-                    </span>
+                const statusStr = String(wish.status).toLowerCase();
+                const isPending = statusStr === "pending" || statusStr === "wished";
+                const isRejected = statusStr === "rejected";
+
+                return (
+                  <div
+                    key={wish.id}
+                    className="p-4 rounded-xl border border-gray-200 bg-white relative shadow-3xs flex flex-col gap-3"
+                  >
+                    {/* Top Section: Badges */}
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="inline-block text-[9px] font-sans font-bold bg-[#FAF8F4] text-amber-800 px-2 py-0.5 rounded-full border border-amber-200/40">
+                        📍 寶貝夢想心願
+                      </span>
+                      {isPending ? (
+                        <span className="text-[9.5px] font-black bg-amber-50 text-amber-600 border border-amber-200 px-2 py-0.5 rounded-full select-none">
+                          🕒 待審核
+                        </span>
+                      ) : isRejected ? (
+                        <span className="text-[9.5px] font-black bg-rose-50 text-rose-600 border border-rose-200 px-2 py-0.5 rounded-full select-none">
+                          ❌ 已拒絕
+                        </span>
+                      ) : null}
+                    </div>
+
+                    {/* Content Section: Product details with optional image */}
+                    <div className="flex gap-3">
+                      {wish.imageUrl && (
+                        <div className="w-16 h-16 rounded-xl bg-gray-50 flex-shrink-0 overflow-hidden border border-[#EFEAE2]">
+                          <img 
+                            src={wish.imageUrl} 
+                            alt={wish.title} 
+                            className="w-full h-full object-cover select-none" 
+                            referrerPolicy="no-referrer"
+                          />
+                        </div>
+                      )}
+                      <div className="flex-1 min-w-0 space-y-1">
+                        <h4 className="font-extrabold text-[#3C332D] text-xs break-all">💭 {wish.title}</h4>
+                        {wish.description && (
+                          <p className="text-[10.5px] text-gray-400 font-semibold line-clamp-2">
+                            {wish.description}
+                          </p>
+                        )}
+                        <span className="inline-block text-[10px] font-sans font-black bg-amber-50 text-amber-900 border border-amber-200/50 px-2 py-0.5 rounded">
+                          單價: {wish.starsCost} ★
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Footer Row: Meta information + dynamic actions */}
+                    <div className="pt-2 border-t border-[#F7F3EB] flex items-center justify-between gap-2">
+                      <div className="flex flex-col gap-0.5">
+                        <span className="text-[10px] text-[#A6A6A6] font-bold">
+                          👤 許願孩子：{wish.creatorName}
+                        </span>
+                        <span className="text-[9px] text-gray-400 font-semibold">
+                          📅 提出日期：{dateStr}
+                        </span>
+                      </div>
+
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        {/* Parent Controls */}
+                        {isParent && (
+                          <>
+                            {isPending && (
+                              <button
+                                onClick={async () => {
+                                  try {
+                                    await onUpdateReward(wish.id, { status: RewardStatus.REJECTED });
+                                    toast.success("❌ 已審查拒絕該願望");
+                                  } catch (err: any) {
+                                    toast.error(`❌ 拒絕願望失敗: ${err.message}`);
+                                  }
+                                }}
+                                className="text-[10.5px] font-black text-rose-600 hover:text-white bg-rose-50 hover:bg-rose-505 border border-rose-200 hover:border-rose-500 px-3 py-1.5 rounded-full transition active:scale-95 cursor-pointer shadow-3xs"
+                              >
+                                ❌ 拒絕
+                              </button>
+                            )}
+                            <button
+                              onClick={() => onApproveWish(wish.id)}
+                              className="text-[10.5px] font-black text-white bg-[#EAA59E] hover:bg-[#df938c] px-3.5 py-1.5 rounded-full shadow-sm cursor-pointer transition active:scale-95 flex items-center gap-1"
+                            >
+                              ✅ 同意上架
+                            </button>
+                          </>
+                        )}
+
+                        {/* Child's own Wish controls */}
+                        {wish.creatorUid === currentUser.uid && !isViewer && (
+                          <>
+                            <button
+                              onClick={() => handleOpenEdit(wish)}
+                              className="text-[10px] font-black text-gray-600 hover:text-sky-600 bg-gray-50 hover:bg-sky-50 border border-gray-200 px-2.5 py-1 rounded-full transition cursor-pointer active:scale-95"
+                              title="修改願望"
+                            >
+                              ✏️ 修改
+                            </button>
+                            <button
+                              onClick={async () => {
+                                if (confirm("確定要取消這個心願嗎？")) {
+                                  try {
+                                    await onDeleteReward(wish.id);
+                                    toast.success("✅ 已成功取消您的心願！");
+                                  } catch (err: any) {
+                                    toast.error(`❌ 取消願望失敗: ${err.message}`);
+                                  }
+                                }
+                              }}
+                              className="text-[10px] font-black text-gray-500 hover:text-red-600 bg-gray-50 hover:bg-red-50 border border-gray-200 px-2.5 py-1 rounded-full transition cursor-pointer active:scale-95"
+                              title="取消願望"
+                            >
+                              🗑️ 取消
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    </div>
                   </div>
-
-                  <div className="mt-3.5 pt-2 border-t border-[#F7F3EB] flex items-center justify-between">
-                    <span className="text-[10px] text-[#A6A6A6] font-extrabold leading-none">
-                      許願孩子：{wish.creatorName}
-                    </span>
-
-                    {isParent && (
-                      <button
-                        onClick={() => onApproveWish(wish.id)}
-                        className="text-[10px] font-black text-white bg-[#EAA59E] hover:bg-[#df938c] px-3.5 py-1.5 rounded-full shadow-sm cursor-pointer transition active:scale-95"
-                      >
-                        准予上架
-                      </button>
-                    )}
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
           
@@ -1338,6 +1393,17 @@ export default function RewardCenter({
                 />
               </div>
 
+              <div>
+                <label className="block text-xs font-black text-[#5B7283] mb-1">圖片網址 (選填)</label>
+                <input
+                  type="url"
+                  placeholder="https://images.unsplash.com/photo-... (或留下空白)"
+                  value={imageUrl}
+                  onChange={(e) => setImageUrl(e.target.value)}
+                  className="w-full text-xs border border-[#EFEAE2] rounded-xl px-3 py-2.5 bg-[#FFFDF8] focus:outline-none font-bold text-gray-600"
+                />
+              </div>
+
               <div className="flex justify-end gap-2 pt-3 border-t border-[#F7F3EB]">
                 <button
                   type="button"
@@ -1410,6 +1476,17 @@ export default function RewardCenter({
               </div>
 
               <div>
+                <label className="block text-xs font-black text-[#5B7283] mb-1">圖片網址 (選填)</label>
+                <input
+                  type="url"
+                  placeholder="https://images.unsplash.com/photo-... (或留下空白)"
+                  value={editImageUrl}
+                  onChange={(e) => setEditImageUrl(e.target.value)}
+                  className="w-full text-xs border border-[#EFEAE2] rounded-xl px-3 py-2.5 bg-[#FFFDF8] focus:outline-none font-bold text-gray-600"
+                />
+              </div>
+
+              <div>
                 <label className="block text-xs font-black text-[#5B7283] mb-1">爸媽叮嚀備註</label>
                 <textarea
                   rows={2}
@@ -1439,19 +1516,6 @@ export default function RewardCenter({
                   onChange={(e) => setEditSortOrder(parseInt(e.target.value) || 0)}
                   className="w-full text-xs border border-[#EFEAE2] rounded-xl px-3 py-2.5 bg-[#FFFDF8] focus:outline-none font-mono font-black"
                 />
-              </div>
-
-              <div>
-                <label className="block text-xs font-black text-[#5B7283] mb-1">商品上架狀態</label>
-                <select
-                  value={editStatus}
-                  onChange={(e) => setEditStatus(e.target.value as RewardStatus)}
-                  className="w-full text-xs border border-[#EFEAE2] bg-[#FFFDF8] rounded-xl px-3 py-2.5 focus:outline-none font-bold"
-                >
-                  <option value={RewardStatus.AVAILABLE}>上架中 (Available)</option>
-                  <option value={RewardStatus.PAUSED}>已暫停出貨 (Paused)</option>
-                  <option value={RewardStatus.ARCHIVED}>已下架庫存 (Archived)</option>
-                </select>
               </div>
 
               <div className="flex justify-end gap-2 pt-3 border-t border-[#F7F3EB]">

@@ -978,113 +978,113 @@ export default function TaskSystem({
               })}
             </div>
           )}
-
-          {/* Deletion confirmation dialog absolute popup overlay */}
-          {deletingTaskId && (
-            (() => {
-              const targetTask = tasks.find((t) => t.id === deletingTaskId);
-              const isApproved = targetTask?.status === "approved";
-              const stars = targetTask?.starsReward || 0;
-              const title = targetTask?.title || "";
-
-              return (
-                <div className="fixed inset-0 bg-[#3C332D]/40 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-in fade-in duration-150 select-none font-sans">
-                  <div className="bg-white rounded-[24px] border border-rose-100 p-6 lg:p-8 max-w-sm w-full shadow-2xl relative text-center space-y-4">
-                    <div className="mx-auto w-12 h-12 bg-rose-50 text-rose-600 rounded-full flex items-center justify-center text-xl font-bold">
-                      ⚠️
-                    </div>
-                    
-                    {isApproved && stars > 0 ? (
-                      <>
-                        <h3 className="text-base lg:text-lg font-black text-[#3C332D]">
-                          確定要刪除此筆記錄嗎？
-                        </h3>
-                        <p className="text-xs text-rose-600 bg-rose-50 p-3 rounded-xl border border-rose-100/50 font-bold leading-relaxed">
-                          此任務已發放 <span className="font-mono text-sm font-black">{stars}</span> 顆星星。<br/>
-                          是否同步回收星星？
-                        </p>
-                        
-                        <div className="flex flex-col gap-2 pt-2">
-                          <button
-                            type="button"
-                            onClick={async () => {
-                              try {
-                                await onDeleteTask(deletingTaskId, true);
-                              } catch (err) {
-                                console.error("Error recycling stars:", err);
-                              } finally {
-                                setDeletingTaskId(null);
-                              }
-                            }}
-                            className="w-full py-2.5 px-4 text-xs font-black text-white bg-rose-500 hover:bg-rose-600 rounded-xl transition shadow-sm cursor-pointer"
-                          >
-                            【刪除並回收星星】
-                          </button>
-                          <button
-                            type="button"
-                            onClick={async () => {
-                              try {
-                                await onDeleteTask(deletingTaskId, false);
-                              } catch (err) {
-                                console.error("Error deleting record only:", err);
-                              } finally {
-                                setDeletingTaskId(null);
-                              }
-                            }}
-                            className="w-full py-2.5 px-4 text-xs font-black text-gray-700 bg-amber-50 hover:bg-amber-100 border border-amber-200/50 rounded-xl transition cursor-pointer"
-                          >
-                            【只刪除紀錄】
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setDeletingTaskId(null)}
-                            className="w-full py-2 px-4 text-xs font-bold text-gray-400 hover:text-gray-600 rounded-xl transition hover:bg-gray-50 cursor-pointer"
-                          >
-                            【取消】
-                          </button>
-                        </div>
-                      </>
-                    ) : (
-                      <>
-                        <h3 className="text-base lg:text-lg font-black text-[#3C332D]">
-                          確定要刪除「{title}」嗎？
-                        </h3>
-                        <p className="text-xs text-gray-450 font-semibold">
-                          刪除後此筆紀錄與成長歷程將無法復原唷。
-                        </p>
-                        
-                        <div className="flex gap-3 pt-2">
-                          <button
-                            type="button"
-                            onClick={() => setDeletingTaskId(null)}
-                            className="flex-1 px-4 py-2.5 text-xs font-black text-gray-500 hover:bg-[#FFFDF8] border border-[#EFEAE2] rounded-xl transition cursor-pointer"
-                          >
-                            【取消】
-                          </button>
-                          <button
-                            type="button"
-                            onClick={async () => {
-                              try {
-                                await onDeleteTask(deletingTaskId, false);
-                              } catch (err) {
-                                console.error("Error deleting task:", err);
-                              } finally {
-                                setDeletingTaskId(null);
-                              }
-                            }}
-                            className="flex-1 px-4 py-2.5 text-xs font-black text-white bg-red-500 hover:bg-red-600 rounded-xl transition shadow-xs cursor-pointer"
-                          >
-                            【確認刪除】
-                          </button>
-                        </div>
-                      </>
-                    )}
-                  </div>
-                </div>
-              );
-            })()
-          )}
         </div>
+      )}
+
+      {/* Deletion confirmation dialog absolute popup overlay */}
+      {deletingTaskId && (
+        (() => {
+          const targetTask = tasks.find((t) => t.id === deletingTaskId);
+          const isApproved = targetTask?.status === "approved";
+          const stars = targetTask?.starsReward || 0;
+          const title = targetTask?.title || "";
+
+          return (
+            <div className="fixed inset-0 bg-[#3C332D]/40 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-in fade-in duration-150 select-none font-sans">
+              <div className="bg-white rounded-[24px] border border-rose-100 p-6 lg:p-8 max-w-sm w-full shadow-2xl relative text-center space-y-4">
+                <div className="mx-auto w-12 h-12 bg-rose-50 text-rose-600 rounded-full flex items-center justify-center text-xl font-bold">
+                  ⚠️
+                </div>
+                
+                {isApproved && stars > 0 ? (
+                  <>
+                    <h3 className="text-base lg:text-lg font-black text-[#3C332D]">
+                      確定要刪除此筆記錄嗎？
+                    </h3>
+                    <p className="text-xs text-rose-600 bg-rose-50 p-3 rounded-xl border border-rose-100/50 font-bold leading-relaxed">
+                      此任務已發放 <span className="font-mono text-sm font-black">{stars}</span> 顆星星。<br/>
+                      是否同步回收星星？
+                    </p>
+                    
+                    <div className="flex flex-col gap-2 pt-2">
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          try {
+                            await onDeleteTask(deletingTaskId, true);
+                          } catch (err) {
+                            console.error("Error recycling stars:", err);
+                          } finally {
+                            setDeletingTaskId(null);
+                          }
+                        }}
+                        className="w-full py-2.5 px-4 text-xs font-black text-white bg-rose-500 hover:bg-rose-600 rounded-xl transition shadow-sm cursor-pointer"
+                      >
+                        【刪除並回收星星】
+                      </button>
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          try {
+                            await onDeleteTask(deletingTaskId, false);
+                          } catch (err) {
+                            console.error("Error deleting record only:", err);
+                          } finally {
+                            setDeletingTaskId(null);
+                          }
+                        }}
+                        className="w-full py-2.5 px-4 text-xs font-black text-gray-700 bg-amber-50 hover:bg-amber-100 border border-amber-200/50 rounded-xl transition cursor-pointer"
+                      >
+                        【只刪除紀錄】
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setDeletingTaskId(null)}
+                        className="w-full py-2 px-4 text-xs font-bold text-gray-400 hover:text-gray-600 rounded-xl transition hover:bg-gray-50 cursor-pointer"
+                      >
+                        【取消】
+                      </button>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <h3 className="text-base lg:text-lg font-black text-[#3C332D]">
+                      確定要刪除「{title}」嗎？
+                    </h3>
+                    <p className="text-xs text-gray-450 font-semibold">
+                      刪除後此筆紀錄與成長歷程將無法復原唷。
+                    </p>
+                    
+                    <div className="flex gap-3 pt-2">
+                      <button
+                        type="button"
+                        onClick={() => setDeletingTaskId(null)}
+                        className="flex-1 px-4 py-2.5 text-xs font-black text-gray-500 hover:bg-[#FFFDF8] border border-[#EFEAE2] rounded-xl transition cursor-pointer"
+                      >
+                        【取消】
+                      </button>
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          try {
+                            await onDeleteTask(deletingTaskId, false);
+                          } catch (err) {
+                            console.error("Error deleting task:", err);
+                          } finally {
+                            setDeletingTaskId(null);
+                          }
+                        }}
+                        className="flex-1 px-4 py-2.5 text-xs font-black text-white bg-red-500 hover:bg-red-600 rounded-xl transition shadow-xs cursor-pointer"
+                      >
+                        【確認刪除】
+                      </button>
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
+          );
+        })()
       )}
 
       {/* Editor Modal for Adding/Editing Task */}

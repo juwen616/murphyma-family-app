@@ -23,6 +23,30 @@ body {
   font-size: 18px; /* Boost body default size by ~15% for readability */
 }
 
+/* PC/Desktop Layout Home Page Font Size Boost (+20%) */
+@media (min-width: 1024px) {
+  #home-dashboard {
+    font-size: 1.2rem; /* Boost any default/unclassed font sizes inside home-dashboard by 20% on PC */
+    /* 1. Scale up Tailwind standard font variables by 20% on PC */
+    --text-xs: 0.9rem;       /* 0.75rem * 1.2 = 0.9rem */
+    --text-sm: 1.05rem;      /* 0.875rem * 1.2 = 1.05rem */
+    --text-base: 1.20rem;    /* 1rem * 1.2 = 1.2rem */
+    --text-lg: 1.35rem;      /* 1.125rem * 1.2 = 1.35rem */
+    --text-xl: 1.50rem;      /* 1.25rem * 1.2 = 1.5rem */
+    --text-2xl: 1.80rem;     /* 1.5rem * 1.2 = 1.8rem */
+    --text-3xl: 2.25rem;     /* 1.875rem * 1.2 = 2.25rem */
+    --text-4xl: 2.70rem;     /* 2.25rem * 1.2 = 2.7rem */
+    --text-5xl: 3.60rem;     /* 3rem * 1.2 = 3.6rem */
+  }
+
+  /* 2. Scale up custom arbitrary pixel font classes by 20% on PC */
+  #home-dashboard .text-\[9px\] { font-size: 11px !important; }
+  #home-dashboard .text-\[10px\] { font-size: 12px !important; }
+  #home-dashboard .text-\[11px\] { font-size: 13.2px !important; }
+  #home-dashboard .text-\[13px\] { font-size: 15.6px !important; }
+  #home-dashboard .text-\[15px\] { font-size: 18px !important; }
+}
+
 /* Cozy Washi tape styled elements */
 .washi-pink {
   background: repeating-linear-gradient(45deg, #FFE9EF, #FFE9EF 10px, #FFF0F5 10px, #FFF0F5 20px);

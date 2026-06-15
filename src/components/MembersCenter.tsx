@@ -46,6 +46,7 @@ interface MembersCenterProps {
   pendingRequests?: any[];
   onApproveJoinRequest?: (req: any) => Promise<void>;
   onRejectJoinRequest?: (req: any) => Promise<void>;
+  onBindGoogle?: (memberUid: string) => Promise<void>;
 }
 
 const MORANDI_COLORS = [
@@ -94,11 +95,17 @@ export default function MembersCenter({
   pendingRequests = [],
   onApproveJoinRequest,
   onRejectJoinRequest,
+  onBindGoogle,
 }: MembersCenterProps) {
   const [activeMode, setActiveMode] = useState<SystemMode>(systemMode);
   const [isUpdating, setIsUpdating] = useState(false);
   const [copied, setCopied] = useState(false);
   const [showAdvancedInfo, setShowAdvancedInfo] = useState(false);
+
+  const isOwnerRole = (mRole: string) => {
+    const norm = (mRole || "").toLowerCase();
+    return norm === "owner" || norm === "admin" || norm === "superadmin" || mRole === UserRole.ADMIN || mRole === UserRole.OWNER;
+  };
 
   const getRoleChineseName = (r: any) => {
     if (r === "Owner" || r === "Admin" || r === UserRole.ADMIN) return "管理員";
@@ -669,7 +676,7 @@ export default function MembersCenter({
     setEditingInvite(null);
     setDisplayName("");
     setRole(UserRole.KID);
-    setBirthday("2015-04-18");
+    setBirthday("");
     setColor("#B4C3B2");
     setPhotoURL("✿");
     setAutoCreateInvite(true);
@@ -683,7 +690,7 @@ export default function MembersCenter({
     setEditingMember(member);
     setDisplayName(member.displayName);
     setRole(member.role);
-    setBirthday(member.birthday || "2015-04-18");
+    setBirthday(member.birthday || "");
     setColor(member.color || "#B4C3B2");
     setPhotoURL(member.photoURL || "✿");
     setShowAgeInCalendar(member.showAgeInCalendar !== false);
@@ -722,25 +729,12 @@ export default function MembersCenter({
     email?: string;
   }) => {
     const roleLabel = getRoleChineseName(member.targetRole);
-    const hasGmail = !!(member.email && member.email.trim());
+    const emailStr = (member.email && member.email.trim()) ? member.email.trim() : "";
     
-    if (hasGmail) {
-      return `歡迎加入「${familyName}」🏠
+    return `歡迎加入「${familyName}」🏠
 
 您的家庭身份：
 ${member.memberName}（${roleLabel}）
-
-此邀請已綁定 Gmail：
-${member.email.trim()}
-
-請開啟家庭生活管理中心：
-https://murphyma-family-app.vercel.app/
-
-請直接使用：
-${member.email.trim()}
-進行 Google 登入。
-
-登入後系統將自動驗證邀請資格。
 
 家庭代碼：
 ${familyId}
@@ -748,33 +742,33 @@ ${familyId}
 邀請代碼：
 ${member.inviteCode}
 
-登入成功後即可進入家庭。
-
-期待一起建立溫暖的${familyName} ❤️`;
-    } else {
-      return `歡迎加入「${familyName}」🏠
-
-您的家庭身份：
-${member.memberName}（${roleLabel}）
-
-請開啟家庭生活管理中心：
+系統網址：
 https://murphyma-family-app.vercel.app/
 
-選擇：
-📨 家庭邀請碼加入
+登入方式：
 
-並輸入以下資訊：
-家庭代碼：
-${familyId}
+如果有綁定 Gmail：
 
-邀請代碼：
-${member.inviteCode}
+請使用下列 Gmail 登入：
 
-加入成功後即可進入家庭系統。
-如無 Gmail 帳號也可直接加入。
+${emailStr || "（無綁定 Gmail）"}
 
-期待一起建立溫慢的${familyName} ❤️`;
-    }
+登入後系統會自動驗證邀請資格。
+
+如果沒有綁定 Gmail：
+
+請於登入頁輸入：
+
+家庭代碼
+邀請代碼
+
+即可登入。
+
+此邀請碼同時也是未來登入代碼。
+
+請妥善保存。
+
+❤️ 歡迎加入家庭`;
   };
 
   const handleFormSubmit = async (e: React.FormEvent) => {
@@ -970,43 +964,38 @@ ${member.inviteCode}
         <div className="flex justify-between items-center border-b border-[#E5E1DA] pb-3">
           <div className="flex items-center gap-2">
             <div className="h-8 w-8 md:h-10 md:w-10 bg-[#F9F8F6] text-[#4A6076] border border-[#E5E1DA] rounded-xl flex items-center justify-center shrink-0">
-              <Users className="h-4.5 w-4.5" />
+              <Users className="h-4 w-4 md:h-5 md:w-5" />
             </div>
             <div>
-              <h2 className="text-sm md:text-lg font-black text-[#2D2926] font-sans">家庭成員管理</h2>
-              <p className="hidden md:block text-xs text-gray-500 mt-0.5 font-medium">檢視家族成員並建立專屬邀請碼</p>
+              <h2 className="text-sm font-black text-[#2D2926] font-sans">家庭成員名單</h2>
+              <p className="text-[10px] text-[#7C6354] font-semibold mt-0.5">管理您的家人、角色、以及登入方式</p>
             </div>
           </div>
-
           {isParent && (
             <button
-              onClick={handleOpenAdd}
-              className="flex items-center gap-1 text-xs font-black text-white bg-[#4A6076] hover:bg-[#3b4c5e] px-3.5 py-2 rounded-xl transition cursor-pointer shadow-xs max-h-[38px]"
+              onClick={() => setShowFormModal(true)}
+              className="inline-flex items-center gap-1.5 text-xs font-black text-white bg-[#4A6076] hover:bg-[#344453] px-3.5 py-2 rounded-xl border-y border-[#4A6076] cursor-pointer shadow-xs transition select-none leading-none active:scale-95 hover:shadow-md duration-200 shrink-0"
             >
-              <Plus className="h-4 w-4" />
-              <span>➕新增成員</span>
+              <span>➕ 新增家庭成員</span>
             </button>
           )}
         </div>
 
-        {/* 1. Pending Join Requests (Approvals) if any exist */}
-        {pendingRequests && pendingRequests.length > 0 && isParent && (
-          <div className="bg-amber-50/50 border border-amber-200 rounded-2xl p-4 space-y-3">
-            <div className="flex items-center gap-2">
-              <span className="text-lg">⏳</span>
-              <div>
-                <h3 className="text-xs font-black text-amber-900">待審批進駐的家庭申請 ({pendingRequests.length})</h3>
-                <p className="text-[10px] text-amber-700 font-medium">新成員輸入了您家的邀請碼，請審查並核准加入！</p>
-              </div>
-            </div>
-            <div className="divide-y divide-amber-100">
+        {/* 1. 待加入申請 (Pending Join Requests) */}
+        {isParent && pendingRequests && pendingRequests.length > 0 && (
+          <div className="space-y-3 bg-[#FCFBF9] border border-[#E5E1DA] rounded-2xl p-4 animate-in fade-in duration-300">
+            <h3 className="text-xs font-black text-amber-800 flex items-center gap-1.5 font-sans">
+              <span>🔔 待加入申請</span>
+              <span className="text-[10px] py-0.5 px-2 bg-amber-50 text-amber-700 border border-amber-200 rounded-full font-bold">
+                {pendingRequests.length}
+              </span>
+            </h3>
+            <div className="divide-y divide-[#E5E1DA]/50">
               {pendingRequests.map((req) => (
-                <div key={req.id} className="py-2.5 flex items-center justify-between gap-4 flex-wrap sm:flex-nowrap">
+                <div key={req.id} className="py-3 first:pt-0 last:pb-0 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 font-sans">
                   <div>
-                    <div className="flex items-center gap-1.5 flex-wrap">
-                      <span className="text-xs font-black text-amber-950 bg-amber-100 px-2 py-0.5 rounded border border-amber-200">
-                        {req.userName}
-                      </span>
+                    <div className="flex items-center gap-2">
+                      <span className="font-extrabold text-sm text-[#2D2926]">{req.userName}</span>
                       <span className="text-[10px] text-gray-500 font-bold font-mono">({req.userEmail})</span>
                     </div>
                     <p className="text-[10px] text-amber-800 mt-1">
@@ -1043,150 +1032,238 @@ ${member.inviteCode}
           </div>
         )}
 
-          <div className="space-y-3">
-            <div className="flex justify-between items-center">
-              <h3 className="text-xs font-black text-[#2D2926] flex items-center gap-1.5 font-sans">
-                <span>👥 已加入成員</span>
-                <span className="text-[10px] py-0.5 px-2 bg-[#F9F8F6] text-[#4A6076] border border-[#E5E1DA] rounded-full font-bold">
-                  {familyMembers.length}
-                </span>
-              </h3>
-            </div>
+        <div className="space-y-3">
+          <div className="flex justify-between items-center">
+            <h3 className="text-xs font-black text-[#2D2926] flex items-center gap-1.5 font-sans">
+              <span>👥 已加入成員</span>
+              <span className="text-[10px] py-0.5 px-2 bg-[#F9F8F6] text-[#4A6076] border border-[#E5E1DA] rounded-full font-bold">
+                {familyMembers.length}
+              </span>
+            </h3>
+          </div>
 
-            <div className="overflow-x-auto border border-[#E5E1DA] rounded-2xl bg-white select-none">
-              <table className="w-full text-left text-xs border-collapse">
-                <thead>
-                  <tr className="bg-[#FCFBF9] border-b border-[#E5E1DA] text-gray-500 font-bold select-none font-sans">
-                    <th className="p-3">姓名</th>
-                    <th className="p-3">角色</th>
-                    <th className="p-3">Email</th>
-                    <th className="p-3 text-center">生日顯示年齡</th>
-                    <th className="p-3">加入時間</th>
-                    {isParent && <th className="p-3 text-center">操作</th>}
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-[#FAF9F6] font-sans">
-                  {familyMembers.map((member) => {
-                    const themeColor = member.color || "#B4C3B2";
-                    const canEdit = currentUser.role === UserRole.ADMIN || currentUser.role === UserRole.PARENT || member.uid === currentUser.uid;
-                    const canDelete = isParent && member.uid !== currentUser.uid;
-                    const avatarTxt = member.displayName ? member.displayName.charAt(0) : "✿";
-                    
-                    return (
-                      <tr 
-                        key={member.uid} 
-                        onClick={() => handleOpenRecords(member)}
-                        className="hover:bg-[#FAF8F4]/30 cursor-pointer transition"
-                      >
-                        <td className="p-3">
-                          <div className="flex items-center gap-2.5">
-                            <div
-                              style={{ backgroundColor: themeColor }}
-                              className="h-8 w-8 rounded-full flex items-center justify-center text-xs text-[#2D2926] border border-[#E5E1DA] font-black shrink-0 relative"
-                            >
-                              {(!member.photoURL || member.photoURL.startsWith("http")) ? avatarTxt : member.photoURL}
-                              {member.role === UserRole.KID && (
-                                <span className="absolute -bottom-0.5 -right-0.5 bg-amber-400 text-white rounded-full h-3.5 w-3.5 flex items-center justify-center text-[7.5px] font-bold border border-white">
-                                  ⭐
-                                </span>
+          <div className="overflow-x-auto border border-[#E5E1DA] rounded-2xl bg-white select-none">
+            <table className="w-full text-left text-xs border-collapse">
+              <thead>
+                <tr className="bg-[#FCFBF9] border-b border-[#E5E1DA] text-gray-500 font-bold select-none font-sans">
+                  <th className="p-3">姓名</th>
+                  <th className="p-3">角色</th>
+                  <th className="p-3">登入方式</th>
+                  <th className="p-3">Email</th>
+                  <th className="p-3 text-center">帳號升級</th>
+                  <th className="p-3 text-center">生日顯示年齡</th>
+                  <th className="p-3">加入時間</th>
+                  {isParent && <th className="p-3 text-center">操作</th>}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-[#FAF9F6] font-sans">
+                {familyMembers.map((member) => {
+                  const themeColor = member.color || "#B4C3B2";
+                  const userRoleLower = (currentUser.role || "").toLowerCase();
+                  const isViewer = userRoleLower === "viewer" || userRoleLower === "member" || userRoleLower === "pet";
+                  const isOwnerCurrentUser = userRoleLower === "owner" || userRoleLower === "admin" || userRoleLower === "superadmin" || (currentUser.role as any) === "Owner" || currentUser.role === UserRole.OWNER;
+                  const canEdit = !isViewer && (currentUser.role === UserRole.ADMIN || currentUser.role === UserRole.PARENT || member.uid === currentUser.uid) && !(currentUser.role === UserRole.PARENT && isOwnerRole(member.role));
+                  const canDelete = !isViewer && isParent && member.uid !== currentUser.uid && !(currentUser.role === UserRole.PARENT && isOwnerRole(member.role));
+                  const avatarTxt = member.displayName ? member.displayName.charAt(0) : "✿";
+                  
+                  const matchedInvite = invites.find(
+                    (inv) =>
+                      inv.joinedUserId === member.uid ||
+                      inv.acceptedBy === member.uid ||
+                      (inv.inviteCode && inv.inviteCode === member.inviteCode)
+                  );
+                  
+                  const isGoogleUser = !!(member.email || (member as any).googleUid);
+                  const codeVal = member.inviteCode || matchedInvite?.inviteCode || "";
+                  const displayLoginMethodText = isGoogleUser 
+                    ? "Google 登入" 
+                    : (codeVal ? `代碼登入（${codeVal}）` : "代碼登入");
+                  
+                  return (
+                    <tr 
+                      key={member.uid} 
+                      onClick={() => handleOpenRecords(member)}
+                      className="hover:bg-[#FAF8F4]/30 cursor-pointer transition"
+                    >
+                      <td className="p-3">
+                        <div className="flex items-center gap-2.5">
+                          <div
+                            style={{ backgroundColor: themeColor }}
+                            className="h-8 w-8 rounded-full flex items-center justify-center text-xs text-[#2D2926] border border-[#E5E1DA] font-black shrink-0 relative"
+                          >
+                            {(!member.photoURL || member.photoURL.startsWith("http")) ? avatarTxt : member.photoURL}
+                            {member.role === UserRole.KID && (
+                              <span className="absolute -bottom-0.5 -right-0.5 bg-amber-400 text-white rounded-full h-3.5 w-3.5 flex items-center justify-center text-[7.5px] font-bold border border-white">
+                                ⭐
+                              </span>
+                            )}
+                          </div>
+                          <div className="font-extrabold text-[#2D2926]">
+                            <div className="flex items-center gap-1">
+                              <span>{member.displayName}</span>
+                              {member.uid === currentUser.uid && (
+                                <span className="text-[8px] font-bold bg-[#4A6076] text-white px-1.5 rounded transform scale-90">我</span>
                               )}
-                            </div>
-                            <div className="font-extrabold text-[#2D2926]">
-                              <div className="flex items-center gap-1">
-                                <span>{member.displayName}</span>
-                                {member.uid === currentUser.uid && (
-                                  <span className="text-[8px] font-bold bg-[#4A6076] text-white px-1.5 rounded transform scale-90">我</span>
-                                )}
-                              </div>
                             </div>
                           </div>
-                        </td>
-                        <td className="p-3 font-semibold text-gray-700">
-                          {getRoleChineseName(member.role)}
-                        </td>
-                        <td className="p-3 font-mono text-gray-500 text-[11px] truncate max-w-[150px]">
-                          {member.email || "（一般由大人管理）"}
-                        </td>
-                        <td className="p-3 text-center" onClick={(e) => e.stopPropagation()}>
-                          <label className="inline-flex items-center gap-1 cursor-pointer">
-                            <input
-                              type="checkbox"
-                              checked={member.showAgeInCalendar !== false}
-                              disabled={!canEdit}
-                              onChange={async (e) => {
-                                const checked = e.target.checked;
-                                try {
-                                  if (onEditMember) {
-                                    await onEditMember(member.uid, {
-                                      displayName: member.displayName,
-                                      role: member.role,
-                                      showAgeInCalendar: checked,
-                                    } as any);
-                                    toast.success(`✓ 已${checked ? "設定在行事曆顯示" : "設定不顯示"} ${member.displayName} 的生日年齡`);
-                                  }
-                                } catch (err: any) {
-                                  toast.error("更新失敗：" + err.message);
-                                }
-                              }}
-                              className="rounded border-[#E5E1DA] text-[#4A6076] focus:ring-[#4A6076] h-4 w-4 cursor-pointer"
-                            />
-                            <span className="text-[10px] text-gray-500 font-bold hidden sm:inline-block">顯示年齡</span>
-                          </label>
-                        </td>
-                        <td className="p-3 text-gray-400 font-mono text-[11px]">
-                          {formatTime(member.createdAt)}
-                        </td>
-                        {isParent && (
-                          <td className="p-3 text-center" onClick={(e) => e.stopPropagation()}>
-                            <div className="flex items-center justify-center gap-2">
-                              {canEdit && (
-                                <button
-                                  onClick={() => handleOpenEdit(member)}
-                                  className="text-[11px] font-black text-gray-500 hover:text-gray-800 p-1.5 hover:bg-slate-50 border border-transparent hover:border-[#E5E1DA] rounded transition cursor-pointer"
-                                  title="編輯資料"
-                                >
-                                  編輯
-                                </button>
-                              )}
-                              {canDelete && (
-                                <button
-                                  onClick={async () => {
-                                    showConfirm(
-                                      "從家庭中移除成員",
-                                      `確認要將「${member.displayName}」從家庭中移除（解除綁定）嗎？此操作將解除其家庭關係、保留其帳號與資料。`,
-                                      async () => {
-                                        try {
-                                          if (onDeleteMember) {
-                                            await onDeleteMember(member.uid);
-                                            toast.success("✓ 已解除該成員的家庭綁定");
-                                          }
-                                        } catch (err: any) {
-                                          toast.error("移除失敗：" + err.message);
-                                        }
-                                      }
-                                    );
-                                  }}
-                                  className="text-[11px] font-black text-rose-500 hover:text-rose-700 p-1.5 hover:bg-rose-50 border border-transparent hover:border-rose-100 rounded transition cursor-pointer"
-                                  title="移除成員"
-                                >
-                                  移除成員
-                                </button>
-                              )}
-                            </div>
-                          </td>
+                        </div>
+                      </td>
+                      <td className="p-3 font-semibold text-gray-700">
+                        {getRoleChineseName(member.role)}
+                      </td>
+                      <td className="p-3" onClick={(e) => e.stopPropagation()}>
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            if (isGoogleUser) {
+                              const emailText = member.email || "（無電子郵件）";
+                              const copyText = `登入方式：
+Google 登入
+
+帳號：
+${emailText}
+
+系統網址：
+https://murphyma-family-app.vercel.app/`;
+                              try {
+                                await navigator.clipboard.writeText(copyText);
+                                toast.success("✅ 已複製登入資訊", { duration: 2000 });
+                              } catch (err) {
+                                console.error("Copy failed: ", err);
+                              }
+                            } else {
+                              const copyText = `家庭代碼：
+${familyId}
+
+登入方式：
+代碼登入（${codeVal}）
+
+系統網址：
+https://murphyma-family-app.vercel.app/`;
+                              try {
+                                await navigator.clipboard.writeText(copyText);
+                                toast.success("✅ 已複製登入資訊", { duration: 2000 });
+                              } catch (err) {
+                                console.error("Copy failed: ", err);
+                              }
+                            }
+                          }}
+                          className={`font-sans font-black border px-2.5 py-1 rounded-lg text-[11px] tracking-wider select-none shrink-0 transition-all flex items-center justify-center gap-1.5 min-w-[110px] cursor-pointer whitespace-nowrap active:scale-95 ${
+                            isGoogleUser
+                              ? "text-[#4A6076] bg-slate-50 border-slate-200 hover:bg-slate-100"
+                              : "text-emerald-700 bg-emerald-50 border-emerald-200 hover:bg-emerald-100"
+                          }`}
+                        >
+                          <span>{displayLoginMethodText}</span>
+                          <span className="text-[10px]/none">📋</span>
+                        </button>
+                      </td>
+                      <td className="p-3 font-mono text-gray-500 text-[11px] truncate max-w-[150px]">
+                        {member.email || (
+                          (member.role === UserRole.KID || String(member.role).toLowerCase() === "child" || String(member.role).toLowerCase() === "kid")
+                            ? "一般由大人管理"
+                            : "尚未綁定 Email"
                         )}
-                      </tr>
-                    );
-                  })}
-                  {familyMembers.length === 0 && (
-                    <tr>
-                      <td colSpan={isParent ? 5 : 4} className="p-8 text-center text-gray-400">目前家庭中尚無其他成員</td>
+                      </td>
+                      <td className="p-3 text-center" onClick={(e) => e.stopPropagation()}>
+                        {!isGoogleUser ? (
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              if (onBindGoogle) {
+                                await onBindGoogle(member.uid);
+                              }
+                            }}
+                            className="inline-flex items-center gap-1 text-[10px] font-black text-white bg-indigo-600 hover:bg-indigo-700 px-2.5 py-1.5 rounded-lg border-0 transition cursor-pointer shadow-xs whitespace-nowrap active:scale-95 duration-100"
+                          >
+                            🔑 綁定 Google
+                          </button>
+                        ) : (
+                          <span className="text-[10.5px] text-gray-400 font-bold whitespace-nowrap">
+                            ✓ 已完成綁定
+                          </span>
+                        )}
+                      </td>
+                      <td className="p-3 text-center" onClick={(e) => e.stopPropagation()}>
+                        <label className="inline-flex items-center gap-1 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={member.showAgeInCalendar !== false}
+                            disabled={!canEdit}
+                            onChange={async (e) => {
+                              const checked = e.target.checked;
+                              try {
+                                if (onEditMember) {
+                                  await onEditMember(member.uid, {
+                                    displayName: member.displayName,
+                                    role: member.role,
+                                    showAgeInCalendar: checked,
+                                  } as any);
+                                  toast.success(`✓ 已${checked ? "設定在行事曆顯示" : "設定不顯示"} ${member.displayName} 的生日年齡`);
+                                }
+                              } catch (err: any) {
+                                border: "1px solid red";
+                              }
+                            }}
+                            className="rounded border-[#E5E1DA] text-[#4A6076] focus:ring-[#4A6076] h-4 w-4 cursor-pointer"
+                          />
+                          <span className="text-[10px] text-gray-500 font-bold hidden sm:inline-block">顯示年齡</span>
+                        </label>
+                      </td>
+                      <td className="p-3 text-gray-400 font-mono text-[11px]">
+                        {formatTime(member.createdAt)}
+                      </td>
+                      {isParent && (
+                        <td className="p-3 text-center" onClick={(e) => e.stopPropagation()}>
+                          <div className="flex items-center justify-center gap-2">
+                            {canEdit && (
+                              <button
+                                onClick={() => handleOpenEdit(member)}
+                                className="text-[11px] font-black text-gray-500 hover:text-gray-800 p-1.5 hover:bg-slate-50 border border-transparent hover:border-[#E5E1DA] rounded transition cursor-pointer"
+                                title="編輯資料"
+                              >
+                                編輯
+                              </button>
+                            )}
+                            {canDelete && (
+                              <button
+                                onClick={async () => {
+                                  showConfirm(
+                                    "從家庭中移除成員",
+                                    `確認要將「${member.displayName}」從家庭中移除（解除綁定）嗎？此操作將解除其家庭關係、保留其帳號與資料。`,
+                                    async () => {
+                                      try {
+                                        if (onDeleteMember) {
+                                          await onDeleteMember(member.uid);
+                                          toast.success("✓ 已解除該成員的家庭綁定");
+                                        }
+                                      } catch (err: any) {
+                                        toast.error("移除失敗：" + err.message);
+                                      }
+                                    }
+                                  );
+                                }}
+                                className="text-[11px] font-black text-rose-500 hover:text-rose-700 p-1.5 hover:bg-rose-50 border border-transparent hover:border-rose-100 rounded transition cursor-pointer"
+                                title="移除成員"
+                              >
+                                移除成員
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      )}
                     </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
+                  );
+                })}
+                {familyMembers.length === 0 && (
+                  <tr>
+                    <td colSpan={isParent ? 8 : 7} className="p-8 text-center text-gray-400">目前家庭中尚無其他成員</td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
           </div>
+        </div>
 
         {/* 3. 邀請中成員 (Members Being Invited) */}
         {isParent && (
@@ -1877,7 +1954,7 @@ ${member.inviteCode}
       {/* Member Creation/Editing form Modal */}
       {showFormModal && (
         <div className="fixed inset-0 bg-[#2D2926]/40 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-2xl border border-[#E5E1DA] p-6 max-w-sm w-full shadow-xl relative animate-in fade-in zoom-in-95 duration-150">
+          <div className="bg-white rounded-2xl border border-[#E5E1DA] p-6 max-w-sm w-full max-h-[90vh] overflow-y-auto shadow-xl relative animate-in fade-in zoom-in-95 duration-150">
             <button
               onClick={() => {
                 setShowFormModal(false);
@@ -1919,7 +1996,9 @@ ${member.inviteCode}
                       onChange={(e) => setRole(e.target.value as UserRole)}
                       className="w-full text-sm border border-[#E5E1DA] rounded-lg px-3 py-2 bg-[#F9F8F6] font-bold text-gray-800"
                     >
-                      <option value="Owner">管理員 (Owner)</option>
+                      {currentUser && ((currentUser.role as any) === "Owner" || (currentUser.role as any) === "Admin") && (
+                        <option value="Owner">管理員 (Owner)</option>
+                      )}
                       <option value="Parent">家長 (Parent)</option>
                       <option value="Child">孩子 (Child)</option>
                       <option value="Viewer">唯讀成員 (Viewer)</option>
@@ -2036,7 +2115,9 @@ ${member.inviteCode}
                       <option value="Parent">家長 (Parent)</option>
                       <option value="Child">孩子 (Child)</option>
                       <option value="Viewer">唯讀成員 (Viewer)</option>
-                      <option value="Owner">管理員 (Owner)</option>
+                      {currentUser && ((currentUser.role as any) === "Owner" || (currentUser.role as any) === "Admin") && (
+                        <option value="Owner">管理員 (Owner)</option>
+                      )}
                     </select>
                   </div>
 
@@ -2140,7 +2221,7 @@ ${member.inviteCode}
 
               <div className="flex justify-between items-center pt-4 border-t border-gray-100 mt-2">
                 <div>
-                  {editingMember && onDeleteMember && (currentUser.role === UserRole.ADMIN || currentUser.role === UserRole.PARENT) && editingMember.uid !== currentUser.uid ? (
+                  {editingMember && onDeleteMember && (currentUser.role === UserRole.ADMIN || currentUser.role === UserRole.PARENT) && editingMember.uid !== currentUser.uid && !(currentUser.role === UserRole.PARENT && isOwnerRole(editingMember.role)) ? (
                     <button
                       type="button"
                       onClick={() => {

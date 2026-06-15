@@ -55,7 +55,7 @@ import TaskSystem from "./components/TaskSystem";
 import RewardCenter from "./components/RewardCenter";
 import FavoriteMgr from "./components/FavoriteMgr";
 import FamilyNotesView from "./components/FamilyNotesView";
-import { canManageFamily } from "./utils/permissionUtils";
+import { canManageFamily, getPermissionsByRole } from "./utils/permissionUtils";
 import MembersCenter from "./components/MembersCenter";
 import { SpecialPeriodsConfig } from "./components/SpecialPeriodsConfig";
 import PerformanceDebugPanel from "./components/PerformanceDebugPanel";
@@ -90,6 +90,37 @@ export const getRoleLabel = (r?: UserRole | string) => {
   if (r === UserRole.VIEWER || r === "Viewer") return "成員";
   return "未知";
 };
+
+export function normalizeDbRole(roleStr: string | undefined): UserRole {
+  if (!roleStr) return UserRole.VIEWER;
+  const lower = roleStr.toLowerCase();
+  if (lower === "owner" || lower === "admin") return UserRole.OWNER;
+  if (lower === "parent") return UserRole.PARENT;
+  if (lower === "child" || lower === "kid") return UserRole.CHILD;
+  if (lower === "viewer" || lower === "member" || lower === "pet") return UserRole.VIEWER;
+  return UserRole.VIEWER;
+}
+
+export function removeUndefinedFields(obj: any): any {
+  if (obj === null || obj === undefined) return obj;
+  if (Array.isArray(obj)) {
+    return obj.map(removeUndefinedFields);
+  }
+  if (typeof obj === "object" && !(obj instanceof Date)) {
+    // If it's a firebaseFieldValue or similar, return as is
+    if (obj.constructor && obj.constructor.name === "FieldValue") {
+      return obj;
+    }
+    const cleaned: any = {};
+    for (const [key, val] of Object.entries(obj)) {
+      if (val !== undefined) {
+        cleaned[key] = removeUndefinedFields(val);
+      }
+    }
+    return cleaned;
+  }
+  return obj;
+}
 
 export default function App() {
   const [user, setUser] = useState<FirebaseUser | null>(null);
@@ -269,7 +300,7 @@ export default function App() {
           base = {
             ...base,
             displayName: found.displayName,
-            role: found.role,
+            role: normalizeDbRole(found.role),
             photoURL: found.photoURL || "",
             stars: found.stars || 0,
             uid: found.uid,
@@ -278,24 +309,15 @@ export default function App() {
       }
 
       if (simulatedRole) {
-        base.role = simulatedRole;
+        base.role = normalizeDbRole(simulatedRole);
       }
     }
 
-    // --- CRITICAL ROLE HARMONIZATION AND AUTO-RESOLUTION ---
-    // If the active family's ownerEmail is "juwen616@gmail.com", or if user's email is "juwen616@gmail.com"
-    // and they have a family association, ensure familyRole (base.role) is automatically UserRole.OWNER.
-    // SUPER_ADMIN (systemRole) is independent and does not override the family role OWNER!
-    const isOwnerByEmail = 
-      (activeFamily && (activeFamily as any).ownerEmail === "juwen616@gmail.com") || 
-      (base.email === "juwen616@gmail.com" && base.familyId);
-
-    if (isOwnerByEmail || (activeFamily && activeFamily.adminUid === base.uid)) {
-      base.role = UserRole.OWNER;
-    }
+    // Ensure normalized role at all times
+    base.role = normalizeDbRole(base.role);
 
     return base as UserProfile;
-  }, [developerModeActive, simulatedRole, simulatedMemberId, simulatedFamilyId, currentUserProfile, familyMembers, activeFamily]);
+  }, [developerModeActive, simulatedRole, simulatedMemberId, simulatedFamilyId, currentUserProfile, familyMembers]);
 
   // Restrict navigation if Kid or Pet (auto fallback) - must be declared before any conditional returns
   useEffect(() => {
@@ -494,20 +516,69 @@ export default function App() {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       setIsLoadingAuth(true);
       if (firebaseUser) {
-        setUser(firebaseUser);
         try {
+          // Check if there is an existing user doc in "users" collection mapping to this googleUid or email
+          let profileDoc: any = null;
+          
+          // First, query by googleUid
+          const qUid = query(collection(db, "users"), where("googleUid", "==", firebaseUser.uid));
+          const snapUid = await getDocs(qUid);
+          if (!snapUid.empty) {
+            profileDoc = snapUid.docs[0];
+          } else if (firebaseUser.email) {
+            // Second, check by email
+            const qEmail = query(collection(db, "users"), where("email", "==", firebaseUser.email));
+            const snapEmail = await getDocs(qEmail);
+            if (!snapEmail.empty) {
+              profileDoc = snapEmail.docs[0];
+            }
+          }
+
+          let matchedProfile: UserProfile | null = null;
+          let effectiveUid = firebaseUser.uid;
+
+          if (profileDoc) {
+            matchedProfile = profileDoc.data() as UserProfile;
+            effectiveUid = profileDoc.id;
+            
+            // Override user state to make sure all features refer to original member UID
+            setUser({
+              uid: effectiveUid,
+              email: firebaseUser.email || matchedProfile.email || "",
+              displayName: firebaseUser.displayName || matchedProfile.displayName,
+              photoURL: firebaseUser.photoURL || matchedProfile.photoURL || "✿",
+              isAnonymous: false,
+            } as any);
+          } else {
+            setUser(firebaseUser);
+          }
+
           // Attempt to pull user profile doc
-          const userDocRef = doc(db, "users", firebaseUser.uid);
-          const userSnap = await getDoc(userDocRef);
+          const userDocRef = doc(db, "users", effectiveUid);
+          const userSnap = matchedProfile ? { exists: () => true, data: () => matchedProfile, id: effectiveUid } : await getDoc(userDocRef);
 
           // Standard loading flow
           if (userSnap.exists()) {
-            const profileData = userSnap.data() as UserProfile;
-            setCurrentUserProfile(profileData);
+            const profileData = (matchedProfile ? matchedProfile : userSnap.data()) as UserProfile;
             if (profileData.familyId) {
+              try {
+                const nestedMemberSnap = await getDoc(
+                  doc(db, "families", profileData.familyId, "members", effectiveUid)
+                );
+                if (nestedMemberSnap.exists()) {
+                  const nestedData = nestedMemberSnap.data();
+                  if (nestedData?.role) {
+                    profileData.role = normalizeDbRole(nestedData.role);
+                  }
+                }
+              } catch (nestedErr) {
+                console.warn("Failed to fetch nested member role on login:", nestedErr);
+              }
+              setCurrentUserProfile(profileData);
               setActivePage("home");
               setOnboardingChoice("none");
             } else {
+              setCurrentUserProfile(profileData);
               await checkGoogleInvites(firebaseUser.email);
             }
           } else {
@@ -530,6 +601,131 @@ export default function App() {
           console.error("Auth state loading error:", err);
         }
       } else {
+        // First check if we have a saved active login/invite session in localStorage
+        let savedFamilyCode = localStorage.getItem("familyCode");
+        let savedInviteCode = localStorage.getItem("inviteCode");
+        let savedMemberId = localStorage.getItem("memberId");
+
+        const familyLoginStr = localStorage.getItem("familyLogin");
+        if (familyLoginStr) {
+          try {
+            const familyLogin = JSON.parse(familyLoginStr);
+            if (familyLogin && familyLogin.familyId && familyLogin.loginCode) {
+              if (!savedFamilyCode) savedFamilyCode = familyLogin.familyId;
+              if (!savedInviteCode) savedInviteCode = familyLogin.loginCode;
+            }
+          } catch (e) {
+            console.warn("familyLogin parse error:", e);
+          }
+        }
+
+        if (savedFamilyCode && savedInviteCode) {
+          try {
+            const inviteRef = doc(db, "families", savedFamilyCode, "invites", savedInviteCode);
+            const inviteSnap = await getDoc(inviteRef);
+            let inviteData: any = null;
+            let isFound = false;
+
+            if (inviteSnap.exists()) {
+              inviteData = inviteSnap.data();
+              isFound = true;
+            } else {
+              const q = query(
+                collection(db, "families", savedFamilyCode, "invites"),
+                where("inviteCode", "==", savedInviteCode)
+              );
+              const qSnap = await getDocs(q);
+              if (!qSnap.empty) {
+                inviteData = qSnap.docs[0].data();
+                isFound = true;
+              }
+            }
+
+            const canLogin = isFound && (
+              inviteData.status === "accepted" ||
+              inviteData.status === "joined" ||
+              !!inviteData.joinedUserId ||
+              !!inviteData.acceptedBy
+            );
+
+            if (canLogin) {
+              const targetUid = savedMemberId || inviteData.joinedUserId || inviteData.acceptedBy || inviteData.memberId;
+              if (targetUid) {
+                let uSnap = await getDoc(doc(db, "users", targetUid));
+                if (!uSnap.exists()) {
+                  console.log("Startup Reconstructing user doc for targetUid:", targetUid);
+                  const reconstructedProfile: UserProfile = removeUndefinedFields({
+                    uid: targetUid,
+                    email: inviteData.email || "",
+                    displayName: inviteData.name || inviteData.displayName || "家庭成員",
+                    photoURL: inviteData.avatar || "🙂",
+                    color: "#B4C3B2",
+                    familyId: savedFamilyCode,
+                    role: (inviteData.role || inviteData.targetRole || "Child") as UserRole,
+                    stars: 0,
+                    birthday: inviteData.birthday || null,
+                    showAgeInCalendar: inviteData.showAgeInCalendar ?? inviteData.showAge ?? true,
+                    gender: inviteData.gender ?? "",
+                    createdAt: serverTimestamp(),
+                    inviteStatus: "active",
+                  });
+                  await setDoc(doc(db, "users", targetUid), reconstructedProfile);
+                  uSnap = await getDoc(doc(db, "users", targetUid));
+                }
+
+                if (uSnap.exists()) {
+                  const freshProfile = uSnap.data() as UserProfile;
+                  if (freshProfile.familyId) {
+                    try {
+                      const nestedSnap = await getDoc(
+                        doc(db, "families", freshProfile.familyId, "members", targetUid)
+                      );
+                      if (nestedSnap.exists() && nestedSnap.data()?.role) {
+                        freshProfile.role = normalizeDbRole(nestedSnap.data()?.role);
+                      }
+                    } catch (nestedErr) {
+                      console.warn("Failed to retrieve nested role during guest session restore:", nestedErr);
+                    }
+                  }
+                  localStorage.setItem("local_guest_profile", JSON.stringify(freshProfile));
+                  localStorage.setItem("memberId", targetUid);
+
+                  // Keep familyLogin in sync
+                  localStorage.setItem(
+                    "familyLogin",
+                    JSON.stringify({
+                      familyId: savedFamilyCode,
+                      loginCode: savedInviteCode,
+                      memberName: freshProfile.displayName,
+                      role: freshProfile.role,
+                      guestUid: targetUid
+                    })
+                  );
+
+                  const mockUser = {
+                    uid: freshProfile.uid,
+                    email: freshProfile.email || "",
+                    displayName: freshProfile.displayName,
+                    isAnonymous: true,
+                    photoURL: freshProfile.photoURL || "✿"
+                  } as any;
+
+                  setUser(mockUser);
+                  setCurrentUserProfile(freshProfile);
+                  if (freshProfile.familyId) {
+                    setActivePage("home");
+                    setOnboardingChoice("none");
+                    setIsLoadingAuth(false);
+                    return;
+                  }
+                }
+              }
+            }
+          } catch (autoErr) {
+            console.warn("Auto verification check error on start:", autoErr);
+          }
+        }
+
         // Check if we have a locally stored guest profile session
         const localGuestProfStr = localStorage.getItem("local_guest_profile");
         if (localGuestProfStr) {
@@ -540,6 +736,18 @@ export default function App() {
               const uSnap = await getDoc(doc(db, "users", localProfile.uid));
               if (uSnap.exists()) {
                 freshProfile = uSnap.data() as UserProfile;
+                if (freshProfile.familyId) {
+                  try {
+                    const nestedSnap = await getDoc(
+                      doc(db, "families", freshProfile.familyId, "members", localProfile.uid)
+                    );
+                    if (nestedSnap.exists() && nestedSnap.data()?.role) {
+                      freshProfile.role = normalizeDbRole(nestedSnap.data()?.role);
+                    }
+                  } catch (nestedErr) {
+                    console.warn("Failed to retrieve nested role from guest local session:", nestedErr);
+                  }
+                }
                 localStorage.setItem("local_guest_profile", JSON.stringify(freshProfile));
               }
             } catch (fsErr) {
@@ -740,7 +948,32 @@ export default function App() {
     }
     const cachedEvents = getCachedData(cacheKey("events"));
     if (cachedEvents) {
-      setEvents(cachedEvents);
+      const filteredCached = (cachedEvents as CalendarEvent[]).filter(evt => {
+        const isPrivate = 
+          evt.isPublic === false || 
+          String(evt.isPublic) === "false" ||
+          (evt as any).isPrivate === true || 
+          (evt as any).isPrivate === "true" ||
+          (evt as any).visibility === "private";
+
+        if (!isPrivate) return true;
+
+        const activeUid = effectiveUserProfile?.uid || user?.uid;
+        const role = effectiveUserProfile?.role;
+        const isOwner = 
+          role === UserRole.OWNER || 
+          role === UserRole.SUPER_ADMIN || 
+          String(role).toLowerCase() === "owner" || 
+          String(role).toLowerCase() === "admin" || 
+          String(role).toLowerCase() === "superadmin";
+
+        const isCreator = 
+          (activeUid && evt.creatorUid && evt.creatorUid === activeUid) || 
+          (activeUid && (evt as any).createdByUid && (evt as any).createdByUid === activeUid);
+
+        return isCreator || isOwner;
+      });
+      setEvents(filteredCached);
       setDataLoaded((prev) => ({ ...prev, events: true }));
     }
     const cachedRewards = getCachedData(cacheKey("rewards"));
@@ -830,7 +1063,34 @@ export default function App() {
         incrementQueries(1);
         const list: CalendarEvent[] = [];
         snapshot.forEach((snap) => {
-          list.push(snap.data() as CalendarEvent);
+          const evt = snap.data() as CalendarEvent;
+          const isPrivate = 
+            evt.isPublic === false || 
+            String(evt.isPublic) === "false" ||
+            (evt as any).isPrivate === true || 
+            (evt as any).isPrivate === "true" ||
+            (evt as any).visibility === "private";
+
+          if (!isPrivate) {
+            list.push(evt);
+          } else {
+            const activeUid = effectiveUserProfile?.uid || user?.uid;
+            const role = effectiveUserProfile?.role;
+            const isOwner = 
+              role === UserRole.OWNER || 
+              role === UserRole.SUPER_ADMIN || 
+              String(role).toLowerCase() === "owner" || 
+              String(role).toLowerCase() === "admin" || 
+              String(role).toLowerCase() === "superadmin";
+
+            const isCreator = 
+              (activeUid && evt.creatorUid && evt.creatorUid === activeUid) || 
+              (activeUid && (evt as any).createdByUid && (evt as any).createdByUid === activeUid);
+
+            if (isCreator || isOwner) {
+              list.push(evt);
+            }
+          }
         });
         setEvents(list);
         setCachedData(cacheKey("events"), list);
@@ -942,7 +1202,12 @@ export default function App() {
         setCachedData(CACHE_KEY_MEMBERS(famId), list);
         const myFreshProfile = list.find((m) => m.uid === user.uid);
         if (myFreshProfile) {
-          setCurrentUserProfile(myFreshProfile);
+          setCurrentUserProfile((prev) => {
+            if (prev) {
+              return { ...myFreshProfile, role: prev.role };
+            }
+            return myFreshProfile;
+          });
         }
         setDataLoaded((prev) => ({ ...prev, members: true }));
         logFirestoreOp("list", "users", "success", `載入 ${list.length} 名家庭成員狀態`);
@@ -950,6 +1215,45 @@ export default function App() {
       (err) => {
         logFirestoreOp("list", "users", "error", err.message);
         handleFirestoreError(err, OperationType.LIST, "users");
+      }
+    );
+
+    // 12. Nested Family Members (Primary Source of truth for Roles)
+    const unsubNestedMembers = onSnapshot(
+      collection(db, "families", famId, "members"),
+      (snapshot) => {
+        incrementQueries(1);
+        const nestedMembersMap = new Map<string, any>();
+        snapshot.forEach((snap) => {
+          nestedMembersMap.set(snap.id, snap.data());
+        });
+
+        setFamilyMembers((prevMembers) => {
+          const updated = prevMembers.map((m) => {
+            const nested = nestedMembersMap.get(m.uid);
+            if (nested && nested.role) {
+              return { ...m, role: normalizeDbRole(nested.role) };
+            }
+            return m;
+          });
+          setCachedData(cacheKey("members"), updated);
+          setCachedData(CACHE_KEY_MEMBERS(famId), updated);
+          return updated;
+        });
+
+        const myNested = nestedMembersMap.get(user.uid);
+        if (myNested && myNested.role) {
+          const normalizedRole = normalizeDbRole(myNested.role);
+          setCurrentUserProfile((prev) => {
+            if (prev && prev.role !== normalizedRole) {
+              return { ...prev, role: normalizedRole };
+            }
+            return prev;
+          });
+        }
+      },
+      (err) => {
+        console.error("Failed to sync nested members:", err);
       }
     );
 
@@ -1018,12 +1322,13 @@ export default function App() {
       unsubRedemptions();
       unsubStarTxGroup();
       unsubUsersGroup();
+      unsubNestedMembers();
       unsubSettingsGroup();
       unsubJoinRequests();
       unsubFamily();
       setListenerCount(0);
     };
-  }, [user?.uid, effectiveUserProfile?.familyId]);
+  }, [user?.uid, effectiveUserProfile?.familyId, effectiveUserProfile?.role]);
 
   // login pipe
   const handleGoogleLogin = async () => {
@@ -1041,6 +1346,194 @@ export default function App() {
       }
     } finally {
       setIsLoggingIn(false);
+    }
+  };
+
+  const handleBindGoogle = async (memberUid: string) => {
+    try {
+      const provider = new GoogleAuthProvider();
+      toast("請在彈出的視窗中完成 Google 登入以綁定此成員...", { duration: 4000 });
+      
+      const result = await signInWithPopup(auth, provider);
+      const googleUser = result.user;
+      
+      if (!googleUser) {
+        toast.error("無法取得 Google 使用者資訊，繫結失敗");
+        return;
+      }
+      
+      const googleUid = googleUser.uid;
+      const googleEmail = googleUser.email || "";
+      
+      // Update existing users in Firestore
+      const userDocRef = doc(db, "users", memberUid);
+      const userSnap = await getDoc(userDocRef);
+      if (userSnap.exists()) {
+        await updateDoc(userDocRef, {
+          googleUid: googleUid,
+          email: googleEmail,
+        });
+      }
+      
+      // Update families/{familyId}/members in Firestore
+      if (currentUserProfile?.familyId) {
+        const nestedMemberRef = doc(db, "families", currentUserProfile.familyId, "members", memberUid);
+        const nestedSnap = await getDoc(nestedMemberRef);
+        if (nestedSnap.exists()) {
+          await updateDoc(nestedMemberRef, {
+            googleUid: googleUid,
+            email: googleEmail,
+          });
+        }
+        clearCachedData(CACHE_KEY_MEMBERS(currentUserProfile.familyId));
+      }
+      
+      toast.success("🎉 已成功將 Google 帳號與此成員綁定完成！");
+    } catch (err: any) {
+      console.error("Bind Google account error:", err);
+      toast.error("綁定 Google 失敗：" + err.message);
+    }
+  };
+
+  const handleCodeLogin = async (familyCodeParam: string, inviteCodeParam: string) => {
+    const cleanedFamilyId = familyCodeParam.trim();
+    const cleanedInviteCode = inviteCodeParam.trim().toUpperCase();
+
+    if (!cleanedFamilyId || !cleanedInviteCode) {
+      setSearchInviteError("請同時輸入家庭代碼與邀請/登入代碼。");
+      return;
+    }
+
+    setIsSearchingInvite(true);
+    setSearchInviteError(null);
+
+    try {
+      // 1. Check family document existence first
+      const familyRef = doc(db, "families", cleanedFamilyId);
+      const familySnap = await getDoc(familyRef);
+
+      if (!familySnap.exists()) {
+        setSearchInviteError("找不到此家庭資料，請確認家庭代碼是否正確。");
+        return;
+      }
+
+      // 2. Read from families/{familyId}/invites/{inviteCode}
+      const inviteRef = doc(db, "families", cleanedFamilyId, "invites", cleanedInviteCode);
+      let inviteSnap = await getDoc(inviteRef);
+
+      let isFound = false;
+      let inviteData: any = null;
+
+      if (inviteSnap.exists()) {
+        inviteData = inviteSnap.data();
+        isFound = true;
+      } else {
+        // Fallback check field inviteCode
+        const q = query(
+          collection(db, "families", cleanedFamilyId, "invites"),
+          where("inviteCode", "==", cleanedInviteCode)
+        );
+        const qSnap = await getDocs(q);
+        if (!qSnap.empty) {
+          inviteSnap = qSnap.docs[0];
+          inviteData = inviteSnap.data();
+          isFound = true;
+        }
+      }
+
+      const canLogin = isFound && (
+        inviteData.status === "accepted" ||
+        inviteData.status === "joined" ||
+        !!inviteData.joinedUserId ||
+        !!inviteData.acceptedBy
+      );
+
+      if (!canLogin) {
+        if (inviteData.status === "pending") {
+          setSearchInviteError("此邀請尚未加入家庭，請點選首次加入。");
+        } else {
+          setSearchInviteError("此邀請/登入狀態非有效登入狀態。");
+        }
+        return;
+      }
+
+      const targetUid = inviteData.joinedUserId || inviteData.acceptedBy || inviteData.memberId;
+      if (!targetUid) {
+        setSearchInviteError("此代碼尚未綁定有效的成員帳戶。");
+        return;
+      }
+
+      // Fetch user profile from root users collection
+      const userDocRef = doc(db, "users", targetUid);
+      let userSnap = await getDoc(userDocRef);
+
+      if (!userSnap.exists()) {
+        console.log("Reconstructing user doc for targetUid:", targetUid);
+        // Automatically reconstruct users document
+        const reconstructedProfile: UserProfile = removeUndefinedFields({
+          uid: targetUid,
+          email: inviteData.email || "",
+          displayName: inviteData.name || inviteData.displayName || "家庭成員",
+          photoURL: inviteData.avatar || "🙂",
+          color: "#B4C3B2",
+          familyId: cleanedFamilyId,
+          role: (inviteData.role || inviteData.targetRole || "Child") as UserRole,
+          stars: 0,
+          birthday: inviteData.birthday || null,
+          showAgeInCalendar: inviteData.showAgeInCalendar ?? inviteData.showAge ?? true,
+          gender: inviteData.gender ?? "",
+          createdAt: serverTimestamp(),
+          inviteStatus: "active",
+        });
+        await setDoc(userDocRef, reconstructedProfile);
+        userSnap = await getDoc(userDocRef);
+      }
+
+      if (!userSnap.exists()) {
+        setSearchInviteError("找不到對應的成員帳戶 profile。");
+        return;
+      }
+
+      const profileData = userSnap.data() as UserProfile;
+
+      // 成功加入/登入家庭後寫入 familyLogin 登入憑證
+      localStorage.setItem(
+        "familyLogin",
+        JSON.stringify({
+          familyId: cleanedFamilyId,
+          loginCode: cleanedInviteCode,
+          memberName: profileData.displayName,
+          role: profileData.role,
+          guestUid: targetUid
+        })
+      );
+
+      // 3. Save to localStorage
+      localStorage.setItem("familyCode", cleanedFamilyId);
+      localStorage.setItem("inviteCode", cleanedInviteCode);
+      localStorage.setItem("memberId", targetUid);
+      localStorage.setItem("local_guest_profile", JSON.stringify(profileData));
+
+      const mockUser = {
+        uid: targetUid,
+        email: profileData.email || "",
+        displayName: profileData.displayName,
+        isAnonymous: true,
+        photoURL: profileData.photoURL || "✿"
+      } as any;
+
+      setUser(mockUser);
+      setCurrentUserProfile(profileData);
+      
+      setActivePage("home");
+      setOnboardingChoice("none");
+      
+      toast.success(`🎉 歡迎回來，${profileData.displayName}！`);
+    } catch (err: any) {
+      console.error("Code login error:", err);
+      setSearchInviteError("登入驗證時出錯：" + err.message);
+    } finally {
+      setIsSearchingInvite(false);
     }
   };
 
@@ -1163,16 +1656,10 @@ export default function App() {
       } else {
         console.log("invite result", inviteData);
 
-        if (inviteData.status === "used" || inviteData.status === "accepted") {
+        if (inviteData.status === "joined") {
           setFoundInvite(null);
-          setSearchInviteError("此邀請碼已使用。");
-        } else if (inviteData.status === "expired") {
-          setFoundInvite(null);
-          setSearchInviteError("此邀請碼已失效。");
-        } else if (inviteData.status === "cancelled") {
-          setFoundInvite(null);
-          setSearchInviteError("此邀請碼已取消。");
-        } else {
+          setSearchInviteError("此邀請已成功加入家庭！請直接在下方點選「登入系統」進行登入。");
+        } else if (inviteData.status === "pending") {
           // Found it! Include familyName from family document if not present in inviteData
           setFoundInvite({
             id: finalInviteId,
@@ -1180,6 +1667,9 @@ export default function App() {
             inviteCode: cleanedInviteCode, // Ensure we preserve the code
             familyName: familyData.name || inviteData.familyName || "我的家庭"
           });
+        } else {
+          setFoundInvite(null);
+          setSearchInviteError(`此邀請狀態為「${inviteData.status || "空值"}」，已無法進行首次加入流程。`);
         }
       }
     } catch (err: any) {
@@ -1203,21 +1693,206 @@ export default function App() {
     }
   };
 
-  const processInviteAccept = async (invite: any, specialUid?: string, specialEmail?: string) => {
-    if (isOnboardingBusy) return;
+  const confirmJoinFamily = async (inviteParam?: any, specialUid?: string, specialEmail?: string) => {
+    const invite = inviteParam || foundInvite;
+    if (!invite || isOnboardingBusy) return;
     setIsOnboardingBusy(true);
 
+    const familyId = invite.familyId;
+    const inviteCode = invite.inviteCode;
+    const inviteData = invite;
+
     try {
-      const targetFamilyId = invite.familyId;
+      console.log("開始加入家庭");
+      console.log("familyId", familyId);
+      console.log("inviteCode", inviteCode);
+      console.log("inviteData", inviteData);
+
+      let targetUid = specialUid || "";
+      let targetEmail = specialEmail || "";
+
+      if (!targetUid) {
+        if (user) {
+          // Already logged in with Google (Onboarding mode)
+          if (invite.email && invite.email.toLowerCase() !== user.email?.toLowerCase()) {
+            toast.error(`⚠️ 此邀請碼限制指定 Google 帳號 (${invite.email}) 使用！目前您登入的帳戶為 (${user.email})！`);
+            setIsOnboardingBusy(false);
+            return;
+          }
+          targetUid = user.uid;
+          targetEmail = user.email || "";
+        } else if (invite.email) {
+          // Requires specific Google login accounts
+          const provider = new GoogleAuthProvider();
+          const res = await signInWithPopup(auth, provider);
+          const firebaseUser = res.user;
+
+          if (firebaseUser.email?.toLowerCase() !== invite.email.toLowerCase()) {
+            toast.error(`⚠️ 此邀請碼限制指定 Google 帳號 (${invite.email}) 使用！目前您登入的帳戶為 (${firebaseUser.email})！`);
+            await signOut(auth);
+            setIsOnboardingBusy(false);
+            return;
+          }
+          targetUid = firebaseUser.uid;
+          targetEmail = firebaseUser.email || "";
+        } else {
+          // Guest mode
+          targetUid = `guest_${invite.inviteCode}_${Math.random().toString(36).substr(2, 9)}`;
+        }
+      }
+
+      if (invite.email && invite.email.toLowerCase() !== targetEmail.toLowerCase()) {
+        toast.error(`⚠️ 此邀請碼限制指定 Google 帳號 (${invite.email}) 使用！目前您登入的帳戶為 (${targetEmail})！`);
+        setIsOnboardingBusy(false);
+        return;
+      }
+
+      const targetFamilyId = familyId;
       const targetFamilyName = invite.familyName || "我的家庭";
       const targetRole = invite.role || invite.targetRole || UserRole.VIEWER;
       const targetName = invite.name || invite.memberName || "新成員";
-      
-      const targetUid = specialUid || (user ? user.uid : `guest_${invite.inviteCode}_${Math.random().toString(36).substr(2, 9)}`);
-      const targetEmail = specialEmail || (user ? (user.email || "") : "");
-      const isLocalGuest = !specialUid && !user;
+      const isLocalGuest = !user && !specialUid;
 
-      console.log("Accepting invite with data:", invite);
+      // 4th, 5th, and 6th Steps: Enforce uniqueness within family for inviteCode, joinedUserId, and memberId
+      const membersRef = collection(db, "families", targetFamilyId, "members");
+      const membersSnap = await getDocs(membersRef);
+
+      let duplicateMemberUid = "";
+      let hasCheckedDuplicate = false;
+
+      // 1. Check if invitation block matches
+      const codeIsUsed = (invite.status === "joined" || invite.status === "accepted" || !!invite.joinedUserId || !!invite.acceptedBy);
+      if (codeIsUsed) {
+        duplicateMemberUid = invite.joinedUserId || invite.acceptedBy || invite.memberId;
+        hasCheckedDuplicate = true;
+      }
+
+      // 2. Check nested family members collection
+      membersSnap.forEach((docSnap) => {
+        const d = docSnap.data();
+        const docId = docSnap.id;
+        const mUid = d.uid || d.userId || docId;
+        const mInviteCode = d.inviteCode || d.loginCode || d.loginCode || d.inviteCode;
+
+        const isMatchedUid = (mUid && mUid === targetUid) || (d.joinedUserId && d.joinedUserId === targetUid);
+        const isMatchedInviteCode = (mInviteCode && mInviteCode.toUpperCase() === inviteCode.toUpperCase()) || (invite.inviteCode && mInviteCode && mInviteCode.toUpperCase() === invite.inviteCode.toUpperCase());
+        const isMatchedMemberId = (invite.memberId && (docId === invite.memberId || d.memberId === invite.memberId));
+
+        if (isMatchedUid || isMatchedInviteCode || isMatchedMemberId) {
+          if (!duplicateMemberUid) {
+            duplicateMemberUid = mUid || docId;
+          }
+          hasCheckedDuplicate = true;
+        }
+      });
+
+      // 3. Check root users collection for the same unique items
+      if (!hasCheckedDuplicate) {
+        const rootUsersQuery = query(collection(db, "users"), where("familyId", "==", targetFamilyId));
+        const rootUsersSnap = await getDocs(rootUsersQuery);
+        rootUsersSnap.forEach((docSnap) => {
+          const d = docSnap.data();
+          const docId = docSnap.id;
+          const isMatchedUid = (docId === targetUid) || (d.uid === targetUid);
+          const isMatchedInviteCode = (d.inviteCode && d.inviteCode.toUpperCase() === inviteCode.toUpperCase());
+          const isMatchedMemberId = (invite.memberId && (docId === invite.memberId || d.memberId === invite.memberId));
+
+          if (isMatchedUid || isMatchedInviteCode || isMatchedMemberId) {
+            duplicateMemberUid = docId || d.uid;
+            hasCheckedDuplicate = true;
+          }
+        });
+      }
+
+      // If duplicate found, directly login existing member data, do not create a new member or write to subcollection again (Step 4, 5, 6)
+      if (hasCheckedDuplicate) {
+        console.log("Anti-duplicate trigger: Direct logging in existing member uid:", duplicateMemberUid);
+        const resolvedUid = duplicateMemberUid || targetUid || invite.memberId;
+
+        // Fetch existing user doc
+        const userDocRef = doc(db, "users", resolvedUid);
+        let userSnap = await getDoc(userDocRef);
+        let profileData: any = null;
+
+        if (userSnap.exists()) {
+          profileData = userSnap.data();
+        } else {
+          // Reconstruct user doc for direct login if missing
+          console.log("Reconstructing user doc in anti-duplicate flow for uid:", resolvedUid);
+          profileData = removeUndefinedFields({
+            uid: resolvedUid,
+            email: targetEmail || invite.email || "",
+            displayName: targetName || invite.name || "家庭成員",
+            photoURL: invite.avatar || "🙂",
+            color: "#B4C3B2",
+            familyId: targetFamilyId,
+            role: targetRole as UserRole,
+            stars: 0,
+            birthday: invite.birthday || null,
+            showAgeInCalendar: invite.showAge ?? true,
+            gender: invite.gender ?? "",
+            createdAt: serverTimestamp(),
+            inviteStatus: "active",
+          });
+          await setDoc(userDocRef, profileData);
+        }
+
+        // Save persistent login states
+        localStorage.setItem("familyCode", targetFamilyId);
+        localStorage.setItem("inviteCode", inviteCode);
+        localStorage.setItem("memberId", resolvedUid);
+        localStorage.setItem(
+          "familyLogin",
+          JSON.stringify({
+            familyId: targetFamilyId,
+            loginCode: inviteCode,
+            memberName: profileData.displayName,
+            role: profileData.role,
+            guestUid: resolvedUid
+          })
+        );
+        localStorage.setItem("local_guest_profile", JSON.stringify(profileData));
+
+        const mockUser = {
+          uid: resolvedUid,
+          email: profileData.email || "",
+          displayName: profileData.displayName,
+          isAnonymous: true,
+          photoURL: profileData.photoURL || "✿"
+        } as any;
+
+        setUser(mockUser);
+        setCurrentUserProfile(profileData);
+        setActivePage("home");
+        setOnboardingChoice("none");
+        setFoundInvite(null);
+
+        toast.success(`🎉 歡迎！您已登入家庭「${targetFamilyName}」為正式一員！`);
+        setIsOnboardingBusy(false);
+        return;
+      }
+
+      // 1. 驗證邀請存在且狀態為 pending
+      if (invite.status && invite.status !== "pending") {
+        toast.error("⚠️ 此邀請碼目前已被使用或無效！");
+        setIsOnboardingBusy(false);
+        return;
+      }
+
+      // Check if user already has a pending request with identical name / role before joining
+      let alreadyExists = false;
+      membersSnap.forEach((docSnap) => {
+        const d = docSnap.data();
+        if (d && d.name === targetName && normalizeDbRole(d.role) === normalizeDbRole(targetRole)) {
+          alreadyExists = true;
+        }
+      });
+
+      if (alreadyExists) {
+        toast.error("⚠️ 此成員已加入家庭！");
+        setIsOnboardingBusy(false);
+        return;
+      }
 
       // Verify and delete placeholder user if needed
       let placeholderData: any = {};
@@ -1240,8 +1915,28 @@ export default function App() {
       const finalShowAge = invite.showAge ?? true;
       const mergedStars = placeholderData.stars || 0;
 
+      const memberId = targetUid;
+      const memberData = removeUndefinedFields({
+        name: inviteData.name || "",
+        displayName: inviteData.name || "",
+        role: inviteData.role || inviteData.targetRole || "Child",
+        birthday: inviteData.birthday ?? null,
+        gender: inviteData.gender ?? "",
+        avatar: inviteData.avatar ?? "🙂",
+        photoURL: inviteData.avatar ?? "🙂",
+        email: inviteData.email ?? "",
+        showAge: inviteData.showAge ?? true,
+        showAgeInCalendar: inviteData.showAgeInCalendar ?? inviteData.showAge ?? true,
+        familyId: familyId,
+        loginCode: inviteCode,
+        createdAt: serverTimestamp(),
+        joinedAt: serverTimestamp()
+      });
+
+      console.log("memberData", memberData);
+
       // Create/Update root user profile
-      const updatedProfile: UserProfile = {
+      const updatedProfile: UserProfile = removeUndefinedFields({
         uid: targetUid,
         email: targetEmail,
         displayName: finalDisplayName,
@@ -1250,45 +1945,23 @@ export default function App() {
         familyId: targetFamilyId,
         role: finalRole as UserRole,
         stars: mergedStars,
-        birthday: finalBirthday || undefined,
+        birthday: finalBirthday || null,
         showAgeInCalendar: finalShowAge,
         gender: finalGender,
         createdAt: serverTimestamp(),
-      };
+        inviteCode: invite.inviteCode,
+        inviteStatus: "active",
+      });
       await setDoc(doc(db, "users", targetUid), updatedProfile);
+      console.log("Login Credential Saved");
 
       // Create the nested families/{familyId}/members/{userId} document
-      const memberRef = doc(db, "families", targetFamilyId, "members", targetUid);
-      const memberData = {
-        name: finalDisplayName,
-        role: finalRole,
-        birthday: finalBirthday || null,
-        showAge: finalShowAge,
-        avatar: finalPhotoURL,
-        gender: finalGender,
-        createdAt: serverTimestamp(),
-        joinedAt: serverTimestamp()
-      };
-      await setDoc(memberRef, memberData);
-
-      console.log(
-        "Member Created Success",
-        memberData
-      );
-      console.log(
-        "Member Created Path",
-        memberRef.path
-      );
-
-      // Validate database sync right away
-      try {
-        const verifyDoc = await getDoc(memberRef);
-        console.log("Invite Verify Exists", verifyDoc.exists());
-        console.log("Invite Verify Data", verifyDoc.data());
-        console.log("Invite Verify Path", memberRef.path);
-      } catch (subErr) {
-        console.warn("Auto verification check warning:", subErr);
-      }
+      console.log("即將建立路徑：");
+      console.log(`families/${familyId}/members/${memberId}`);
+      const memberDocRef = doc(db, "families", targetFamilyId, "members", targetUid);
+      
+      await setDoc(memberDocRef, memberData);
+      console.log("Member Created");
 
       // Auto Birthday Event
       if (memberData.birthday) {
@@ -1297,7 +1970,7 @@ export default function App() {
 
       // Create family_members link (legacy root sync)
       const memberLinkId = `${targetFamilyId}_${targetUid}`;
-      await setDoc(doc(db, "family_members", memberLinkId), {
+      await setDoc(doc(db, "family_members", memberLinkId), removeUndefinedFields({
         id: memberLinkId,
         familyId: targetFamilyId,
         userId: targetUid,
@@ -1305,36 +1978,53 @@ export default function App() {
         role: finalRole as UserRole,
         stars: mergedStars,
         createdAt: serverTimestamp(),
-      });
+      }));
 
       // Mark invite as accepted in nest subcollection
       const nestInviteRef = doc(db, "families", targetFamilyId, "invites", invite.inviteCode);
-      await updateDoc(nestInviteRef, {
-        status: "accepted",
+      await updateDoc(nestInviteRef, removeUndefinedFields({
+        status: "joined",
         acceptedBy: targetUid,
         acceptedAt: new Date().toISOString(),
         joinedUserId: targetUid,
         joinedEmail: targetEmail,
         joinedTime: new Date().toISOString(),
-      });
+      }));
 
       // Mark invite as accepted in root invites collection
       if (invite.id) {
         try {
-          await updateDoc(doc(db, "invites", invite.id), {
-            status: "accepted",
+          await updateDoc(doc(db, "invites", invite.id), removeUndefinedFields({
+            status: "joined",
             acceptedBy: targetUid,
             acceptedAt: new Date().toISOString(),
             joinedUserId: targetUid,
             joinedEmail: targetEmail,
             joinedTime: new Date().toISOString(),
-          });
+          }));
         } catch (ignored) {}
       }
+      console.log("Invite Updated");
+
+      // Record local storage information for persistent login
+      localStorage.setItem("familyCode", targetFamilyId);
+      localStorage.setItem("inviteCode", invite.inviteCode);
+      localStorage.setItem("memberId", targetUid);
+
+      // 成功加入家庭後，寫入 familyLogin 登入憑證
+      localStorage.setItem(
+        "familyLogin",
+        JSON.stringify({
+          familyId: targetFamilyId,
+          loginCode: invite.inviteCode,
+          memberName: inviteData.name,
+          role: inviteData.role
+        })
+      );
 
       // Record Audit Log
       const auditId = `aud_${Date.now()}_join`;
-      await setDoc(doc(db, "audit_logs", auditId), {
+      await setDoc(doc(db, "audit_logs", auditId), removeUndefinedFields({
         id: auditId,
         userId: targetUid,
         userName: `${finalDisplayName} (${getRoleLabel(finalRole)})`,
@@ -1343,7 +2033,7 @@ export default function App() {
         targetId: targetFamilyId,
         targetName: targetFamilyName,
         createdAt: new Date().toISOString(),
-      });
+      }));
 
       if (isLocalGuest) {
         localStorage.setItem("local_guest_profile", JSON.stringify(updatedProfile));
@@ -1365,60 +2055,32 @@ export default function App() {
       setActivePage("home");
       setOnboardingChoice("none");
 
+      console.log("Join Success");
       toast.success(`🎉 歡迎！您已成功進駐家庭「${targetFamilyName}」，系統已為您配置「${getRoleLabel(finalRole)}」角色權限！`);
-    } catch (err: any) {
-      console.error("Accept invite error:", err);
-      toast.error("❌ 接受邀請失敗：" + err.message);
+    } catch (error: any) {
+      console.error("Join Family Error");
+      console.error(error);
+      if (error) {
+        console.error(error.code);
+        console.error(error.message);
+      }
+      toast.error("❌ 接受邀請失敗：" + error.message);
     } finally {
       setIsOnboardingBusy(false);
     }
   };
 
-  const handleConfirmInviteJoin = async () => {
-    if (!foundInvite || isOnboardingBusy) return;
-
-    try {
-      let targetUid = "";
-      let targetEmail = "";
-
-      if (user) {
-        // Already logged in with Google (Onboarding mode)
-        if (foundInvite.email && foundInvite.email.toLowerCase() !== user.email?.toLowerCase()) {
-          toast.error(`⚠️ 此邀請碼限制指定 Google 帳號 (${foundInvite.email}) 使用！目前您登入的帳戶為 (${user.email})！`);
-          return;
-        }
-        targetUid = user.uid;
-        targetEmail = user.email || "";
-      } else if (foundInvite.email) {
-        // Requires specific Google login accounts
-        setIsOnboardingBusy(true);
-        const provider = new GoogleAuthProvider();
-        const res = await signInWithPopup(auth, provider);
-        const firebaseUser = res.user;
-
-        if (firebaseUser.email?.toLowerCase() !== foundInvite.email.toLowerCase()) {
-          toast.error(`⚠️ 此邀請碼限制指定 Google 帳號 (${foundInvite.email}) 使用！目前您登入的帳戶為 (${firebaseUser.email})！`);
-          await signOut(auth);
-          setIsOnboardingBusy(false);
-          return;
-        }
-        targetUid = firebaseUser.uid;
-        targetEmail = firebaseUser.email || "";
-        setIsOnboardingBusy(false);
-      }
-
-      await processInviteAccept(foundInvite, targetUid, targetEmail);
-    } catch (err: any) {
-      console.error(err);
-      toast.error("❌ 加入家庭失敗：" + err.message);
-      setIsOnboardingBusy(false);
-    }
-  };
+  const processInviteAccept = confirmJoinFamily;
+  const handleConfirmInviteJoin = confirmJoinFamily;
 
   const handleLogout = async () => {
     try {
       localStorage.removeItem("local_guest_profile");
       localStorage.removeItem("local_guest_uid");
+      localStorage.removeItem("familyCode");
+      localStorage.removeItem("inviteCode");
+      localStorage.removeItem("memberId");
+      localStorage.removeItem("familyLogin");
       setUser(null);
       setCurrentUserProfile(null);
       await signOut(auth);
@@ -3197,7 +3859,22 @@ function generateTemplateDates(startDateStr: string, weekdays: number[], count: 
       if (memberData.color) newProfile.color = memberData.color;
       
       await setDoc(doc(db, "users", newUid), newProfile);
+
+      // Create the nested families/{familyId}/members/{userId} document
       if (currentUserProfile.familyId) {
+        const memberRef = doc(db, "families", currentUserProfile.familyId, "members", newUid);
+        const nestedMemberData = {
+          name: memberData.displayName,
+          role: memberData.role,
+          birthday: memberData.birthday || null,
+          showAge: true,
+          avatar: memberData.photoURL || "✿",
+          gender: "",
+          createdAt: serverTimestamp(),
+          joinedAt: serverTimestamp()
+        };
+        await setDoc(memberRef, nestedMemberData);
+        
         clearCachedData(CACHE_KEY_MEMBERS(currentUserProfile.familyId));
         setTimeout(() => loadAppletData(true), 100);
       }
@@ -3230,7 +3907,20 @@ function generateTemplateDates(startDateStr: string, weekdays: number[], count: 
       if (updatedData.showAgeInCalendar !== undefined) updateObj.showAgeInCalendar = updatedData.showAgeInCalendar;
       
       await updateDoc(doc(db, "users", memberUid), updateObj);
+
+      // Update nested families/{familyId}/members/{userId} document
       if (currentUserProfile?.familyId) {
+        const nestedRef = doc(db, "families", currentUserProfile.familyId, "members", memberUid);
+        const nestedUpdateObj: any = {
+          name: updatedData.displayName,
+          role: updatedData.role,
+        };
+        if (updatedData.birthday !== undefined) nestedUpdateObj.birthday = updatedData.birthday;
+        if (updatedData.photoURL !== undefined) nestedUpdateObj.avatar = updatedData.photoURL;
+        if (updatedData.showAgeInCalendar !== undefined) nestedUpdateObj.showAge = updatedData.showAgeInCalendar;
+
+        await setDoc(nestedRef, nestedUpdateObj, { merge: true });
+
         clearCachedData(CACHE_KEY_MEMBERS(currentUserProfile.familyId));
         setTimeout(() => loadAppletData(true), 100);
       }
@@ -3255,13 +3945,11 @@ function generateTemplateDates(startDateStr: string, weekdays: number[], count: 
         inviteStatus: ""
       });
 
-      // Revoke family_members join record
+      // Revoke nested nested subcollection document as well
       if (currentUserProfile?.familyId) {
+        await deleteDoc(doc(db, "families", currentUserProfile.familyId, "members", memberUid));
         const fmLinkId = `${currentUserProfile.familyId}_${memberUid}`;
         await deleteDoc(doc(db, "family_members", fmLinkId));
-      }
-
-      if (currentUserProfile?.familyId) {
         clearCachedData(CACHE_KEY_MEMBERS(currentUserProfile.familyId));
         setTimeout(() => loadAppletData(true), 100);
       }
@@ -3439,16 +4127,25 @@ function generateTemplateDates(startDateStr: string, weekdays: number[], count: 
                   {isSearchingInvite ? (
                     <div className="flex items-center gap-2 text-xs text-emerald-600 font-bold select-none p-1 shrink-0 animate-pulse justify-center">
                       <div className="h-3.5 w-3.5 border-2 border-emerald-600 border-t-transparent rounded-full animate-spin"></div>
-                      <span>正在驗證邀請資訊...</span>
+                      <span>正在驗證資訊...</span>
                     </div>
                   ) : (
-                    <button
-                      type="button"
-                      onClick={() => handleQueryInvite(joinFamilyId, joinInviteCode)}
-                      className="w-full py-3 bg-[#4D6375] hover:bg-[#3d4f5e] text-white font-extrabold rounded-xl shadow-md transition flex items-center justify-center gap-2 text-sm cursor-pointer"
-                    >
-                      🔍 查詢邀請
-                    </button>
+                    <div className="flex flex-col gap-2.5">
+                      <button
+                        type="button"
+                        onClick={() => handleQueryInvite(joinFamilyId, joinInviteCode)}
+                        className="w-full py-3 bg-[#4D6375] hover:bg-[#3d4f5e] text-white font-extrabold rounded-xl shadow-md transition flex items-center justify-center gap-2 text-sm cursor-pointer"
+                      >
+                        🔍 查詢邀請 (首次加入)
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleCodeLogin(joinFamilyId, joinInviteCode)}
+                        className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold rounded-xl shadow-md transition flex items-center justify-center gap-2 text-sm cursor-pointer"
+                      >
+                        🔑 登入系統 (已加入成員)
+                      </button>
+                    </div>
                   )}
 
                   {searchInviteError && (
@@ -3487,7 +4184,7 @@ function generateTemplateDates(startDateStr: string, weekdays: number[], count: 
                   <div className="space-y-2 pt-2">
                     <button
                       type="button"
-                      onClick={() => handleConfirmInviteJoin()}
+                      onClick={() => confirmJoinFamily()}
                       disabled={isOnboardingBusy}
                       className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 active:translate-y-0.5 text-white font-extrabold rounded-xl shadow-md cursor-pointer transition flex items-center justify-center gap-2 text-xs md:text-sm disabled:opacity-50"
                     >
@@ -3771,7 +4468,7 @@ function generateTemplateDates(startDateStr: string, weekdays: number[], count: 
                   <div className="space-y-2 pt-2">
                     <button
                       type="button"
-                      onClick={() => handleConfirmInviteJoin()}
+                      onClick={() => confirmJoinFamily()}
                       disabled={isOnboardingBusy}
                       className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 active:translate-y-0.5 text-white font-extrabold rounded-xl shadow-md cursor-pointer transition flex items-center justify-center gap-2 text-xs"
                     >
@@ -4201,6 +4898,7 @@ function generateTemplateDates(startDateStr: string, weekdays: number[], count: 
                   pendingRequests={pendingRequests}
                   onApproveJoinRequest={handleApproveJoinRequest}
                   onRejectJoinRequest={handleRejectJoinRequest}
+                  onBindGoogle={handleBindGoogle}
                 />
               )}
 
@@ -4425,6 +5123,7 @@ function generateTemplateDates(startDateStr: string, weekdays: number[], count: 
                         pendingRequests={pendingRequests}
                         onApproveJoinRequest={handleApproveJoinRequest}
                         onRejectJoinRequest={handleRejectJoinRequest}
+                        onBindGoogle={handleBindGoogle}
                       />
                     </div>
                   )}
@@ -5133,27 +5832,37 @@ function generateTemplateDates(startDateStr: string, weekdays: number[], count: 
                       {
                         key: "canManageFamily",
                         label: "家庭設定/模式管理",
-                        allowed: canManageFamily(effectiveUserProfile, activeFamily) || isSuperAdmin
+                        allowed: getPermissionsByRole(effectiveUserProfile.role).canManageFamily || isSuperAdmin
                       },
                       {
                         key: "canManageMembers",
                         label: "成員管理與邀請碼產出",
-                        allowed: canManageFamily(effectiveUserProfile, activeFamily) || isSuperAdmin
+                        allowed: getPermissionsByRole(effectiveUserProfile.role).canManageMembers || isSuperAdmin
                       },
                       {
                         key: "canManageRoles",
                         label: "權限管理與角色指派",
-                        allowed: canManageFamily(effectiveUserProfile, activeFamily) || isSuperAdmin
+                        allowed: getPermissionsByRole(effectiveUserProfile.role).canManageRoles || isSuperAdmin
                       },
                       {
-                        key: "canManageEvents",
-                        label: "新增修刪日曆行程",
-                        allowed: effectiveUserProfile.role === UserRole.OWNER || effectiveUserProfile.role === UserRole.PARENT || isSuperAdmin
+                        key: "canManageInvites",
+                        label: "成員邀請管理",
+                        allowed: getPermissionsByRole(effectiveUserProfile.role).canManageInvites || isSuperAdmin
                       },
                       {
                         key: "canManageTasks",
                         label: "新增與指派/審核任務",
-                        allowed: effectiveUserProfile.role === UserRole.OWNER || effectiveUserProfile.role === UserRole.PARENT || isSuperAdmin
+                        allowed: getPermissionsByRole(effectiveUserProfile.role).canManageTasks || isSuperAdmin
+                      },
+                      {
+                        key: "canManageEvents",
+                        label: "新增修刪日曆行程",
+                        allowed: getPermissionsByRole(effectiveUserProfile.role).canManageEvents || isSuperAdmin
+                      },
+                      {
+                        key: "canManageAnnouncements",
+                        label: "發佈與修改公告",
+                        allowed: getPermissionsByRole(effectiveUserProfile.role).canManageAnnouncements || isSuperAdmin
                       }
                     ].map((p) => (
                       <div key={p.key} className="flex justify-between items-center py-0.5">
