@@ -79,3 +79,22 @@ body {
 .soft-journal-shadow-sm {
   box-shadow: 0 4px 15px -3px rgba(180, 165, 150, 0.12);
 }
+
+/* Today Cell Special Styling with high craftsmanship and soft buttercream shadow glow */
+.today-cell-special {
+  background: #FFF9F1 !important;
+  box-shadow: 
+    0 0 0 1px rgba(230,190,120,0.15),
+    0 4px 14px rgba(230,190,120,0.12) !important;
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@media (min-width: 768px) {
+  .today-cell-special:hover {
+    transform: translateY(-2px) !important;
+    box-shadow: 
+      0 0 0 1px rgba(230,190,120,0.18),
+      0 6px 18px rgba(230,190,120,0.18) !important;
+  }
+}
+

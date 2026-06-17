@@ -959,6 +959,20 @@ ${emailStr || "（無綁定 Gmail）"}
 
   return (
     <div id="members-settings-module" className="max-w-4xl mx-auto font-sans">
+      {!isParent && (
+        <div className="mb-4 bg-[#FFF9F1] border border-amber-200/50 rounded-2xl p-4 flex items-start gap-3 shadow-xs">
+          <span className="text-xl shrink-0">👀</span>
+          <div>
+            <h4 className="text-sm font-black text-amber-900">目前為唯讀模式</h4>
+            <p className="text-xs text-amber-800/80 font-medium mt-1 leading-relaxed">
+              您可以查看家庭成員資料，但無法修改家庭設定。
+            </p>
+          </div>
+          <span className="ml-auto text-[10px] font-black tracking-wider text-amber-600 bg-amber-50 border border-amber-200/30 px-2 py-0.5 rounded-full select-none">
+            👀 唯讀
+          </span>
+        </div>
+      )}
       {/* List of Family Members - Full-width single Column */}
       <div className="bg-white rounded-2xl border-0 md:border border-[#E5E1DA] p-3.5 md:p-6 shadow-xs space-y-4 md:space-y-6 font-sans">
         <div className="flex justify-between items-center border-b border-[#E5E1DA] pb-3">

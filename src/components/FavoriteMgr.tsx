@@ -163,6 +163,20 @@ export default function FavoriteMgr({
 
   return (
     <div id="favorite-activities-module" className="bg-[#FCFAF2] rounded-2xl md:rounded-[24px] border-0 md:border md:border-[#EFEAE2] p-3 md:p-6 lg:p-8 md:soft-journal-shadow space-y-4 md:space-y-6">
+      {!isParent && (
+        <div className="mb-4 bg-[#FFF9F1] border border-amber-200/50 rounded-2xl p-4 flex items-start gap-3 shadow-xs">
+          <span className="text-xl shrink-0">👀</span>
+          <div>
+            <h4 className="text-sm font-black text-[#D97706]">👀 唯讀模式</h4>
+            <p className="text-xs text-amber-800/80 font-semibold mt-1 leading-relaxed">
+              僅可查看家庭預設常用事項
+            </p>
+          </div>
+          <span className="ml-auto text-[10px] font-black tracking-wider text-[#D97706] bg-[#FFF1E6] border border-amber-200/30 px-2 py-0.5 rounded-full select-none">
+            👀 唯讀
+          </span>
+        </div>
+      )}
       {/* Header bar - Compressing height & padding to 40~60px / 12~16px */}
       <div className="flex justify-between items-center border-b border-[#F4EFE6] pb-3">
         <div className="flex items-center gap-2">
@@ -235,12 +249,14 @@ export default function FavoriteMgr({
 
                 {/* Actions Row */}
                 <div className="flex items-center gap-1 md:mt-4 md:w-full md:border-t md:border-gray-100 md:pt-3 shrink-0">
-                  <button
-                    onClick={() => handleApplyQuick(act)}
-                    className="px-2.5 py-1.5 text-[11px] font-black text-amber-900 bg-amber-50 hover:bg-amber-100 border border-amber-200 rounded-lg transition shadow-none cursor-pointer"
-                  >
-                    加入
-                  </button>
+                  {isParent && (
+                    <button
+                      onClick={() => handleApplyQuick(act)}
+                      className="px-2.5 py-1.5 text-[11px] font-black text-amber-900 bg-amber-50 hover:bg-amber-100 border border-amber-200 rounded-lg transition shadow-none cursor-pointer"
+                    >
+                      加入
+                    </button>
+                  )}
                   {isParent && (
                     <>
                       <button

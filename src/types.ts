@@ -70,6 +70,7 @@ export interface CalendarEvent {
   title: string;
   date: string; // "YYYY-MM-DD"
   time: string; // "HH:MM~HH:MM" or similar, can be empty
+  location?: string; // event venue/address
   category?: string;
   isFixed: boolean;
   weekdays?: number[]; // [0, 1, 2, 3, 4, 5, 6] where 0 = Sunday

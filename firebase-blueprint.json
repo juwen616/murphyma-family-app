@@ -53,6 +53,7 @@
         "title": { "type": "string" },
         "date": { "type": "string" },
         "time": { "type": "string" },
+        "location": { "type": "string" },
         "category": { "type": "string" },
         "isFixed": { "type": "boolean" },
         "note": { "type": "string" },

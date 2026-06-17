@@ -535,6 +535,7 @@ export default function CalendarView({
   const [title, setTitle] = useState("");
   const [startTime, setStartTime] = useState("");
   const [endTime, setEndTime] = useState("");
+  const [location, setLocation] = useState("");
   const [isFixed, setIsFixed] = useState(false);
   const [weekdays, setWeekdays] = useState<number[]>([]);
   const [note, setNote] = useState("");
@@ -844,6 +845,7 @@ export default function CalendarView({
     setTitle("");
     setStartTime("");
     setEndTime("");
+    setLocation("");
     setIsFixed(false);
     setWeekdays([]);
     setNote("");
@@ -882,6 +884,7 @@ export default function CalendarView({
     const targetDate = dateStr || evt.date || "";
     setSelectedDate(targetDate);
     setTitle(evt.title);
+    setLocation(evt.location || "");
     setIsFixed(evt.isFixed || false);
     setWeekdays(evt.weekdays || []);
     setNote(evt.note || "");
@@ -1055,6 +1058,7 @@ export default function CalendarView({
       title: title.trim(),
       date: isFixed ? "" : selectedDate,
       time: eventTimeStr,
+      location: location.trim(),
       isFixed,
       weekdays: isFixed ? weekdays : [],
       note: note.trim(),
@@ -1100,6 +1104,7 @@ export default function CalendarView({
           title: title.trim(),
           date: isFixed ? "" : selectedDate,
           time: eventTimeStr,
+          location: location.trim(),
           category: "",
           isFixed,
           weekdays: isFixed ? weekdays : [],
@@ -1369,15 +1374,15 @@ export default function CalendarView({
                     {/* Day header block */}
                     <div className={`p-2.5 rounded-xl font-black text-sm flex justify-between items-center ${
                       isToday 
-                        ? "bg-[#FFE9EF]/55 text-rose-700 border border-rose-100/50" 
+                        ? "bg-[#FFF9F1] text-[#D97706] border border-amber-100/50" 
                         : "bg-[#FFFDFB]/85 text-[#3C332D]"
                     }`}>
                       <span className="font-mono">
                         {formatListDayHeader(dayCell.dateStr)}
                       </span>
                       {isToday && (
-                        <span className="text-[10px] bg-rose-100 text-rose-800 font-black px-2 py-0.5 rounded-full select-none animate-pulse">
-                          今天
+                        <span className="text-[10px] bg-[#FFF1E6] text-[#D97706] font-black px-2.5 py-0.5 rounded-full select-none">
+                          📍 今天
                         </span>
                       )}
                     </div>
@@ -1501,8 +1506,8 @@ export default function CalendarView({
               // Apply color theme backgrounds
               let cellBg = "bg-white";
               if (isToday) {
-                // Today: elegant warm light beige background (slightly brighter, yet distinct)
-                cellBg = "bg-[#FCF7F0]";
+                // Today: elegant warm light buttercream gold
+                cellBg = "today-cell-special";
               } else if (activeMode) {
                 if (activeMode.type === "travel") cellBg = "bg-[#EAF6FF]";
                 else if (activeMode.type === "exam") cellBg = "bg-[#FFF5D9]";
@@ -1541,10 +1546,10 @@ export default function CalendarView({
                       }
                     }
                   }}
-                  className={`min-h-[105px] h-[105px] md:min-h-[160px] md:h-auto p-1 md:p-2.5 flex flex-col justify-start md:justify-between gap-1 md:gap-0 transition group hover:bg-[#FFFDF8]/90 cursor-pointer overflow-hidden ${cellBg} ${
+                  className={`min-h-[105px] h-[105px] md:min-h-[160px] md:h-auto p-1 md:p-2.5 flex flex-col justify-start md:justify-between gap-1 md:gap-0 transition group cursor-pointer overflow-hidden border-r border-b border-[#A59D84] ${cellBg} ${
                     isToday 
-                      ? "border-[#A78B75] border-2 relative z-25 shadow-[0_0_10px_rgba(167,139,117,0.35)] scale-[1.01]" 
-                      : "border-r border-b border-[#A59D84]"
+                      ? "relative z-10" 
+                      : "hover:bg-[#FFFDF8]/90"
                   }`}
                 >
                   {/* MOBILE VIEW COMPACT CELL */}
@@ -1552,19 +1557,21 @@ export default function CalendarView({
                     <div className="flex justify-between items-center select-none mb-0.5 pb-[2px] border-b border-gray-100/50">
                       <div className="flex items-center gap-1.5 min-w-0">
                         <span
-                          className={`text-[10px] font-black rounded-full h-5 w-5 flex items-center justify-center font-mono shrink-0 ${
+                          className={`font-mono shrink-0 flex items-center justify-center ${
                             isToday
-                              ? "bg-rose-150 text-rose-700 font-extrabold"
-                              : cell.isWeekend
-                              ? "text-[#3C332D]/70"
-                              : "text-[#3C332D]"
+                              ? "bg-[#F7BFAE] text-white rounded-full px-2 py-[3px] text-[10px] font-black"
+                              : `text-[10px] font-black rounded-full h-5 w-5 ${
+                                  cell.isWeekend
+                                    ? "text-[#3C332D]/70"
+                                    : "text-[#3C332D]"
+                                }`
                           }`}
                         >
                           {cell.day}
                         </span>
                         {isToday && (
-                          <span className="text-[9px] font-black text-rose-700 bg-white border border-rose-250 px-1 rounded scale-90 origin-left shrink-0">
-                            今天
+                          <span className="text-[9px] font-black text-[#D97706] bg-[#FFF1E6] px-2 py-0.5 rounded-full shrink-0 select-none scale-90 origin-left">
+                            📍 今天
                           </span>
                         )}
                       </div>
@@ -1663,21 +1670,23 @@ export default function CalendarView({
                     <div className="flex justify-between items-start">
                       <div className="flex items-center gap-1.5 min-w-0">
                         <span
-                          className={`text-sm font-black rounded-full h-7.5 w-7.5 flex items-center justify-center font-mono shrink-0 ${
+                          className={`font-mono shrink-0 flex items-center justify-center ${
                             isToday
-                              ? "bg-[#EAA59E] text-white shadow-xs font-extrabold"
-                              : cell.isWeekend
-                              ? holiday
-                                 ? "text-amber-800 font-extrabold"
-                                 : "text-[#3C332D]/74"
-                              : "text-[#3C332D]"
+                              ? "bg-[#F7BFAE] text-white rounded-full px-2.5 py-1 text-sm font-black"
+                              : `text-sm font-black rounded-full h-7.5 w-7.5 ${
+                                  cell.isWeekend
+                                    ? holiday
+                                       ? "text-amber-800 font-extrabold"
+                                       : "text-[#3C332D]/74"
+                                    : "text-[#3C332D]"
+                                }`
                           }`}
                         >
                           {cell.day}
                         </span>
                         {isToday && (
-                          <span className="text-[10.5px] font-black text-rose-700 bg-rose-50 px-1.5 py-0.5 rounded border border-rose-200 shadow-xs select-none shrink-0">
-                            今天
+                          <span className="text-[10.5px] md:text-[11px] font-black text-[#D97706] bg-[#FFF1E6] px-2.5 py-1 rounded-full select-none shrink-0 border border-amber-100/30">
+                            📍 今天
                           </span>
                         )}
                       </div>
@@ -1769,23 +1778,38 @@ export default function CalendarView({
                               isTravel ? "p-2.5 text-base md:text-[16.2px]" : "p-2 text-sm md:text-[13.5px]"
                             } ${getAppletEventStyleClasses(evt, isBday, cell.dateStr, "month")}`}
                           >
-                            <div className="flex items-center justify-between gap-1 overflow-hidden">
-                              <span className={`truncate whitespace-nowrap overflow-hidden block max-w-[85%] font-sans font-black text-[#3C332D] ${
+                             <div className="flex items-center justify-between gap-1 overflow-hidden">
+                              <span className={`truncate whitespace-nowrap overflow-hidden block max-w-[70%] font-sans font-black text-[#3C332D] ${
                                 isTravel ? "text-base md:text-[16.8px]" : "text-sm md:text-[14px]"
                               }`}>
                                 {getEventTitleWithPrefix(evt, isBday, cell.dateStr)}
                               </span>
-                              {isUserAllowedToDelete(evt) && (
-                                <button
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    triggerDeleteConfirm(evt, cell.dateStr);
-                                  }}
-                                  className="hidden group-hover/item:inline-block text-gray-400 hover:text-red-500 p-0.5 ml-auto cursor-pointer transition"
-                                >
-                                  <Trash2 className="h-3.5 w-3.5" />
-                                </button>
-                              )}
+                              <div className="flex items-center gap-1.5 ml-auto shrink-0 select-none">
+                                {evt.location && (
+                                  <button
+                                    type="button"
+                                    title="開啟地圖"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      window.open(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(evt.location || "")}`, '_blank');
+                                    }}
+                                    className="text-xs hover:scale-120 active:scale-90 transition-transform p-0.5 cursor-pointer bg-white/70 hover:bg-white border border-[#EAA59E]/20 shadow-xs rounded-full inline-flex items-center justify-center w-5 h-5"
+                                  >
+                                    📍
+                                  </button>
+                                )}
+                                {isUserAllowedToDelete(evt) && (
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      triggerDeleteConfirm(evt, cell.dateStr);
+                                    }}
+                                    className="hidden group-hover/item:inline-block text-gray-400 hover:text-red-500 p-0.5 cursor-pointer transition"
+                                  >
+                                    <Trash2 className="h-3.5 w-3.5" />
+                                  </button>
+                                )}
+                              </div>
                             </div>
                             {evt.dailyNotes?.[cell.dateStr] && (
                               <div className="text-[10px] text-[#004B8F] font-bold bg-[#E1F0FF]/45 border border-sky-150 rounded px-1.5 py-0.5 mt-1 truncate max-w-full text-left font-sans self-start">
@@ -1796,6 +1820,12 @@ export default function CalendarView({
                               <span className="text-xs md:text-[12.5px] font-mono font-extrabold text-[#5B7283] mt-1 flex items-center gap-0.5">
                                 🕒 {evt.time}
                               </span>
+                            )}
+                            {evt.location && (
+                              <div className="text-[10.5px] md:text-[11px] font-sans font-bold text-amber-900 border border-amber-900/10 bg-amber-50/15 px-1.5 py-0.5 rounded flex items-center gap-1 mt-1 truncate max-w-full text-left self-start">
+                                <span>📍</span>
+                                <span className="truncate">{evt.location}</span>
+                              </div>
                             )}
                             {!evt.isPublic && (
                               <span className="text-[9px] font-sans text-amber-800 mt-0.5 font-bold">
@@ -1854,7 +1884,7 @@ export default function CalendarView({
                 <div key={wd.dateStr} className={`space-y-1 p-2 border-r last:border-r-0 border-gray-105 flex flex-col items-center justify-between min-h-[105px] ${wd.isToday ? "font-black" : ""}`}>
                   <div className="space-y-0.5">
                     <div className={textHeaderColor}>{wd.dayName}</div>
-                    <div className={`text-sm mt-0.5 font-mono inline-block ${wd.isToday ? "bg-[#EAA59E] text-white rounded-full px-2.5 py-0.5 font-extrabold shadow-sm" : ""}`}>
+                    <div className={`text-sm mt-0.5 font-mono inline-block ${wd.isToday ? "bg-[#F7BFAE] text-white rounded-full px-2.5 py-0.5 font-extrabold shadow-sm" : ""}`}>
                       {wd.day} 日
                     </div>
                   </div>
@@ -1919,7 +1949,7 @@ export default function CalendarView({
 
               let cellBg = "";
               if (cell.isToday) {
-                cellBg = "bg-[#FFE8EF]/40 ring-1 ring-[#EAA59E] ring-inset";
+                cellBg = "today-cell-special relative z-10";
               } else if (activeMode) {
                 if (activeMode.type === "travel") cellBg = "bg-[#EAF6FF]/95";
                 else if (activeMode.type === "exam") cellBg = "bg-[#FFF5D9]/95";
@@ -1998,7 +2028,6 @@ export default function CalendarView({
 
                   <div className="flex-grow space-y-3">
                     {sortedDayEvents.map((evt) => {
-                      const emoji = getEventEmoji(evt.title);
                       const isBday = (evt as any).isBirthday;
                       return (
                         <div
@@ -2013,17 +2042,32 @@ export default function CalendarView({
                             <h4 className="text-base font-black font-sans tracking-tight text-[#3C332D]">
                               {getEventTitleWithPrefix(evt, isBday, cell.dateStr)}
                             </h4>
-                            {isUserAllowedToDelete(evt) && (
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  triggerDeleteConfirm(evt, cell.dateStr);
-                                }}
-                                className="text-gray-400 hover:text-red-500 p-0.5 flex-shrink-0 transition cursor-pointer"
-                              >
-                                <Trash2 className="h-3.5 w-3.5" />
-                              </button>
-                            )}
+                            <div className="flex items-center gap-1.5 shrink-0 select-none">
+                              {evt.location && (
+                                <button
+                                  type="button"
+                                  title="開啟地圖"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    window.open(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(evt.location || "")}`, '_blank');
+                                  }}
+                                  className="text-xs hover:scale-120 active:scale-90 transition-transform p-0.5 cursor-pointer bg-white/70 hover:bg-white border border-[#EAA59E]/20 shadow-xs rounded-full inline-flex items-center justify-center w-5 h-5"
+                                >
+                                  📍
+                                </button>
+                              )}
+                              {isUserAllowedToDelete(evt) && (
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    triggerDeleteConfirm(evt, cell.dateStr);
+                                  }}
+                                  className="text-gray-400 hover:text-red-500 p-0.5 flex-shrink-0 transition cursor-pointer"
+                                >
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                </button>
+                              )}
+                            </div>
                           </div>
                           {evt.dailyNotes?.[cell.dateStr] && (
                             <div className="text-[11px] text-[#004B8F] font-bold bg-[#E1F0FF]/45 border border-sky-150 rounded px-1.5 py-0.5 mt-1.5 truncate max-w-full text-left font-sans self-start">
@@ -2035,6 +2079,12 @@ export default function CalendarView({
                               <ClockIcon className="h-3.5 w-3.5 text-[#5B7283]" />
                               {evt.time}
                             </span>
+                          )}
+                          {evt.location && (
+                            <div className="text-[11px] font-sans font-bold text-amber-900 border border-amber-900/10 bg-amber-50/15 px-1.5 py-0.5 rounded flex items-center gap-1 mt-1.5 self-start select-none">
+                              <span>📍</span>
+                              <span className="truncate">{evt.location}</span>
+                            </div>
                           )}
                           {evt.note && (
                             <p className="text-[11px] text-[#6E645E] mt-2 italic break-words line-clamp-2">
@@ -2065,19 +2115,21 @@ export default function CalendarView({
               return (
                 <div
                   key={wd.dateStr}
-                  className={`border border-[#EFEAE2] rounded-2xl p-4 bg-white shadow-xs relative ${
-                    wd.isToday ? "ring-2 ring-[#EAA59E] z-10" : ""
+                  className={`border border-[#EFEAE2] rounded-2xl p-4 transition-all duration-200 relative ${
+                    wd.isToday 
+                      ? "today-cell-special z-10" 
+                      : "bg-white shadow-xs"
                   }`}
                 >
                   <div className="flex justify-between items-center border-b border-gray-100 pb-2 flex-wrap gap-2">
                     <div className="flex items-center gap-2">
                       <span className={`text-xs font-black px-2.5 py-1 rounded-full ${
-                        wd.isToday ? "bg-[#EAA59E] text-white" : "bg-[#FFFDF8] text-[#5B7283] border border-[#EFEAE2]"
+                        wd.isToday ? "bg-[#F7BFAE] text-white" : "bg-[#FFFDF8] text-[#5B7283] border border-[#EFEAE2]"
                       }`}>
                         {wd.dayName} {wd.day}日
                       </span>
                       {wd.isToday && (
-                        <span className="text-[9px] bg-rose-100 text-rose-800 font-black px-2 py-0.5 rounded-full select-none shrink-0">今天</span>
+                        <span className="text-[9px] bg-[#FFF1E6] text-[#D97706] font-black px-2 py-0.5 rounded-full select-none shrink-0">📍 今天</span>
                       )}
                       {holiday && (
                         <span className="text-[9px] bg-[#FFEBEB] text-[#E53935] border border-[#FFD5D4] px-1.5 py-0.5 rounded-full font-bold select-none shrink-0">
@@ -2114,22 +2166,44 @@ export default function CalendarView({
                             className={`p-3.5 border flex flex-col gap-1.5 text-left relative cursor-pointer hover:opacity-90 transition-all duration-200 ${getAppletEventStyleClasses(evt, isBday, wd.dateStr, "month")}`}
                           >
                             <div className="flex items-center justify-between gap-1.5">
-                              <span className="font-extrabold text-xs text-[#3C332D] truncate block max-w-[85%]">
+                              <span className="font-extrabold text-xs text-[#3C332D] truncate block max-w-[70%]">
                                 {getEventTitleWithPrefix(evt, isBday, wd.dateStr)}
                               </span>
                               
-                              {isUserAllowedToDelete(evt) && (
-                                <button
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    triggerDeleteConfirm(evt, wd.dateStr);
-                                  }}
-                                  className="text-gray-400 hover:text-red-500 p-0.5 rounded transition"
-                                >
-                                  <Trash2 className="h-3.5 w-3.5" />
-                                </button>
-                              )}
+                              <div className="flex items-center gap-1.5 select-none shrink-0 ml-auto bg-transparent">
+                                {evt.location && (
+                                  <button
+                                    type="button"
+                                    title="開啟地圖"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      window.open(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(evt.location || "")}`, '_blank');
+                                    }}
+                                    className="text-[10px] hover:scale-120 active:scale-90 transition-transform p-0.5 cursor-pointer bg-white border border-[#EAA59E]/20 shadow-xs rounded-full inline-flex items-center justify-center w-5 h-5 animate-in fade-in"
+                                  >
+                                    📍
+                                  </button>
+                                )}
+                                {isUserAllowedToDelete(evt) && (
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      triggerDeleteConfirm(evt, wd.dateStr);
+                                    }}
+                                    className="text-gray-400 hover:text-red-500 p-0.5 rounded transition"
+                                  >
+                                    <Trash2 className="h-3.5 w-3.5" />
+                                  </button>
+                                )}
+                              </div>
                             </div>
+
+                            {evt.location && (
+                              <div className="text-[10.5px] md:text-[11px] font-sans font-bold text-amber-900 border border-amber-900/10 bg-amber-50/15 px-1.5 py-0.5 rounded flex items-center gap-1 mt-0.5 truncate max-w-full text-left self-start select-none">
+                                <span>📍</span>
+                                <span className="truncate">{evt.location}</span>
+                              </div>
+                            )}
 
                             {evt.time && (
                               <span className="text-[11px] font-mono text-gray-450 font-bold flex items-center gap-1">
@@ -2713,6 +2787,34 @@ export default function CalendarView({
                       </option>
                     ))}
                   </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-[#5B7283] mb-1.5">📍 活動地點</label>
+                <div className="space-y-1.5">
+                  <input
+                    type="text"
+                    disabled={isReadOnlyForm}
+                    placeholder="請輸入地點 (例如：台北市立動物園、大安森林公園)"
+                    value={location}
+                    onChange={(e) => setLocation(e.target.value)}
+                    className="w-full text-sm border border-[#EFEAE2] rounded-xl px-3.5 py-2.5 bg-[#FFFDF8] focus:outline-none focus:ring-2 focus:ring-[#5B7283] disabled:bg-gray-50/50"
+                  />
+                  {location.trim() && (
+                    <div className="flex justify-end animate-in fade-in slide-in-from-top-1 duration-200">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const url = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(location.trim())}`;
+                          window.open(url, '_blank');
+                        }}
+                        className="inline-flex items-center gap-1.5 text-xs font-extrabold text-sky-850 hover:text-sky-900 bg-sky-50 hover:bg-sky-100 border border-sky-150 rounded-xl px-3.5 py-2 transition-all shadow-2xs hover:shadow-xs cursor-pointer focus:outline-none active:scale-95"
+                      >
+                        🗺 開啟地圖
+                      </button>
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -3541,10 +3643,24 @@ export default function CalendarView({
                         }}
                         className={`p-3.5 text-left flex flex-col gap-1.5 shadow-xs relative cursor-pointer hover:opacity-90 transition-all ${getAppletEventStyleClasses(evt, isBday, selectedMobileDate, "month")}`}
                       >
-                        <div className="flex items-center justify-between gap-2 overflow-hidden">
-                          <span className="font-black text-sm md:text-base text-[#3C332D] truncate block max-w-[85%]">
+                        <div className="flex items-center justify-between gap-1 overflow-hidden">
+                          <span className="font-black text-sm md:text-base text-[#3C332D] truncate block max-w-[70%]">
                             {getEventTitleWithPrefix(evt, isBday, selectedMobileDate)}
                           </span>
+                          
+                          {evt.location && (
+                            <button
+                              type="button"
+                              title="開啟地圖"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                window.open(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(evt.location || "")}`, '_blank');
+                              }}
+                              className="text-[10px] hover:scale-120 active:scale-95 transition-transform p-0.5 cursor-pointer bg-white border border-[#EAA59E]/20 shadow-xs rounded-full inline-flex items-center justify-center w-5 h-5 ml-auto shrink-0 select-none"
+                            >
+                              📍
+                            </button>
+                          )}
                           
                           {isUserAllowedToDelete(evt) && (
                             <button
@@ -3574,6 +3690,13 @@ export default function CalendarView({
                         {evt.dailyNotes?.[selectedMobileDate] && (
                           <div className="text-[10px] text-[#004B8F] font-bold bg-[#E1F0FF]/55 border border-sky-150 rounded-lg px-2 py-1">
                             📝 {evt.dailyNotes[selectedMobileDate]}
+                          </div>
+                        )}
+
+                        {evt.location && (
+                          <div className="text-[10.5px] md:text-[11px] font-sans font-bold text-amber-900 border border-amber-900/10 bg-amber-50/15 px-1.5 py-0.5 rounded flex items-center gap-1 mt-0.5 truncate max-w-full text-left self-start select-none">
+                            <span>📍</span>
+                            <span className="truncate">{evt.location}</span>
                           </div>
                         )}
                       </div>

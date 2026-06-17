@@ -42,6 +42,7 @@ import toast from "react-hot-toast";
 interface AdminCenterProps {
   currentUser: any;
   activeFamily?: any;
+  familyMembers?: any[];
   developerModeActive?: boolean;
   setDeveloperModeActive?: (active: boolean) => void;
   setShowDevPanel?: (show: boolean) => void;
@@ -64,6 +65,7 @@ interface AdminCenterProps {
 export default function AdminCenter({
   currentUser,
   activeFamily,
+  familyMembers,
   developerModeActive = false,
   setDeveloperModeActive,
   setShowDevPanel,
@@ -82,6 +84,173 @@ export default function AdminCenter({
   simulatedMemberId = null,
   onSetSimulatedMemberId,
 }: AdminCenterProps) {
+  const isKid = currentUser?.role === "Child" || currentUser?.role === "KID" || currentUser?.role?.toLowerCase() === "child" || currentUser?.role?.toLowerCase() === "kid";
+
+  // If isKid, render Kid's restricted read-only system management page directly
+  if (isKid) {
+    const formattedDate = activeFamily?.createdAt 
+      ? (activeFamily.createdAt.toDate ? activeFamily.createdAt.toDate().toLocaleDateString("zh-TW", { year: 'numeric', month: 'long', day: 'numeric' }) : new Date(activeFamily.createdAt).toLocaleDateString("zh-TW", { year: 'numeric', month: 'long', day: 'numeric' })) 
+      : "無";
+
+    return (
+      <div className="max-w-3xl mx-auto space-y-6 font-sans">
+        {/* Banner Alert-style: 🚀 唯讀模式 */}
+        <div className="bg-[#FFF9F1] border border-amber-200/50 rounded-2xl p-5 flex items-start gap-4 shadow-sm animate-in fade-in duration-300">
+          <span className="text-2xl mt-0.5 shrink-0">👀</span>
+          <div className="space-y-1">
+            <h3 className="text-base font-black text-amber-900">目前為唯讀模式</h3>
+            <p className="text-xs text-amber-800/80 font-medium leading-relaxed">
+              您可以查看家庭系統資訊與您的個人權限說明，但唯讀狀態下無法修改任何家庭或系統層級的設定。
+            </p>
+          </div>
+          <span className="ml-auto text-[10px] font-black tracking-wider text-amber-600 bg-amber-50 border border-amber-200/40 px-3 py-1 rounded-full select-none">
+            👀 唯讀
+          </span>
+        </div>
+
+        {/* Info panel grid */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+          {/* Box 1: 家庭資訊 */}
+          <div className="bg-white border border-[#E9E2DB] rounded-2xl p-5 shadow-xs space-y-4">
+            <div className="flex items-center gap-2 border-b border-gray-150 pb-3">
+              <div className="h-8 w-8 bg-amber-50 text-amber-700 rounded-lg flex items-center justify-center font-bold">
+                🏠
+              </div>
+              <div>
+                <h3 className="text-sm font-black text-gray-800">家庭基本資訊</h3>
+                <p className="text-[10px] text-gray-400">目前所屬家庭群組檔案</p>
+              </div>
+            </div>
+
+            <div className="space-y-3 text-xs">
+              <div className="flex justify-between items-center py-1">
+                <span className="text-gray-400 font-medium">家庭名稱</span>
+                <span className="font-extrabold text-[#3C332D]">{activeFamily?.name || "未登錄"}</span>
+              </div>
+              <div className="flex justify-between items-center py-1">
+                <span className="text-gray-400 font-medium">家庭代碼</span>
+                <span className="font-mono font-black text-[#4A6076] bg-gray-50 px-2 py-0.5 rounded border border-gray-150 select-all">
+                  {activeFamily?.familyCode || activeFamily?.id || "無"}
+                </span>
+              </div>
+              <div className="flex justify-between items-center py-1">
+                <span className="text-gray-400 font-medium">家庭人數</span>
+                <span className="font-extrabold text-[#3C332D]">
+                  {familyMembers ? `${familyMembers.length} 人` : `${activeFamily?.memberCount || 1} 人`}
+                </span>
+              </div>
+              <div className="flex justify-between items-center py-1">
+                <span className="text-gray-400 font-medium">建立日期</span>
+                <span className="font-semibold text-gray-500">{formattedDate}</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Box 2: 目前身份 */}
+          <div className="bg-white border border-[#E9E2DB] rounded-2xl p-5 shadow-xs flex flex-col justify-between">
+            <div>
+              <div className="flex items-center gap-2 border-b border-gray-150 pb-3 mb-4">
+                <div className="h-8 w-8 bg-indigo-50 text-indigo-700 rounded-lg flex items-center justify-center font-bold">
+                  👤
+                </div>
+                <div>
+                  <h3 className="text-sm font-black text-gray-800">目前使用者身份</h3>
+                  <p className="text-[10px] text-gray-400">您的個人登入與系統角色</p>
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                <div className="flex items-center gap-3">
+                  {currentUser?.photoURL ? (
+                    <img src={currentUser.photoURL} alt="avatar" className="h-10 w-10 rounded-full border border-gray-200" referrerPolicy="no-referrer" />
+                  ) : (
+                    <div className="h-10 w-10 bg-indigo-50 text-indigo-600 rounded-full flex items-center justify-center font-black text-sm border border-indigo-100">
+                      {(currentUser?.displayName || "孩").substring(0, 1)}
+                    </div>
+                  )}
+                  <div>
+                    <div className="font-black text-sm text-[#3C332D]">{currentUser?.displayName || "小孩成員"}</div>
+                    <div className="text-[10px] text-gray-400 font-medium font-mono">{currentUser?.email || "帳號登入中"}</div>
+                  </div>
+                </div>
+
+                <div className="mt-4 pt-1 flex items-center justify-between">
+                  <span className="text-xs text-gray-400 font-medium">角色配置</span>
+                  <span className="text-xs font-black text-amber-700 bg-amber-50 border border-amber-200/50 px-3 py-1 rounded-full">
+                    🌱 小孩 (Kid)
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Box 3: 權限配置與說明卡片 */}
+        <div className="bg-white border border-[#E9E2DB] rounded-2xl p-5 shadow-xs space-y-4">
+          <div className="flex items-center gap-2 border-b border-gray-150 pb-3">
+            <div className="h-8 w-8 bg-[#EBF5EF] text-emerald-700 rounded-lg flex items-center justify-center font-bold">
+              📋
+            </div>
+            <div>
+              <h3 className="text-sm font-black text-gray-800">小孩身份權限說明表</h3>
+              <p className="text-[10px] text-gray-400">了解您在家庭中所擁裝的功能權限範圍</p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* Allowed rules */}
+            <div className="bg-emerald-50/20 border border-emerald-100 rounded-xl p-4 space-y-2.5">
+              <h4 className="text-xs font-extrabold text-emerald-800 flex items-center gap-1">
+                <span>✅ 允許執行事項</span>
+              </h4>
+              <ul className="text-xs text-emerald-800/80 font-bold space-y-2 list-none p-0 m-0">
+                <li className="flex items-center gap-2">
+                  <span className="text-emerald-500 text-sm">✓</span> 可查看行事曆
+                </li>
+                <li className="flex items-center gap-2">
+                  <span className="text-emerald-500 text-sm">✓</span> 可建立行程
+                </li>
+                <li className="flex items-center gap-2">
+                  <span className="text-emerald-500 text-sm">✓</span> 可建立公告
+                </li>
+                <li className="flex items-center gap-2">
+                  <span className="text-emerald-500 text-sm">✓</span> 可許願禮物
+                </li>
+                <li className="flex items-center gap-2">
+                  <span className="text-emerald-500 text-sm">✓</span> 可查看家庭成員與常用事項
+                </li>
+              </ul>
+            </div>
+
+            {/* Blocked rules */}
+            <div className="bg-[#FFEBEB]/20 border border-[#FFD5D4]/45 rounded-xl p-4 space-y-2.5">
+              <h4 className="text-xs font-extrabold text-rose-700 flex items-center gap-1">
+                <span>❌ 禁止操作事項</span>
+              </h4>
+              <ul className="text-xs text-rose-800/70 font-semibold space-y-2 list-none p-0 m-0">
+                <li className="flex items-center gap-2">
+                  <span className="text-rose-400 text-sm font-bold">✕</span> 新增、編輯或刪除家庭成員
+                </li>
+                <li className="flex items-center gap-2">
+                  <span className="text-rose-400 text-sm font-bold">✕</span> 發送受邀成員邀請碼
+                </li>
+                <li className="flex items-center gap-2">
+                  <span className="text-rose-400 text-sm font-bold">✕</span> 修改其他成員的角色與特定權限
+                </li>
+                <li className="flex items-center gap-2">
+                  <span className="text-rose-400 text-sm font-bold">✕</span> 執行白名單、系統庫與系統設定管理
+                </li>
+                <li className="flex items-center gap-2">
+                  <span className="text-rose-400 text-sm font-bold">✕</span> 使用重置系統等任何破壞性功能
+                </li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   // Check super administrator restriction
   const isAuthorizedAdmin = currentUser?.email === "juwen616@gmail.com";
 
@@ -305,25 +474,97 @@ export default function AdminCenter({
   // Handler to add whitelist
   const handleAddWhitelist = async (e: React.FormEvent) => {
     e.preventDefault();
-    const email = newWhitelistedEmail.trim().toLowerCase();
-    if (!email) return;
+    if (!newWhitelistedEmail.trim()) return;
 
-    // Check if email already in whitelist
-    const exists = whitelist.some((w) => w.email?.toLowerCase() === email);
-    if (exists) {
-      toast.error(`❌ ${email} 已經在授權名單中！`);
+    // Split input by newlines, commas, and semicolons
+    const rawTokens = newWhitelistedEmail.split(/[\n,;]/);
+    
+    // Process tokens:
+    // 1. trim()
+    // 2. toLowerCase()
+    // 3. remove spaces within (去除空白)
+    const emailMap = new Map<string, string>(); // To de-duplicate locally
+    
+    rawTokens.forEach((token) => {
+      const cleaned = token.replace(/\s+/g, "").toLowerCase();
+      if (cleaned) {
+        emailMap.set(cleaned, cleaned);
+      }
+    });
+
+    const uniqueEmails = Array.from(emailMap.values());
+    if (uniqueEmails.length === 0) {
+      toast.error("❌ 請輸入有效的 Gmail 信箱！");
       return;
+    }
+
+    // Email format validation (Regex check)
+    const validEmails: string[] = [];
+    const invalidEmails: string[] = [];
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+    uniqueEmails.forEach((email) => {
+      if (emailRegex.test(email)) {
+        validEmails.push(email);
+      } else {
+        invalidEmails.push(email);
+      }
+    });
+
+    // If there are invalid emails, format mistakes warning
+    if (invalidEmails.length > 0) {
+      toast.error(`❌ 以下 Email 格式錯誤：\n${invalidEmails.join("\n")}`, {
+        duration: 8000,
+      });
+      // Do not write invalid ones. Continue with valid ones if they exist.
+      if (validEmails.length === 0) {
+        return;
+      }
     }
 
     setSubmittingWhitelist(true);
     try {
-      const whitelistId = `cw_${Math.random().toString(36).substr(2, 9)}`;
-      await setDoc(doc(db, "allowed_family_creators", whitelistId), {
-        email,
-        status: "active",
-        createdAt: new Date().toISOString(),
+      // Check existing whitelist in local state
+      const addedEmails: string[] = [];
+      let skippedCount = 0;
+
+      validEmails.forEach((email) => {
+        const alreadyExists = whitelist.some(
+          (w) => w.email?.toLowerCase() === email
+        );
+        if (alreadyExists) {
+          skippedCount++;
+        } else {
+          addedEmails.push(email);
+        }
       });
-      toast.success(`🎉 成功將 ${email} 加入白名單！`);
+
+      if (addedEmails.length > 0) {
+        // Write batch
+        const batch = writeBatch(db);
+        addedEmails.forEach((email) => {
+          const whitelistId = `cw_${Math.random().toString(36).substr(2, 9)}`;
+          const docRef = doc(db, "allowed_family_creators", whitelistId);
+          batch.set(docRef, {
+            email,
+            status: "active",
+            createdAt: new Date().toISOString(),
+          });
+        });
+        await batch.commit();
+      }
+
+      // Show success message
+      if (addedEmails.length > 0) {
+        if (skippedCount > 0) {
+          toast.success(`✓ 新增成功 ${addedEmails.length} 筆\n略過已存在 ${skippedCount} 筆`);
+        } else {
+          toast.success(`🎉 成功新增 ${addedEmails.length} 位授權管理員`);
+        }
+      } else if (skippedCount > 0) {
+        toast.success(`✓ 略過已存在 ${skippedCount} 筆 (皆已在白名單中)`);
+      }
+
       setNewWhitelistedEmail("");
       await fetchAdminData();
     } catch (err: any) {
@@ -1160,7 +1401,7 @@ export default function AdminCenter({
               
               {/* Whitelist Addition Block */}
               <div className="bg-[#FAF8F5]/50 border border-[#EFEAE2] rounded-2xl p-5 space-y-4">
-                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
+                <div className="flex flex-col gap-4 row-start-1">
                   <div>
                     <h3 className="text-xs font-black text-gray-800 flex items-center gap-1">
                       <LockKeyhole className="h-3.5 w-3.5 text-indigo-600" />
@@ -1169,23 +1410,25 @@ export default function AdminCenter({
                     <p className="text-[10px] text-gray-400 mt-0.5">授權對應的 Gmail 可在平台上創立、並命名自己的家庭（亦即 Mommy 擁有者）</p>
                   </div>
 
-                  <form onSubmit={handleAddWhitelist} className="flex gap-2 w-full sm:w-auto">
-                    <input
-                      type="email"
+                  <form onSubmit={handleAddWhitelist} className="w-full space-y-3">
+                    <textarea
+                      rows={6}
                       required
-                      placeholder="請輸入預授權之 Gmail 信箱"
+                      placeholder={"請輸入 Gmail\n\n每行一筆\n\n例如：\nabc@gmail.com\ndef@gmail.com\nghi@gmail.com"}
                       value={newWhitelistedEmail}
                       onChange={(e) => setNewWhitelistedEmail(e.target.value)}
-                      className="text-xs border border-[#E5E1DA] bg-white rounded-xl px-3 py-2 w-full sm:w-64 focus:outline-none placeholder-gray-450 font-semibold"
+                      className="text-xs border border-[#E5E1DA] bg-white rounded-xl px-3.5 py-2.5 w-full focus:outline-none focus:ring-1 focus:ring-indigo-500 placeholder-gray-405 font-mono leading-relaxed"
                     />
-                    <button
-                      type="submit"
-                      disabled={submittingWhitelist || !newWhitelistedEmail}
-                      className="flex items-center gap-1 text-xs text-white bg-indigo-600 hover:bg-indigo-500 px-4 py-2 rounded-xl transition cursor-pointer shrink-0 font-bold active:scale-95 text-nowrap"
-                    >
-                      <Plus className="h-3 w-3" />
-                      <span>授權開通</span>
-                    </button>
+                    <div className="flex justify-end">
+                      <button
+                        type="submit"
+                        disabled={submittingWhitelist || !newWhitelistedEmail.trim()}
+                        className="flex items-center gap-1.5 text-xs text-white bg-indigo-600 hover:bg-indigo-500 px-5 py-2.5 rounded-xl transition cursor-pointer shrink-0 font-bold active:scale-95 text-nowrap shadow-sm"
+                      >
+                        <Plus className="h-3.5 w-3.5" />
+                        <span>➕ 授權開通</span>
+                      </button>
+                    </div>
                   </form>
                 </div>
               </div>

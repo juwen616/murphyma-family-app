@@ -319,17 +319,8 @@ export default function App() {
     return base as UserProfile;
   }, [developerModeActive, simulatedRole, simulatedMemberId, simulatedFamilyId, currentUserProfile, familyMembers]);
 
-  // Restrict navigation if Kid or Pet (auto fallback) - must be declared before any conditional returns
-  useEffect(() => {
-    if (effectiveUserProfile) {
-      const isKidOrPet = effectiveUserProfile.role === UserRole.KID || effectiveUserProfile.role === UserRole.PET;
-      if (isKidOrPet && (activePage === "favorites" || activePage === "members" || activePage === "special-periods")) {
-        setActivePage("home");
-      }
-    }
-  }, [effectiveUserProfile?.role, activePage]);
 
-  // Scroll to section helper for mobile single-page interface
+  // Mobile single-page interface helper
   const handleScrollToSection = (id: string, sectionKey: string) => {
     if (activePage === "admin") {
       setActivePage("home");
@@ -4683,42 +4674,59 @@ function generateTemplateDates(startDateStr: string, weekdays: number[], count: 
                 禮物中心
               </button>
 
-              {effectiveUserProfile && (effectiveUserProfile.role === UserRole.ADMIN || effectiveUserProfile.role === UserRole.PARENT) && (
+               {effectiveUserProfile && (
+                effectiveUserProfile.role === UserRole.ADMIN || 
+                effectiveUserProfile.role === UserRole.PARENT || 
+                (effectiveUserProfile.role as any) === UserRole.CHILD || 
+                (effectiveUserProfile.role as any) === "Child"
+              ) && (
                 <button
                   onClick={() => setActivePage("favorites")}
-                  className={`px-5 py-2.5 text-sm md:text-base font-black rounded-full transition-all duration-200 border cursor-pointer whitespace-nowrap ${
+                  className={`px-5 py-2.5 text-sm md:text-base font-black rounded-full transition-all duration-200 border cursor-pointer whitespace-nowrap flex items-center gap-1.5 ${
                     activePage === "favorites"
                       ? "bg-[#F5EBE6] text-[#7C6354] border-[#E7DCD5] shadow-sm font-extrabold"
                       : "bg-white text-[#666666] border-[#E5E1DA] hover:bg-gray-50/55"
                   }`}
                 >
-                  常用事項
+                  <span>常用事項</span>
+                  {((effectiveUserProfile.role as any) === UserRole.CHILD || (effectiveUserProfile.role as any) === "Child") && (
+                    <span className="text-[9px] font-black text-[#D97706] bg-[#FFF1E6] px-1.5 py-0.5 rounded-full border border-amber-200/20 shadow-xs">👀 唯讀</span>
+                  )}
                 </button>
               )}
 
-              {effectiveUserProfile && (effectiveUserProfile.role === UserRole.ADMIN || effectiveUserProfile.role === UserRole.PARENT) && (
-                <button
-                  onClick={() => setActivePage("special-periods")}
-                  className={`px-5 py-2.5 text-sm md:text-base font-black rounded-full transition-all duration-200 border cursor-pointer whitespace-nowrap ${
-                    activePage === "special-periods"
-                      ? "bg-[#F5EBE6] text-[#7C6354] border-[#E7DCD5] shadow-sm font-extrabold"
-                      : "bg-white text-[#666666] border-[#E5E1DA] hover:bg-gray-50/55"
-                  }`}
-                >
-                  特別期間安排
-                </button>
-              )}
+              <button
+                onClick={() => setActivePage("special-periods")}
+                className={`px-5 py-2.5 text-sm md:text-base font-black rounded-full transition-all duration-200 border cursor-pointer whitespace-nowrap flex items-center gap-1.5 ${
+                  activePage === "special-periods"
+                    ? "bg-[#F5EBE6] text-[#7C6354] border-[#E7DCD5] shadow-sm font-extrabold"
+                    : "bg-white text-[#666666] border-[#E5E1DA] hover:bg-gray-50/55"
+                }`}
+              >
+                <span>特別安排</span>
+                {effectiveUserProfile && ((effectiveUserProfile.role as any) === UserRole.CHILD || (effectiveUserProfile.role as any) === "Child") && (
+                  <span className="text-[9px] font-black text-[#D97706] bg-[#FFF1E6] px-1.5 py-0.5 rounded-full border border-amber-200/20 shadow-xs">👀 唯讀</span>
+                )}
+              </button>
 
-              {effectiveUserProfile && (effectiveUserProfile.role === UserRole.ADMIN || effectiveUserProfile.role === UserRole.PARENT) && (
+              {effectiveUserProfile && (
+                effectiveUserProfile.role === UserRole.ADMIN || 
+                effectiveUserProfile.role === UserRole.PARENT || 
+                (effectiveUserProfile.role as any) === UserRole.CHILD || 
+                (effectiveUserProfile.role as any) === "Child"
+              ) && (
                 <button
                   onClick={() => setActivePage("members")}
-                  className={`px-5 py-2.5 text-sm md:text-base font-black rounded-full transition-all duration-200 border cursor-pointer whitespace-nowrap ${
+                  className={`px-5 py-2.5 text-sm md:text-base font-black rounded-full transition-all duration-200 border cursor-pointer whitespace-nowrap flex items-center gap-1.5 ${
                     activePage === "members"
                       ? "bg-[#F5EBE6] text-[#7C6354] border-[#E7DCD5] shadow-sm font-extrabold"
                       : "bg-white text-[#666666] border-[#E5E1DA] hover:bg-gray-50/55"
                   }`}
                 >
-                  家庭成員
+                  <span>家庭成員</span>
+                  {((effectiveUserProfile.role as any) === UserRole.CHILD || (effectiveUserProfile.role as any) === "Child") && (
+                    <span className="text-[9px] font-black text-[#D97706] bg-[#FFF1E6] px-1.5 py-0.5 rounded-full border border-amber-200/20 shadow-xs">👀 唯讀</span>
+                  )}
                 </button>
               )}
 
@@ -4733,16 +4741,19 @@ function generateTemplateDates(startDateStr: string, weekdays: number[], count: 
                 家庭記事
               </button>
 
-              {isSuperAdmin && (
+              {(isSuperAdmin || (effectiveUserProfile && ((effectiveUserProfile.role as any) === UserRole.CHILD || (effectiveUserProfile.role as any) === "Child"))) && (
                 <button
                   onClick={() => setActivePage("admin")}
-                  className={`px-5 py-2.5 text-sm md:text-base font-black rounded-full transition-all duration-200 border cursor-pointer whitespace-nowrap ${
+                  className={`px-5 py-2.5 text-sm md:text-base font-black rounded-full transition-all duration-150 border cursor-pointer whitespace-nowrap flex items-center gap-1.5 ${
                     activePage === "admin"
                       ? "bg-indigo-50 text-indigo-700 border-indigo-200 shadow-sm font-extrabold"
-                      : "bg-white text-indigo-600 border-[#E5E1DA] hover:bg-indigo-50/25"
+                      : "bg-white text-indigo-650 border-[#E5E1DA] hover:bg-indigo-50/25"
                   }`}
                 >
-                  🛡️ 系統管理中心
+                  <span>🛡️ 系統管理中心</span>
+                  {((effectiveUserProfile?.role as any) === UserRole.CHILD || (effectiveUserProfile?.role as any) === "Child") && (
+                    <span className="text-[9px] font-black text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded-full border border-indigo-250/20 shadow-xs">👀 唯讀</span>
+                  )}
                 </button>
               )}
             </div>
@@ -4756,7 +4767,7 @@ function generateTemplateDates(startDateStr: string, weekdays: number[], count: 
       </header>
 
       {/* Main Content Layout */}
-      <div className="flex-grow max-w-7xl w-full mx-auto p-4 lg:p-6 pb-20 md:pb-6">
+      <div className="flex-grow max-w-7xl w-full mx-auto p-4 lg:p-6 pb-[120px] md:pb-6">
         
         {/* Primary Workspace Sections */}
         <main className="w-full">
@@ -4912,10 +4923,11 @@ function generateTemplateDates(startDateStr: string, weekdays: number[], count: 
                 />
               )}
 
-              {activePage === "admin" && isSuperAdmin && (
+              {activePage === "admin" && (isSuperAdmin || (effectiveUserProfile && ((effectiveUserProfile.role as any) === UserRole.CHILD || (effectiveUserProfile.role as any) === "Child"))) && (
                 <AdminCenter 
                   currentUser={effectiveUserProfile}
                   activeFamily={activeFamily}
+                  familyMembers={familyMembers}
                   developerModeActive={developerModeActive}
                   setDeveloperModeActive={setDeveloperModeActive}
                   setShowDevPanel={setShowDevPanel}
@@ -5150,7 +5162,7 @@ function generateTemplateDates(startDateStr: string, weekdays: number[], count: 
                   )}
 
                   {/* 系統管理 */}
-                  {activePage === "admin" && isSuperAdmin && (
+                  {activePage === "admin" && (isSuperAdmin || (effectiveUserProfile && ((effectiveUserProfile.role as any) === UserRole.CHILD || (effectiveUserProfile.role as any) === "Child"))) && (
                     <div id="mobile-view-admin" className="animate-in fade-in duration-200 space-y-4">
                       <div className="flex items-center gap-2 mb-1">
                         <button
@@ -5163,6 +5175,7 @@ function generateTemplateDates(startDateStr: string, weekdays: number[], count: 
                       <AdminCenter 
                         currentUser={effectiveUserProfile}
                         activeFamily={activeFamily}
+                        familyMembers={familyMembers}
                         developerModeActive={developerModeActive}
                         setDeveloperModeActive={setDeveloperModeActive}
                         setShowDevPanel={setShowDevPanel}
@@ -5185,71 +5198,93 @@ function generateTemplateDates(startDateStr: string, weekdays: number[], count: 
                   )}
 
                   {/* 獨立更多功能頁面 (2x2 Grid) */}
-                  {activePage === "more" && (
-                    <div className="animate-in fade-in duration-200 space-y-4 text-[#3C332D]">
-                      <div className="border-b border-[#F5F2EB] pb-2">
-                        <h2 className="text-base font-black text-gray-700 flex items-center gap-1.5">
-                          <span>⚙️</span> 更多功能
-                        </h2>
-                        <p className="text-xs text-gray-400 mt-0.5">家庭管理與備事清單</p>
-                      </div>
+                  {activePage === "more" && (() => {
+                    const isKid = (effectiveUserProfile?.role as any) === UserRole.CHILD || (effectiveUserProfile?.role as any) === "Child";
+                    return (
+                      <div className="animate-in fade-in duration-200 space-y-4 text-[#3C332D]">
+                        <div className="border-b border-[#F5F2EB] pb-2">
+                          <h2 className="text-base font-black text-gray-700 flex items-center gap-1.5">
+                            <span>⚙️</span> 更多功能
+                          </h2>
+                          <p className="text-xs text-gray-400 mt-0.5">家庭管理與備事清單</p>
+                        </div>
 
-                      <div className="grid grid-cols-2 gap-3 pt-1">
-                        {/* 1. 常用事項 */}
-                        <button
-                          onClick={() => setActivePage("favorites")}
-                          className="p-3 bg-white border border-[#EFEAE2] rounded-2xl text-left flex flex-col justify-between min-h-[95px] shadow-xs active:scale-97 hover:border-amber-200 transition cursor-pointer"
-                        >
-                          <div className="h-7 w-7 bg-amber-50 rounded-lg flex items-center justify-center text-[#7C6354]">
-                            <Sparkles className="h-4 w-4 text-amber-500" />
-                          </div>
-                          <div>
-                            <h3 className="text-[12px] font-black mt-1.5">⚡ 常用事項</h3>
-                            <p className="text-[9px] text-gray-400 leading-tight mt-0.5">常用行程快速建檔</p>
-                          </div>
-                        </button>
+                        <div className="grid grid-cols-2 gap-3 pt-1">
+                          {/* 1. 常用事項 */}
+                          <button
+                            onClick={() => setActivePage("favorites")}
+                            className="p-3 bg-white border border-[#EFEAE2] rounded-2xl text-left flex flex-col justify-between min-h-[95px] shadow-xs active:scale-97 hover:border-amber-200 transition cursor-pointer relative"
+                          >
+                            <div className="h-7 w-7 bg-amber-50 rounded-lg flex items-center justify-center text-[#7C6354]">
+                              <Sparkles className="h-4 w-4 text-amber-500" />
+                            </div>
+                            {isKid && (
+                              <span className="absolute top-2 right-2 text-[8px] font-black tracking-wide text-[#D97706] bg-[#FFF9F1] border border-amber-200/50 px-1.5 py-0.5 rounded-full select-none shadow-[inset_0_1px_2px_rgba(230,190,120,0.1)]">
+                                🔒 僅查看
+                              </span>
+                            )}
+                            <div>
+                              <h3 className="text-[12px] font-black mt-1.5">⚡ 常用事項</h3>
+                              <p className="text-[9px] text-gray-400 leading-tight mt-0.5">常用行程快速建檔</p>
+                            </div>
+                          </button>
 
-                        {/* 2. 特別期間安排 */}
-                        <button
-                          onClick={() => setActivePage("special-periods")}
-                          className="p-3 bg-white border border-[#EFEAE2] rounded-2xl text-left flex flex-col justify-between min-h-[95px] shadow-xs active:scale-97 hover:border-indigo-200 transition cursor-pointer"
-                        >
-                          <div className="h-7 w-7 bg-indigo-50 rounded-lg flex items-center justify-center text-indigo-650">
-                            <CalendarDays className="h-4 w-4 text-[#7559AC]" />
-                          </div>
-                          <div>
-                            <h3 className="text-[12px] font-black mt-1.5">🏕️ 特別安排</h3>
-                            <p className="text-[9px] text-gray-400 leading-tight mt-0.5">寒暑假與大假計畫</p>
-                          </div>
-                        </button>
+                          {/* 2. 特別期間安排 */}
+                          <button
+                            onClick={() => setActivePage("special-periods")}
+                            className="p-3 bg-white border border-[#EFEAE2] rounded-2xl text-left flex flex-col justify-between min-h-[95px] shadow-xs active:scale-97 hover:border-indigo-200 transition cursor-pointer relative"
+                          >
+                            <div className="h-7 w-7 bg-indigo-50 rounded-lg flex items-center justify-center text-indigo-650">
+                              <CalendarDays className="h-4 w-4 text-[#7559AC]" />
+                            </div>
+                            {isKid && (
+                              <span className="absolute top-2 right-2 text-[8px] font-black tracking-wide text-[#D97706] bg-[#FFF9F1] border border-amber-200/50 px-1.5 py-0.5 rounded-full select-none shadow-[inset_0_1px_2px_rgba(230,190,120,0.1)]">
+                                🔒 僅查看
+                              </span>
+                            )}
+                            <div>
+                              <h3 className="text-[12px] font-black mt-1.5">🏕️ 特別安排</h3>
+                              <p className="text-[9px] text-gray-400 leading-tight mt-0.5">寒暑假與大假計畫</p>
+                            </div>
+                          </button>
 
-                        {/* 3. 家庭成員 */}
-                        <button
-                          onClick={() => setActivePage("members")}
-                          className="p-3 bg-white border border-[#EFEAE2] rounded-2xl text-left flex flex-col justify-between min-h-[95px] shadow-xs active:scale-97 hover:border-teal-200 transition cursor-pointer"
-                        >
-                          <div className="h-7 w-7 bg-[#EBF5EF] rounded-lg flex items-center justify-center text-[#4A6076]">
-                            <Users className="h-4 w-4 text-[#4A6076]" />
-                          </div>
-                          <div>
-                            <h3 className="text-[12px] font-black mt-1.5">👨‍👩‍👧‍👦 家庭成員</h3>
-                            <p className="text-[9px] text-gray-400 leading-tight mt-0.5">成員角色與權限</p>
-                          </div>
-                        </button>
+                          {/* 3. 家庭成員 */}
+                          <button
+                            onClick={() => setActivePage("members")}
+                            className="p-3 bg-white border border-[#EFEAE2] rounded-2xl text-left flex flex-col justify-between min-h-[95px] shadow-xs active:scale-97 hover:border-teal-200 transition cursor-pointer relative"
+                          >
+                            <div className="h-7 w-7 bg-[#EBF5EF] rounded-lg flex items-center justify-center text-[#4A6076]">
+                              <Users className="h-4 w-4 text-[#4A6076]" />
+                            </div>
+                            {isKid && (
+                              <span className="absolute top-2 right-2 text-[8px] font-black tracking-wide text-[#D97706] bg-[#FFF9F1] border border-amber-200/50 px-1.5 py-0.5 rounded-full select-none shadow-[inset_0_1px_2px_rgba(230,190,120,0.1)]">
+                                🔒 僅查看
+                              </span>
+                            )}
+                            <div>
+                              <h3 className="text-[12px] font-black mt-1.5">👨‍👩‍👧‍👦 家庭成員</h3>
+                              <p className="text-[9px] text-gray-400 leading-tight mt-0.5">成員角色與權限</p>
+                            </div>
+                          </button>
 
-                        {/* 4. 系統管理 */}
-                        <button
-                          onClick={() => setActivePage("admin")}
-                          className="p-3 bg-white border border-[#EFEAE2] rounded-2xl text-left flex flex-col justify-between min-h-[95px] shadow-xs active:scale-97 hover:border-indigo-200 transition cursor-pointer"
-                        >
-                          <div className="h-7 w-7 bg-indigo-50 rounded-lg flex items-center justify-center">
-                            <Settings className="h-4 w-4 text-indigo-600" />
-                          </div>
-                          <div>
-                            <h3 className="text-[12px] font-black mt-1.5">🛡️ 系統管理</h3>
-                            <p className="text-[9px] text-gray-400 leading-tight mt-0.5">模擬測試與重置</p>
-                          </div>
-                        </button>
+                          {/* 4. 系統管理 */}
+                          <button
+                            onClick={() => setActivePage("admin")}
+                            className="p-3 bg-white border border-[#EFEAE2] rounded-2xl text-left flex flex-col justify-between min-h-[95px] shadow-xs active:scale-97 hover:border-indigo-200 transition cursor-pointer relative"
+                          >
+                            <div className="h-7 w-7 bg-indigo-50 rounded-lg flex items-center justify-center">
+                              <Settings className="h-4 w-4 text-indigo-600" />
+                            </div>
+                            {isKid && (
+                              <span className="absolute top-2 right-2 text-[8px] font-black tracking-wide text-[#D97706] bg-[#FFF9F1] border border-amber-200/50 px-1.5 py-0.5 rounded-full select-none shadow-[inset_0_1px_2px_rgba(230,190,120,0.1)]">
+                                🔒 僅查看
+                              </span>
+                            )}
+                            <div>
+                              <h3 className="text-[12px] font-black mt-1.5">🛡️ 系統管理</h3>
+                              <p className="text-[9px] text-gray-400 leading-tight mt-0.5">模擬測試與重置</p>
+                            </div>
+                          </button>
 
                         {/* 5. 家庭記事 */}
                         <button
@@ -5299,7 +5334,8 @@ function generateTemplateDates(startDateStr: string, weekdays: number[], count: 
                         </div>
                       </div>
                     </div>
-                  )}
+                  );
+                })()}
                 </>
               )}
             </div>
@@ -5308,80 +5344,93 @@ function generateTemplateDates(startDateStr: string, weekdays: number[], count: 
       </div>
 
       {/* MOBILE BOTTOM FIXED QUICK BAR */}
-      <div id="mobile-bottom-quickbar" className="fixed bottom-0 left-0 right-0 h-14 bg-white border-t border-[#EFEAE2] shadow-[0_-4px_12px_rgba(0,0,0,0.03)] md:hidden flex items-center justify-around z-50 select-none pb-safe">
+      <div 
+        id="mobile-bottom-quickbar" 
+        className="fixed bottom-0 left-0 right-0 bg-white border-t border-[#EFEAE2] shadow-[0_-4px_16px_rgba(0,0,0,0.04)] md:hidden flex items-center justify-around z-50 select-none px-2"
+        style={{ 
+          height: "calc(80px + env(safe-area-inset-bottom, 0px))", 
+          paddingBottom: "max(12px, env(safe-area-inset-bottom, 0px))",
+          paddingTop: "6px"
+        }}
+      >
         <button
           onClick={() => {
             setActivePage("home");
           }}
-          className={`flex flex-col items-center justify-center flex-1 h-full transition-all cursor-pointer ${
+          style={{ minWidth: "72px", minHeight: "72px" }}
+          className={`flex flex-col items-center justify-center flex-1 py-1 px-2 rounded-[16px] transition-all duration-150 cursor-pointer ${
             activePage === "home"
-              ? "text-[#7C6354] font-extrabold"
-              : "text-gray-400 font-medium hover:text-[#7C6354]"
+              ? "bg-[#FFF7E8] text-[#8B6B56] font-bold"
+              : "text-gray-400 font-semibold hover:text-[#7C6354]"
           }`}
         >
-          <Home className={`h-5 w-5 ${activePage === "home" ? "stroke-[2.5px]" : "stroke-[1.8px]"}`} />
-          <span className="text-[10px] mt-1">首頁</span>
+          <Home className={`h-7 w-7 ${activePage === "home" ? "stroke-[2.5px]" : "stroke-[1.8px]"}`} />
+          <span className="text-[14px] mt-0.5 font-semibold">首頁</span>
         </button>
 
         <button
           onClick={() => {
             setActivePage("calendar");
           }}
-          className={`flex flex-col items-center justify-center flex-1 h-full transition-all cursor-pointer ${
+          style={{ minWidth: "72px", minHeight: "72px" }}
+          className={`flex flex-col items-center justify-center flex-1 py-1 px-2 rounded-[16px] transition-all duration-150 cursor-pointer ${
             activePage === "calendar"
-              ? "text-[#7C6354] font-extrabold"
-              : "text-gray-400 font-medium hover:text-[#7C6354]"
+              ? "bg-[#FFF7E8] text-[#8B6B56] font-bold"
+              : "text-gray-400 font-semibold hover:text-[#7C6354]"
           }`}
         >
-          <CalendarDays className={`h-5 w-5 ${activePage === "calendar" ? "stroke-[2.5px]" : "stroke-[1.8px]"}`} />
-          <span className="text-[10px] mt-1">行事曆</span>
+          <CalendarDays className={`h-7 w-7 ${activePage === "calendar" ? "stroke-[2.5px]" : "stroke-[1.8px]"}`} />
+          <span className="text-[14px] mt-0.5 font-semibold">行事曆</span>
         </button>
 
         <button
           onClick={() => {
             setActivePage("tasks");
           }}
-          className={`flex flex-col items-center justify-center flex-1 h-full transition-all cursor-pointer ${
+          style={{ minWidth: "72px", minHeight: "72px" }}
+          className={`flex flex-col items-center justify-center flex-1 py-1 px-2 rounded-[16px] transition-all duration-150 cursor-pointer ${
             activePage === "tasks"
-              ? "text-[#7C6354] font-extrabold"
-              : "text-gray-400 font-medium hover:text-[#7C6354]"
+              ? "bg-[#FFF7E8] text-[#8B6B56] font-bold"
+              : "text-gray-400 font-semibold hover:text-[#7C6354]"
           }`}
         >
-          <ClipboardList className={`h-5 w-5 ${activePage === "tasks" ? "stroke-[2.5px]" : "stroke-[1.8px]"}`} />
-          <span className="text-[10px] mt-1">任務</span>
+          <ClipboardList className={`h-7 w-7 ${activePage === "tasks" ? "stroke-[2.5px]" : "stroke-[1.8px]"}`} />
+          <span className="text-[14px] mt-0.5 font-semibold">任務</span>
         </button>
 
         <button
           onClick={() => {
             setActivePage("rewards");
           }}
-          className={`flex flex-col items-center justify-center flex-1 h-full transition-all cursor-pointer ${
+          style={{ minWidth: "72px", minHeight: "72px" }}
+          className={`flex flex-col items-center justify-center flex-1 py-1 px-2 rounded-[16px] transition-all duration-150 cursor-pointer ${
             activePage === "rewards"
-              ? "text-[#7C6354] font-extrabold"
-              : "text-gray-400 font-medium hover:text-[#7C6354]"
+              ? "bg-[#FFF7E8] text-[#8B6B56] font-bold"
+              : "text-gray-400 font-semibold hover:text-[#7C6354]"
           }`}
         >
-          <Gift className={`h-5 w-5 ${activePage === "rewards" ? "stroke-[2.5px]" : "stroke-[1.8px]"}`} />
-          <span className="text-[10px] mt-1">禮物</span>
+          <Gift className={`h-7 w-7 ${activePage === "rewards" ? "stroke-[2.5px]" : "stroke-[1.8px]"}`} />
+          <span className="text-[14px] mt-0.5 font-semibold">禮物</span>
         </button>
 
         <button
           onClick={() => {
             setActivePage("more");
           }}
-          className={`flex flex-col items-center justify-center flex-1 h-full transition-all cursor-pointer ${
+          style={{ minWidth: "72px", minHeight: "72px" }}
+          className={`flex flex-col items-center justify-center flex-1 py-1 px-2 rounded-[16px] transition-all duration-150 cursor-pointer ${
             ["more", "favorites", "special-periods", "members", "admin"].includes(activePage)
-              ? "text-[#7C6354] font-extrabold"
-              : "text-gray-400 font-medium hover:text-[#7C6354]"
+              ? "bg-[#FFF7E8] text-[#8B6B56] font-bold"
+              : "text-gray-400 font-semibold hover:text-[#7C6354]"
           }`}
         >
-          <MoreHorizontal className={`h-5 w-5 ${["more", "favorites", "special-periods", "members", "admin"].includes(activePage) ? "stroke-[2.5px]" : "stroke-[1.8px]"}`} />
-          <span className="text-[10px] mt-1">更多</span>
+          <MoreHorizontal className={`h-7 w-7 ${["more", "favorites", "special-periods", "members", "admin"].includes(activePage) ? "stroke-[2.5px]" : "stroke-[1.8px]"}`} />
+          <span className="text-[14px] mt-0.5 font-semibold">更多</span>
         </button>
       </div>
 
-      <footer className="bg-white border-t border-gray-100 py-4 text-center text-[10px] text-gray-400 select-none">
-        <p>© 2026 家庭生活管理中心 · 以愛為核心的極簡清新設計</p>
+      <footer className="bg-white border-t border-gray-100 text-center text-[13px] font-normal text-[#9CA3AF] select-none whitespace-nowrap overflow-x-auto flex items-center justify-center" style={{ paddingTop: "24px", paddingBottom: "24px" }}>
+        <span>© 2026 麻菲麻 MurphyMa All Rights Reserved.｜用愛陪伴每個家的日常</span>
       </footer>
 
       {isSuperAdmin && developerModeActive && currentUserProfile && (
