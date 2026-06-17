@@ -1501,8 +1501,8 @@ export default function CalendarView({
               // Apply color theme backgrounds
               let cellBg = "bg-white";
               if (isToday) {
-                // Today: light pink background instead of thick red borders, satisfying design rules
-                cellBg = "bg-[#FFE9EF]/45";
+                // Today: elegant warm light beige background (slightly brighter, yet distinct)
+                cellBg = "bg-[#FCF7F0]";
               } else if (activeMode) {
                 if (activeMode.type === "travel") cellBg = "bg-[#EAF6FF]";
                 else if (activeMode.type === "exam") cellBg = "bg-[#FFF5D9]";
@@ -1541,8 +1541,10 @@ export default function CalendarView({
                       }
                     }
                   }}
-                  className={`min-h-[105px] h-[105px] md:min-h-[160px] md:h-auto p-1 md:p-2.5 border-r border-b border-[#A59D84] flex flex-col justify-start md:justify-between gap-1 md:gap-0 transition group hover:bg-[#FFFDF8]/90 cursor-pointer overflow-hidden ${cellBg} ${
-                    isToday ? "shadow-[0_0_18px_rgba(255,255,255,1.0),inset_0_0_10px_rgba(255,255,255,0.7)] relative z-25 border-white border-[3px] scale-[1.01]" : ""
+                  className={`min-h-[105px] h-[105px] md:min-h-[160px] md:h-auto p-1 md:p-2.5 flex flex-col justify-start md:justify-between gap-1 md:gap-0 transition group hover:bg-[#FFFDF8]/90 cursor-pointer overflow-hidden ${cellBg} ${
+                    isToday 
+                      ? "border-[#A78B75] border-2 relative z-25 shadow-[0_0_10px_rgba(167,139,117,0.35)] scale-[1.01]" 
+                      : "border-r border-b border-[#A59D84]"
                   }`}
                 >
                   {/* MOBILE VIEW COMPACT CELL */}
@@ -1698,12 +1700,6 @@ export default function CalendarView({
                           {activeMode.type === "exam" && "📚考試"}
                           {activeMode.type === "vacation" && "🏕假期"}
                           {activeMode.type === "custom" && "🏠自訂"}
-                        </span>
-                      )}
-
-                      {isToday && !holiday && !activeMode && (
-                        <span className="text-[9px] font-sans font-black text-[#EAA59E] bg-white border border-[#EAA59E]/30 px-2 py-0.5 rounded-full scale-90 animate-pulse">
-                          今天
                         </span>
                       )}
                     </div>

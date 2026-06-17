@@ -1,5 +1,5 @@
 {
-  "name": "Family Schedule V2",
+  "name": "家庭生活管理中心",
   "description": "家庭生活管理中心：包含日曆、任務指派、常用事項、禮物與成員中心，專為家庭設計的繁體中文生活行事曆與任務獎勵系統。",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]

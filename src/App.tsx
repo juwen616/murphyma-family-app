@@ -5381,7 +5381,7 @@ function generateTemplateDates(startDateStr: string, weekdays: number[], count: 
       </div>
 
       <footer className="bg-white border-t border-gray-100 py-4 text-center text-[10px] text-gray-400 select-none">
-        <p>© 2026 家庭生活管理中心 Family Schedule V2 · 以愛為核心的極簡清新設計</p>
+        <p>© 2026 家庭生活管理中心 · 以愛為核心的極簡清新設計</p>
       </footer>
 
       {isSuperAdmin && developerModeActive && currentUserProfile && (
