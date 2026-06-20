@@ -991,7 +991,7 @@ export default function TaskSystem({
 
           return (
             <div className="fixed inset-0 bg-[#3C332D]/40 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-in fade-in duration-150 select-none font-sans">
-              <div className="bg-white rounded-[24px] border border-rose-100 p-6 lg:p-8 max-w-sm w-full shadow-2xl relative text-center space-y-4">
+              <div className="bg-white rounded-[24px] border border-rose-100 p-6 lg:p-8 max-w-sm w-full shadow-2xl relative text-center space-y-4 max-h-[85vh] overflow-y-auto pb-[max(20px,env(safe-area-inset-bottom))]">
                 <div className="mx-auto w-12 h-12 bg-rose-50 text-rose-600 rounded-full flex items-center justify-center text-xl font-bold">
                   ⚠️
                 </div>
@@ -1090,7 +1090,7 @@ export default function TaskSystem({
       {/* Editor Modal for Adding/Editing Task */}
       {showAddForm && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-[24px] border border-[#DEEFE5] p-6 md:p-8 max-w-md w-full max-h-[90vh] overflow-y-auto scrollbar-thin shadow-2xl relative font-sans animate-in fade-in duration-150">
+          <div className="bg-white rounded-[24px] border border-[#DEEFE5] p-6 md:p-8 max-w-md w-full max-h-[85vh] overflow-y-auto scrollbar-thin shadow-2xl relative font-sans animate-in fade-in duration-150 pb-[max(24px,env(safe-area-inset-bottom))]">
             <button
               onClick={() => {
                 setShowAddForm(false);
@@ -1303,7 +1303,7 @@ export default function TaskSystem({
       {/* Confirmation of submission / completed thoughts description form for Kids */}
       {showSubmitForm && (
         <div className="fixed inset-0 bg-[#3C332D]/40 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-in fade-in duration-150">
-          <div className="bg-white rounded-[24px] border border-[#EFEAE2] p-8 max-w-sm w-full soft-journal-shadow relative font-sans">
+          <div className="bg-white rounded-[24px] border border-[#EFEAE2] p-8 max-w-sm w-full soft-journal-shadow relative font-sans max-h-[85vh] overflow-y-auto pb-[max(24px,env(safe-area-inset-bottom))]">
             <button
               onClick={() => setShowSubmitForm(false)}
               className="absolute right-5 top-5 text-gray-400 hover:text-gray-700 cursor-pointer"
@@ -1388,7 +1388,7 @@ export default function TaskSystem({
       {/* Reject with Feedback dialog for parents (再努力一次) */}
       {showRejectModal && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-in fade-in duration-150">
-          <div className="bg-white rounded-2xl border border-gray-100 p-6 max-w-md w-full shadow-2xl relative font-sans">
+          <div className="bg-white rounded-2xl border border-gray-100 p-6 max-w-md w-full shadow-2xl relative font-sans max-h-[85vh] overflow-y-auto pb-[max(20px,env(safe-area-inset-bottom))]">
             <button
               onClick={() => setShowRejectModal(false)}
               className="absolute right-4 top-4 text-gray-400 hover:text-gray-700 cursor-pointer"
@@ -1457,7 +1457,7 @@ export default function TaskSystem({
       {/* Confirmation approval modal with encouragement and stars */}
       {showApproveModal && taskToApprove && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-in fade-in duration-150 animate-fade-in font-sans">
-          <div className="bg-white rounded-[24px] border border-[#DEEFE5] p-8 max-w-md w-full shadow-2xl relative">
+          <div className="bg-white rounded-[24px] border border-[#DEEFE5] p-8 max-w-md w-full shadow-2xl relative max-h-[85vh] overflow-y-auto pb-[max(24px,env(safe-area-inset-bottom))]">
             <button
               onClick={() => {
                 setShowApproveModal(false);

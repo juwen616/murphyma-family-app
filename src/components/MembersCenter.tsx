@@ -1909,7 +1909,7 @@ https://murphyma-family-app.vercel.app/`;
       {/* Member Creation/Editing form Modal */}
       {showFormModal && (
         <div className="fixed inset-0 bg-[#2D2926]/40 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-2xl border border-[#E5E1DA] p-6 max-w-sm w-full max-h-[90vh] overflow-y-auto shadow-xl relative animate-in fade-in zoom-in-95 duration-150">
+          <div className="bg-white rounded-2xl border border-[#E5E1DA] p-6 max-w-sm w-full max-h-[85vh] overflow-y-auto shadow-xl relative animate-in fade-in zoom-in-95 duration-150 pb-[max(24px,env(safe-area-inset-bottom))]">
             <button
               onClick={() => {
                 setShowFormModal(false);
@@ -2232,7 +2232,7 @@ https://murphyma-family-app.vercel.app/`;
       {/* Historical Records logs Modal */}
       {viewingRecordMember && (
         <div className="fixed inset-0 bg-[#2D2926]/40 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-in fade-in duration-150">
-          <div className="bg-white rounded-2xl border border-[#E5E1DA] p-6 max-w-lg w-full max-h-[85vh] overflow-y-auto shadow-xl relative flex flex-col font-sans">
+          <div className="bg-white rounded-2xl border border-[#E5E1DA] p-6 max-w-lg w-full max-h-[85vh] overflow-y-auto shadow-xl relative flex flex-col font-sans pb-[max(24px,env(safe-area-inset-bottom))]">
             <button
               onClick={() => setViewingRecordMember(null)}
               className="absolute right-4 top-4 text-gray-400 hover:text-gray-700 transition cursor-pointer animate-none"
@@ -2325,7 +2325,7 @@ https://murphyma-family-app.vercel.app/`;
       {/* Custom React-level deletion modal for period modes */}
       {confirmDeleteId && (
         <div id="delete-mode-modal" className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-in fade-in duration-200">
-          <div className="bg-white rounded-[24px] border border-gray-100 p-6 max-w-sm w-full shadow-2xl space-y-5 text-center font-sans">
+          <div className="bg-white rounded-[24px] border border-gray-100 p-6 max-w-sm w-full shadow-2xl space-y-5 text-center font-sans max-h-[85vh] overflow-y-auto pb-[max(24px,env(safe-area-inset-bottom))]">
             <div className="mx-auto h-12 w-12 bg-red-50 text-red-500 rounded-full flex items-center justify-center">
               <AlertCircle className="h-6 w-6 stroke-red-500" />
             </div>
@@ -2386,7 +2386,7 @@ https://murphyma-family-app.vercel.app/`;
       {/* Mode Schedule Scheduler form Modal */}
       {showModeModal && (
         <div className="fixed inset-0 bg-[#2D2926]/40 backdrop-blur-sm flex items-center justify-center p-4 z-50 overflow-y-auto">
-          <div className="bg-white rounded-2xl border border-[#E5E1DA] p-6 max-w-lg w-full shadow-2xl relative my-8 animate-in fade-in zoom-in-95 duration-150">
+          <div className="bg-white rounded-2xl border border-[#E5E1DA] p-6 max-w-lg w-full shadow-2xl relative my-8 animate-in fade-in zoom-in-95 duration-150 max-h-[85vh] overflow-y-auto pb-[max(24px,env(safe-area-inset-bottom))]">
             <button
               onClick={() => setShowModeModal(false)}
               className="absolute top-4 right-4 p-1.5 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition cursor-pointer"
@@ -2855,7 +2855,7 @@ https://murphyma-family-app.vercel.app/`;
       {/* ⚠️ Custom Cozy Confirmation Modal */}
       {confirmDialog.isOpen && (
         <div className="fixed inset-0 bg-[#2D2926]/40 backdrop-blur-[2px] flex items-center justify-center p-4 z-[9999] animate-in fade-in duration-100">
-          <div className="bg-[#FFFDF9] rounded-2xl border border-[#F2ECE5] p-5 max-w-sm w-full shadow-lg relative flex flex-col font-sans">
+          <div className="bg-[#FFFDF9] rounded-2xl border border-[#F2ECE5] p-5 max-w-sm w-full shadow-lg relative flex flex-col font-sans max-h-[85vh] overflow-y-auto pb-[max(20px,env(safe-area-inset-bottom))]">
             <h3 className="text-sm font-black text-[#5C4537] mb-2 border-b border-[#FAF6F0] pb-2 flex items-center gap-1.5">
               <span>⚠️</span> {confirmDialog.title}
             </h3>
@@ -2885,7 +2885,7 @@ https://murphyma-family-app.vercel.app/`;
       {/* 🟢 成員邀請建立成功 Modal */}
       {inviteSuccessData?.isOpen && (
         <div className="fixed inset-0 bg-[#2D2926]/40 backdrop-blur-sm flex items-center justify-center p-4 z-[9999] animate-in fade-in zoom-in-95 duration-150">
-          <div className="bg-white rounded-2xl border border-[#E5E1DA] p-6 max-w-md w-full shadow-2xl relative flex flex-col font-sans select-none">
+          <div className="bg-white rounded-2xl border border-[#E5E1DA] p-6 max-w-md w-full shadow-2xl relative flex flex-col font-sans select-none max-h-[85vh] overflow-y-auto pb-[max(24px,env(safe-area-inset-bottom))]">
             
             <div className="text-center pb-4 border-b border-gray-100">
               <div className="h-12 w-12 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center mx-auto mb-2 text-xl font-bold">

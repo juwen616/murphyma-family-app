@@ -283,7 +283,7 @@ export default function FavoriteMgr({
       {/* ⚡ 快速套用常用事項 Dialog */}
       {applyingTemplate && (
         <div className="fixed inset-0 bg-[#3C332D]/40 backdrop-blur-xs flex items-center justify-center p-4 z-50 font-sans animate-in fade-in duration-150">
-          <div className="bg-white rounded-3xl border border-[#EFEAE2] p-5 max-w-xs w-full soft-journal-shadow space-y-4">
+          <div className="bg-white rounded-3xl border border-[#EFEAE2] p-5 max-w-xs w-full soft-journal-shadow space-y-4 max-h-[85vh] overflow-y-auto pb-[max(20px,env(safe-area-inset-bottom))]">
             <div className="text-center">
               <span className="text-[10px] font-black uppercase tracking-wider text-amber-600 block">
                 ⚡ 秒速導入：{applyingTemplate.title}
@@ -426,7 +426,7 @@ export default function FavoriteMgr({
       {/* Confirmation dialog box */}
       {deletingTemplate && (
         <div className="fixed inset-0 bg-[#3C332D]/40 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-in fade-in duration-150 font-sans">
-          <div className="bg-white rounded-[24px] border border-[#EFEAE2] p-6 max-w-sm w-full soft-journal-shadow relative">
+          <div className="bg-white rounded-[24px] border border-[#EFEAE2] p-6 max-w-sm w-full soft-journal-shadow relative max-h-[85vh] overflow-y-auto pb-[max(20px,env(safe-area-inset-bottom))]">
             <h3 className="text-lg font-black text-[#3C332D] mb-4 flex items-center gap-2">
               ⚠️ 確認刪除常用事項
             </h3>
@@ -483,7 +483,7 @@ export default function FavoriteMgr({
       {/* Add / Edit Favorite Modal popup */}
       {showAddForm && (
         <div className="fixed inset-0 bg-[#3C332D]/40 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-[24px] border border-[#EFEAE2] p-8 max-w-md w-full soft-journal-shadow relative animate-in fade-in duration-150 font-sans">
+          <div className="bg-white rounded-[24px] border border-[#EFEAE2] p-8 max-w-md w-full soft-journal-shadow relative animate-in fade-in duration-150 font-sans max-h-[85vh] overflow-y-auto pb-[max(24px,env(safe-area-inset-bottom))]">
             <button
               onClick={() => setShowAddForm(false)}
               className="absolute right-5 top-5 text-gray-400 hover:text-gray-700 transition cursor-pointer"

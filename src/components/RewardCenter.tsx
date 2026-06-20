@@ -1597,7 +1597,7 @@ export default function RewardCenter({
       {/* MODAL 1: Add Reward popup */}
       {showAddForm && (
         <div className="fixed inset-0 bg-[#3C332D]/40 backdrop-blur-xs flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-[24px] border border-[#EFEAE2] p-6 max-w-sm w-full shadow-lg relative font-sans">
+          <div className="bg-white rounded-[24px] border border-[#EFEAE2] p-6 max-w-sm w-full shadow-lg relative font-sans max-h-[85vh] overflow-y-auto pb-[max(24px,env(safe-area-inset-bottom))]">
             <button
               onClick={() => setShowAddForm(false)}
               className="absolute right-5 top-5 text-gray-400 hover:text-[#3C332D] cursor-pointer transition"
@@ -1681,7 +1681,7 @@ export default function RewardCenter({
       {/* MODAL 2: Edit Reward popup */}
       {editingReward && (
         <div className="fixed inset-0 bg-[#3C332D]/40 backdrop-blur-xs flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-[24px] border border-[#EFEAE2] p-6 max-w-sm w-full shadow-lg relative font-sans">
+          <div className="bg-white rounded-[24px] border border-[#EFEAE2] p-6 max-w-sm w-full shadow-lg relative font-sans max-h-[85vh] overflow-y-auto pb-[max(24px,env(safe-area-inset-bottom))]">
             <button
               onClick={() => setEditingReward(null)}
               className="absolute right-5 top-5 text-gray-400 hover:text-[#3C332D] cursor-pointer transition"
@@ -1795,7 +1795,7 @@ export default function RewardCenter({
       {/* MODAL 3: Star Adjustment Center Modal */}
       {adjustType && (
         <div className="fixed inset-0 bg-[#3C332D]/40 backdrop-blur-xs flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-[24px] border border-[#EFEAE2] p-6 max-w-md w-full shadow-lg relative font-sans">
+          <div className="bg-white rounded-[24px] border border-[#EFEAE2] p-6 max-w-md w-full shadow-lg relative font-sans max-h-[85vh] overflow-y-auto pb-[max(24px,env(safe-area-inset-bottom))]">
             <button
               onClick={() => setAdjustType(null)}
               className="absolute right-5 top-5 text-gray-400 hover:text-[#3C332D] cursor-pointer transition text-lg"
@@ -1939,7 +1939,7 @@ export default function RewardCenter({
       {/* --- NEW MODAL 4: Edit Transaction Line popup (媽媽強制修正) --- */}
       {editingTransaction && (
         <div className="fixed inset-0 bg-[#3C332D]/40 backdrop-blur-xs flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-[24px] border border-[#EFEAE2] p-6 max-w-sm w-full shadow-lg relative font-sans">
+          <div className="bg-white rounded-[24px] border border-[#EFEAE2] p-6 max-w-sm w-full shadow-lg relative font-sans max-h-[85vh] overflow-y-auto pb-[max(24px,env(safe-area-inset-bottom))]">
             <button
               onClick={() => setEditingTransaction(null)}
               className="absolute right-5 top-5 text-gray-400 hover:text-[#3C332D] cursor-pointer transition"
@@ -2008,7 +2008,7 @@ export default function RewardCenter({
       {/* --- NEW MODAL 5: Edit Redemption History Item popup (媽媽強制修正) --- */}
       {editingRedemptionObj && (
         <div className="fixed inset-0 bg-[#3C332D]/40 backdrop-blur-xs flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-[24px] border border-[#EFEAE2] p-6 max-w-sm w-full shadow-lg relative font-sans">
+          <div className="bg-white rounded-[24px] border border-[#EFEAE2] p-6 max-w-sm w-full shadow-lg relative font-sans max-h-[85vh] overflow-y-auto pb-[max(24px,env(safe-area-inset-bottom))]">
             <button
               onClick={() => setEditingRedemptionObj(null)}
               className="absolute right-5 top-5 text-gray-400 hover:text-[#3C332D] cursor-pointer transition"
@@ -2092,7 +2092,7 @@ export default function RewardCenter({
       {/* --- NEW MODAL 6: RESET/归零 focused kid stars popup --- */}
       {showResetStarsForm && (
         <div className="fixed inset-0 bg-[#3C332D]/40 backdrop-blur-xs flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-[24px] border border-[#EFEAE2] p-6 max-w-sm w-full shadow-lg relative font-sans">
+          <div className="bg-white rounded-[24px] border border-[#EFEAE2] p-6 max-w-sm w-full shadow-lg relative font-sans max-h-[85vh] overflow-y-auto pb-[max(24px,env(safe-area-inset-bottom))]">
             <button
               onClick={() => setShowResetStarsForm(false)}
               className="absolute right-5 top-5 text-gray-400 hover:text-[#3C332D] cursor-pointer transition"
@@ -2144,7 +2144,7 @@ export default function RewardCenter({
       {/* 🗑️ Clear Trash Confirmation Dialog Modal */}
       {showClearTrashConfirm && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 z-55 animate-in fade-in duration-200">
-          <div className="bg-white border-2 border-[#E5E1DA] rounded-2xl max-w-sm w-full p-6 shadow-xl space-y-4 animate-in zoom-in-95 duration-200">
+          <div className="bg-white border-2 border-[#E5E1DA] rounded-2xl max-w-sm w-full p-6 shadow-xl space-y-4 animate-in zoom-in-95 duration-200 max-h-[85vh] overflow-y-auto pb-[max(24px,env(safe-area-inset-bottom))]">
             <div className="text-center space-y-2">
               <span className="text-3xl">⚠️</span>
               <h3 className="text-sm font-black text-gray-900 leading-normal">
@@ -2178,7 +2178,7 @@ export default function RewardCenter({
       {/* 🎁 Delete Gift Confirmation Dialog Modal */}
       {pendingDeleteRewardId && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 z-55 animate-in fade-in duration-200">
-          <div className="bg-white border-2 border-[#E5E1DA] rounded-2xl max-w-sm w-full p-6 shadow-xl space-y-4 animate-in zoom-in-95 duration-200">
+          <div className="bg-white border-2 border-[#E5E1DA] rounded-2xl max-w-sm w-full p-6 shadow-xl space-y-4 animate-in zoom-in-95 duration-200 max-h-[85vh] overflow-y-auto pb-[max(24px,env(safe-area-inset-bottom))]">
             <div className="text-center space-y-2.5">
               <div className="mx-auto w-10 h-10 rounded-full bg-rose-50 flex items-center justify-center border border-rose-100">
                 <Trash2 className="h-5 w-5 text-rose-500" />

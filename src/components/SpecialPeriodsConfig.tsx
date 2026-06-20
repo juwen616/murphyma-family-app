@@ -973,7 +973,7 @@ export const SpecialPeriodsConfig: React.FC<SpecialPeriodsConfigProps> = ({
       {/* 🔮 Mode Scheduling Creator Form Modal */}
       {showModeModal && (
         <div className="fixed inset-0 bg-[#2D2926]/40 backdrop-blur-sm flex items-center justify-center p-4 z-50 overflow-y-auto font-sans">
-          <div className="bg-white rounded-2xl border border-[#E5E1DA] p-6 max-w-lg w-full shadow-2xl relative my-8 animate-in fade-in zoom-in-95 duration-150">
+          <div className="bg-white rounded-2xl border border-[#E5E1DA] p-6 max-w-lg w-full shadow-2xl relative my-8 animate-in fade-in zoom-in-95 duration-150 max-h-[85vh] overflow-y-auto pb-[max(24px,env(safe-area-inset-bottom))]">
             <button
               onClick={() => setShowModeModal(false)}
               className="absolute top-4 right-4 p-1.5 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition cursor-pointer"
@@ -1668,7 +1668,7 @@ export const SpecialPeriodsConfig: React.FC<SpecialPeriodsConfigProps> = ({
       {/* Cancel delete confirmation modal box */}
       {confirmDeleteId && (
         <div className="fixed inset-0 bg-[#2D2926]/40 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-[24px] border border-[#E5E1DA] p-6 max-w-sm w-full shadow-2xl relative font-sans text-xs">
+          <div className="bg-white rounded-[24px] border border-[#E5E1DA] p-6 max-w-sm w-full shadow-2xl relative font-sans text-xs max-h-[85vh] overflow-y-auto pb-[max(24px,env(safe-area-inset-bottom))]">
             <h3 className="text-sm font-black text-red-700 flex items-center gap-1.5 pb-2 border-b border-gray-100">
               ⚠️ 撤銷特別期間安排確認
             </h3>

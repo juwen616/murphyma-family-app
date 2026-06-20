@@ -2144,7 +2144,7 @@ export default function HomeDashboard({
           {/* 📱 快速新增行程彈窗 (手機版專用) */}
           {quickAddDate && (
             <div className="fixed inset-0 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-in fade-in duration-250">
-              <div className="bg-white w-full max-w-md rounded-2xl shadow-xl overflow-hidden animate-in zoom-in-95 duration-200 border border-[#E8E2D8]">
+              <div className="bg-white w-full max-w-md rounded-2xl shadow-xl overflow-hidden animate-in zoom-in-95 duration-200 border border-[#E8E2D8] max-h-[85vh] overflow-y-auto pb-[max(16px,env(safe-area-inset-bottom))]">
                 <div className="bg-[#FAF9F6] px-5 py-4 border-b border-[#EFEAE2] flex items-center justify-between">
                   <div>
                     <h3 className="font-black text-sm text-[#3C332D]">⚡ 快速新增行程</h3>
@@ -3093,7 +3093,7 @@ export default function HomeDashboard({
               </div>
 
               {/* Fixed Footer */}
-              <div className="p-4 border-t border-gray-100 bg-[#FFFDF8] flex justify-end gap-2.5 shrink-0">
+              <div className="p-4 border-t border-gray-100 bg-[#FFFDF8] flex justify-end gap-2.5 shrink-0 pb-[max(16px,env(safe-area-inset-bottom))]">
                 <button
                   type="button"
                   onClick={() => setShowModeModal(false)}
@@ -3117,7 +3117,7 @@ export default function HomeDashboard({
       {/* Mode Schedule Cancel / Delete Confirm popup Modal overlay */}
       {confirmDeleteId && (
         <div className="fixed inset-0 bg-[#2D2926]/40 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-in fade-in duration-150">
-          <div className="bg-white rounded-[24px] border border-[#E5E1DA] p-6 max-w-sm w-full shadow-2xl relative font-sans text-xs">
+          <div className="bg-white rounded-[24px] border border-[#E5E1DA] p-6 max-w-sm w-full shadow-2xl relative font-sans text-xs max-h-[85vh] overflow-y-auto pb-[max(16px,env(safe-area-inset-bottom))]">
             <h3 className="text-sm font-black text-red-700 flex items-center gap-1.5 pb-2 border-b border-gray-100">
               ⚠️ 撤銷特殊期間規劃確認
             </h3>
@@ -3625,7 +3625,7 @@ export default function HomeDashboard({
       {/* 🔮 1. ANNOUNCEMENT DETAILS POPUP MODAL */}
       {selectedAnnouncement && (
         <div className="fixed inset-0 bg-[#3C332D]/40 backdrop-blur-xs z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
-          <div className="bg-white rounded-[24px] border border-[#EFEAE2] p-5 w-full max-w-sm shadow-2xl relative space-y-4 font-sans text-xs">
+          <div className="bg-white rounded-[24px] border border-[#EFEAE2] p-5 w-full max-w-sm shadow-2xl relative space-y-4 font-sans text-xs max-h-[85vh] overflow-y-auto pb-[max(16px,env(safe-area-inset-bottom))]">
             <button
               onClick={() => setSelectedAnnouncement(null)}
               className="absolute right-3.5 top-3.5 p-1 rounded-full bg-gray-100 hover:bg-gray-200 text-gray-500 cursor-pointer"
@@ -3670,7 +3670,7 @@ export default function HomeDashboard({
       {/* 🏡 1b. ANNOUNCEMENT DELETE CONFIRMED POPUP OVERLAY */}
       {showDeleteAnnConfirm && announcementToDelete && (
         <div className="fixed inset-0 bg-[#3C332D]/40 backdrop-blur-xs z-[60] flex items-center justify-center p-4 animate-in fade-in duration-200">
-          <div className="bg-white rounded-[24px] border border-[#EFEAE2] p-6 w-full max-w-sm shadow-2xl relative space-y-4 font-sans text-xs">
+          <div className="bg-white rounded-[24px] border border-[#EFEAE2] p-6 w-full max-w-sm shadow-2xl relative space-y-4 font-sans text-xs max-h-[85vh] overflow-y-auto pb-[max(16px,env(safe-area-inset-bottom))]">
             {/* Modal Header */}
             <div className="flex items-center gap-2 pb-3 border-b border-[#F5F2EB]">
               <div className="p-2 bg-rose-50 border border-rose-100 text-rose-500 rounded-xl text-lg shrink-0">
@@ -3832,7 +3832,7 @@ export default function HomeDashboard({
               )}
             </div>
 
-            <div className="pt-3 border-t border-[#F5F2EB] flex justify-end shrink-0">
+            <div className="pt-3 border-t border-[#F5F2EB] flex justify-end shrink-0 pb-[max(16px,env(safe-area-inset-bottom))]">
               <button
                 onClick={() => setShowAllAnnouncements(false)}
                 className="px-4 py-2 bg-[#7C6354] hover:bg-[#685245] text-white font-extrabold rounded-xl cursor-pointer"
@@ -3847,7 +3847,7 @@ export default function HomeDashboard({
       {/* 🔮 2b. ADD / EDIT ANNOUNCEMENT POPUP FORM MODAL */}
       {showAddAnnModal && (
         <div className="fixed inset-0 bg-[#3C332D]/40 backdrop-blur-xs z-50 flex items-center justify-center p-4 animate-in fade-in duration-250">
-          <div className="bg-white rounded-[24px] border border-[#EFEAE2] p-6 w-full max-w-sm shadow-2xl relative space-y-4 font-sans text-xs">
+          <div className="bg-white rounded-[24px] border border-[#EFEAE2] p-6 w-full max-w-sm shadow-2xl relative space-y-4 font-sans text-xs max-h-[85vh] overflow-y-auto pb-[max(20px,env(safe-area-inset-bottom))]">
             {/* Modal Header */}
             <div className="flex items-center gap-2 pb-3 border-b border-[#F5F2EB]">
               <div className="p-2 bg-[#FAF8F5] border border-[#EFEAE2] rounded-xl text-lg">
@@ -3949,7 +3949,7 @@ export default function HomeDashboard({
 
         return (
           <div className="fixed inset-0 bg-[#3C332D]/40 backdrop-blur-xs z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
-            <div className="bg-white rounded-[24px] border border-[#EFEAE2] p-5 w-full max-w-sm shadow-2xl relative space-y-4 font-sans text-xs">
+            <div className="bg-white rounded-[24px] border border-[#EFEAE2] p-5 w-full max-w-sm shadow-2xl relative space-y-4 font-sans text-xs max-h-[85vh] overflow-y-auto pb-[max(20px,env(safe-area-inset-bottom))]">
               <button
                 onClick={() => setSelectedReward(null)}
                 className="absolute right-3.5 top-3.5 p-1 rounded-full bg-gray-100 hover:bg-gray-200 text-gray-500 cursor-pointer"

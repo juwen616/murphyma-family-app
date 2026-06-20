@@ -211,7 +211,7 @@ export default function FamilyNotesView({
       {/* 📝 Dialog Modal for CRUD */}
       {showAddModal && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-in fade-in duration-250">
-          <div className="bg-[#FCFAF7] border border-[#E9E2D8] rounded-3xl p-5 w-full max-w-md shadow-2xl relative animate-in zoom-in-95 duration-200">
+          <div className="bg-[#FCFAF7] border border-[#E9E2D8] rounded-3xl p-5 w-full max-w-md shadow-2xl relative animate-in zoom-in-95 duration-200 max-h-[85vh] overflow-y-auto pb-[max(20px,env(safe-area-inset-bottom))]">
             <button
               onClick={() => setShowAddModal(false)}
               className="absolute top-4 right-4 p-1.5 rounded-full hover:bg-gray-150 text-gray-400 hover:text-gray-600 transition"

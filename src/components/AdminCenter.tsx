@@ -1863,7 +1863,7 @@ export default function AdminCenter({
       {/* FAMILY DETAILS POPUP DIALOG */}
       {selectedFamilyDetails && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-in fade-in duration-200" id="family-details-modal">
-          <div className="bg-white rounded-3xl max-w-lg w-full overflow-hidden shadow-2xl border border-gray-150 animate-in zoom-in-95 duration-200 flex flex-col max-h-[90vh]">
+          <div className="bg-white rounded-3xl max-w-lg w-full overflow-hidden shadow-2xl border border-gray-150 animate-in zoom-in-95 duration-200 flex flex-col max-h-[85vh]">
             
             {/* Modal Header */}
             <div className="bg-[#FAF8F5] p-6 border-b border-gray-150 flex justify-between items-start">
@@ -2045,7 +2045,7 @@ export default function AdminCenter({
             </div>
 
             {/* Modal Footer */}
-            <div className="bg-[#FAF8F5] border-t border-gray-150 p-4 shrink-0 flex justify-end gap-2 text-xs font-black">
+            <div className="bg-[#FAF8F5] border-t border-gray-150 p-4 pb-[max(16px,env(safe-area-inset-bottom))] shrink-0 flex justify-end gap-2 text-xs font-black z-10">
               <button
                 onClick={() => setSelectedFamilyDetails(null)}
                 className="px-5 py-2.5 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-xl transition active:scale-95 cursor-pointer font-bold"
@@ -2074,7 +2074,7 @@ export default function AdminCenter({
       {/* PERFECT CASCADE DELETE CONFIRMATION DIALOG WITH PREFLIGHT */}
       {showDeleteModal && deleteTarget && (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-in fade-in duration-200" id="cascade-delete-modal">
-          <div className="bg-white rounded-3xl max-w-lg w-full overflow-hidden shadow-2xl border border-rose-150 animate-in zoom-in-95 duration-200 flex flex-col max-h-[90vh]">
+          <div className="bg-white rounded-3xl max-w-lg w-full overflow-hidden shadow-2xl border border-rose-150 animate-in zoom-in-95 duration-200 flex flex-col max-h-[85vh]">
             
             {/* Modal Header */}
             <div className="bg-rose-50 p-6 border-b border-rose-100 flex justify-between items-start">
@@ -2186,7 +2186,7 @@ export default function AdminCenter({
             </div>
 
             {/* Modal Footer */}
-            <div className="bg-gray-50 border-t border-gray-150 p-4 shrink-0 flex justify-end gap-2 text-xs font-black">
+            <div className="bg-gray-50 border-t border-gray-150 p-4 pb-[max(16px,env(safe-area-inset-bottom))] shrink-0 flex justify-end gap-2 text-xs font-black z-10">
               <button
                 onClick={() => {
                   setShowDeleteModal(false);
@@ -2225,7 +2225,7 @@ export default function AdminCenter({
       {/* 1. Whitelist Delete Confirmation Modal */}
       {showWhitelistDeleteModal && whitelistDeleteTarget && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs font-sans">
-          <div className="bg-white border border-gray-100 rounded-3xl shadow-2xl max-w-md w-full overflow-hidden flex flex-col animate-in zoom-in duration-150">
+          <div className="bg-white border border-gray-100 rounded-3xl shadow-2xl max-w-md w-full overflow-hidden flex flex-col animate-in zoom-in duration-150 max-h-[85vh]">
             {/* Modal Header */}
             <div className="bg-rose-600/5 px-6 py-5 border-b border-rose-100 shrink-0 flex items-center gap-3">
               <div className="p-2.5 bg-rose-50 text-rose-600 rounded-2xl">
@@ -2252,7 +2252,7 @@ export default function AdminCenter({
             </div>
 
             {/* Modal Footer */}
-            <div className="bg-gray-50 border-t border-gray-150 p-4 shrink-0 flex justify-end gap-2 text-xs font-black">
+            <div className="bg-gray-50 border-t border-gray-150 p-4 pb-[max(16px,env(safe-area-inset-bottom))] shrink-0 flex justify-end gap-2 text-xs font-black z-10">
               <button
                 onClick={() => {
                   setShowWhitelistDeleteModal(false);
@@ -2285,7 +2285,7 @@ export default function AdminCenter({
       {/* 2. Family Suspension Confirmation Modal */}
       {showFamilySuspendModal && familySuspendTarget && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs font-sans">
-          <div className="bg-white border border-gray-100 rounded-3xl shadow-2xl max-w-md w-full overflow-hidden flex flex-col animate-in zoom-in duration-150">
+          <div className="bg-white border border-gray-100 rounded-3xl shadow-2xl max-w-md w-full overflow-hidden flex flex-col animate-in zoom-in duration-150 max-h-[85vh]">
             {/* Modal Header */}
             <div className={`px-6 py-5 border-b shrink-0 flex items-center gap-3 ${
               familySuspendTarget.shouldSuspend ? "bg-rose-600/5 border-rose-100" : "bg-emerald-600/5 border-emerald-100"
@@ -2316,7 +2316,7 @@ export default function AdminCenter({
             </div>
 
             {/* Modal Footer */}
-            <div className="bg-gray-50 border-t border-gray-150 p-4 shrink-0 flex justify-end gap-2 text-xs font-black">
+            <div className="bg-gray-50 border-t border-gray-150 p-4 pb-[max(16px,env(safe-area-inset-bottom))] shrink-0 flex justify-end gap-2 text-xs font-black z-10">
               <button
                 onClick={() => {
                   setShowFamilySuspendModal(false);
@@ -2382,7 +2382,7 @@ export default function AdminCenter({
             </div>
 
             {/* Modal Footer */}
-            <div className="bg-gray-100 border-t border-gray-150 p-4 shrink-0 flex justify-end gap-2 text-xs font-black">
+            <div className="bg-gray-100 border-t border-gray-150 p-4 pb-[max(16px,env(safe-area-inset-bottom))] shrink-0 flex justify-end gap-2 text-xs font-black z-10">
               <button
                 onClick={() => {
                   setShowEditFamilyModal(false);

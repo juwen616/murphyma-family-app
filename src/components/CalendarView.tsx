@@ -2529,10 +2529,10 @@ export default function CalendarView({
         <div className="fixed inset-0 bg-[#3C332D]/40 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4 z-[95] animate-in fade-in duration-150 font-sans">
           <form
             onSubmit={handleFormSubmit}
-            className="bg-[#FFF8F5] rounded-[24px] border border-[#D8C6B8] max-w-md w-full soft-journal-shadow relative flex flex-col max-h-[90vh] md:max-h-[800px]"
+            className="bg-[#FFF8F5] rounded-[24px] border border-[#D8C6B8] max-w-md w-full soft-journal-shadow relative flex flex-col max-h-[85vh]"
           >
             {/* Header (Fixed) */}
-            <div className="p-4 md:p-6 pb-3 md:pb-4 border-b border-[#D8C6B8] flex items-center justify-between shrink-0 bg-[#FFF8F5]">
+            <div className="p-4 md:p-6 pb-3 md:pb-4 border-b border-[#D8C6B8] flex items-center justify-between shrink-0 bg-[#FFF8F5] z-10">
               <h3 className="text-base sm:text-[17px] font-black text-[#5C4D41] flex items-center gap-2">
                 <CalendarDays className="h-5 w-5 text-[#B89B84]" />
                 {editingEvent ? (isReadOnlyForm ? "查看行程細節" : "編輯/查看行程") : "新增行事曆行程"}
@@ -3143,7 +3143,7 @@ export default function CalendarView({
             </div>
 
             {/* Footer (Fixed) */}
-            <div className="p-4 md:p-6 border-t border-[#D8C6B8] flex justify-between items-center bg-[#FFF8F5] shrink-0 rounded-b-[24px]">
+            <div className="p-4 md:p-6 border-t border-[#D8C6B8] flex justify-between items-center bg-[#FFF8F5] shrink-0 rounded-b-[24px] sticky bottom-0 z-[60] pb-[max(16px,env(safe-area-inset-bottom))]">
               {editingEvent && isUserAllowedToDelete(editingEvent) && !isReadOnlyForm ? (
                 <button
                   type="button"
@@ -3248,7 +3248,7 @@ export default function CalendarView({
 
         return (
           <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4 animate-fade-in font-sans">
-            <div className="bg-white rounded-[32px] max-w-xl w-full max-h-[90vh] overflow-y-auto soft-journal-shadow border border-[#EFEAE2] flex flex-col transition-all">
+            <div className="bg-white rounded-[32px] max-w-xl w-full max-h-[85vh] overflow-y-auto soft-journal-shadow border border-[#EFEAE2] flex flex-col transition-all relative select-none scrollbar-thin">
               {/* Header color accent */}
               <div className="h-4 w-full shrink-0"
                 style={{
@@ -3588,7 +3588,7 @@ export default function CalendarView({
                 </div>
 
                 {/* Footer buttons */}
-                <div className="border-t border-gray-100 pt-5">
+                <div className="border-t border-gray-100 pt-4 sticky bottom-0 bg-white z-[60] pb-[max(16px,env(safe-area-inset-bottom))] px-6 md:px-8 -mx-6 md:-mx-8 shrink-0 mt-5 shadow-[0_-4px_12px_rgba(0,0,0,0.03)]">
                   {isTravel ? (
                     <div className="flex w-full items-center justify-between gap-3 font-sans">
                       <button
@@ -3652,7 +3652,7 @@ export default function CalendarView({
       {/* ⚠️ Prompt: Synchronize multi-day calendar event into a Special Period */}
       {promptSpecialPeriod && pendingAddPayload && (
         <div id="sync-special-modal" className="fixed inset-0 bg-[#3C332D]/40 backdrop-blur-sm flex items-center justify-center p-4 z-[100] animate-in fade-in duration-200 font-sans">
-          <div className="bg-white rounded-[24px] border border-[#EFEAE2] p-8 max-w-md w-full shadow-2xl space-y-6 relative text-center">
+          <div className="bg-white rounded-[24px] border border-[#EFEAE2] p-8 max-w-md w-full shadow-2xl space-y-6 relative text-center max-h-[85vh] overflow-y-auto">
             
             <div className="text-center space-y-2">
               <span className="text-[10px] font-black uppercase tracking-wider text-[#EAA59E] block">
@@ -3725,7 +3725,7 @@ export default function CalendarView({
       {/* 🏕️ Choose Special Period Type popup */}
       {chosenSpecialType === "select-type" && pendingAddPayload && (
         <div id="choose-special-type-modal" className="fixed inset-0 bg-[#3C332D]/40 backdrop-blur-sm flex items-center justify-center p-4 z-[100] animate-in fade-in duration-200 font-sans">
-          <div className="bg-white rounded-[24px] border border-[#EFEAE2] p-8 max-w-sm w-full shadow-2xl space-y-6 text-center">
+          <div className="bg-white rounded-[24px] border border-[#EFEAE2] p-8 max-w-sm w-full shadow-2xl space-y-6 text-center max-h-[85vh] overflow-y-auto">
             
             <div className="space-y-1.5 text-center">
               <span className="text-[10px] font-black uppercase tracking-wider text-[#5B7283] block">
@@ -3856,7 +3856,7 @@ export default function CalendarView({
             onClick={() => setIsDrawerOpen(false)}
           />
           {/* Content (centered modal dialog) */}
-          <div className="relative w-full max-w-sm bg-white rounded-[24px] shadow-2xl border border-[#EFEAE2] flex flex-col max-h-[75vh] overflow-hidden animate-in fade-in zoom-in-95 duration-200 z-10 text-[#3C332D]">
+          <div className="relative w-full max-w-sm bg-white rounded-[24px] shadow-2xl border border-[#EFEAE2] flex flex-col max-h-[85vh] overflow-hidden animate-in fade-in zoom-in-95 duration-200 z-10 text-[#3C332D]">
             <div className="flex justify-between items-center px-5 pt-4 pb-3 border-b border-[#F2ECE5] shrink-0 bg-white">
               <div>
                 <h3 className="text-sm font-black text-[#3C332D] flex items-center gap-1.5">
@@ -3897,7 +3897,7 @@ export default function CalendarView({
             </div>
 
             {/* Scrollable container section with safety padding at bottom to avoid blocking by sticky footer button */}
-            <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4 pb-32">
+            <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4 pb-6">
               {getEventsForDate(selectedMobileDate).length === 0 ? (
                 <div className="py-8 text-center border border-dashed border-[#EFEAE2] rounded-2xl bg-white/40">
                   <span className="text-2xl block mb-1">🍵</span>
@@ -3982,7 +3982,7 @@ export default function CalendarView({
             {/* ➕ Sticky Footer for Adding Event */}
             {canCreateCalendar && (
               <div 
-                className="shrink-0 border-t border-[#F2ECE5] bg-[#FFFDF8] px-5 py-4 z-30 shadow-sm relative rounded-b-[24px]"
+                className="shrink-0 border-t border-[#F2ECE5] bg-[#FFFDF8] px-5 py-4 z-30 shadow-sm relative rounded-b-[24px] pb-[max(16px,env(safe-area-inset-bottom))]"
               >
                 <button
                   onClick={() => {
@@ -4059,7 +4059,7 @@ export default function CalendarView({
       {/* ✈️ Custom Travel Mode Creator Modal */}
       {showCreateTravelModal && (
         <div className="fixed inset-0 bg-[#3C332D]/40 backdrop-blur-sm flex items-center justify-center p-4 z-[100] animate-in fade-in duration-150 font-sans">
-          <div className="bg-white rounded-[24px] border border-[#EFEAE2] max-w-md w-full soft-journal-shadow relative flex flex-col max-h-[90vh]">
+          <div className="bg-white rounded-[24px] border border-[#EFEAE2] max-w-md w-full soft-journal-shadow relative flex flex-col max-h-[85vh]">
             {/* Header */}
             <div className="p-6 pb-4 border-b border-[#EFEAE2] flex items-center justify-between bg-[#FFFDF8] rounded-t-[24px]">
               <h3 className="text-lg font-black text-[#3C332D] flex items-center gap-2">
@@ -4147,7 +4147,7 @@ export default function CalendarView({
             </div>
 
             {/* Footer */}
-            <div className="p-6 border-t border-[#EFEAE2] flex justify-end gap-3 bg-[#FFFDF8] rounded-b-[24px]">
+            <div className="p-6 border-t border-[#EFEAE2] flex justify-end gap-3 bg-[#FFFDF8] rounded-b-[24px] pb-[max(24px,env(safe-area-inset-bottom))]">
               <button
                 type="button"
                 onClick={() => setShowCreateTravelModal(null)}
