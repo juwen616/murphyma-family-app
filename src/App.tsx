@@ -81,6 +81,7 @@ import {
   Bell,
   Settings,
   BookOpen,
+  ShieldAlert,
 } from "lucide-react";
 
 export const getRoleLabel = (r?: UserRole | string) => {
@@ -214,11 +215,23 @@ export default function App() {
   // Handle Google Redirect Result on Init
   useEffect(() => {
     const handleRedirectResult = async () => {
+      // ONLY check redirect result if we explicitly initiated a redirect operation.
+      // This completely prevents "missing-initial-state" errors on ordinary page hydration.
+      const isRedirectSession = localStorage.getItem("firebase_redirect_active") === "true";
+      if (!isRedirectSession) {
+        console.log("No pending Google login redirect operation detected in local state. Skipping getRedirectResult.");
+        return;
+      }
+
       try {
-        console.log("Google Login Start");
+        console.log("Google Login Start (Processing Redirect Result)");
         console.log("Redirect Login");
         const result = await getRedirectResult(auth);
         console.log("Redirect Result", result);
+        
+        // Clear redirect signal once processed
+        localStorage.removeItem("firebase_redirect_active");
+
         if (result) {
           const googleUser = result.user;
           if (googleUser) {
@@ -278,7 +291,16 @@ export default function App() {
           }
         }
       } catch (err: any) {
-        console.error("Firebase Complete Redirect Sign-In error:", err);
+        // Clear redirect signal on failure too
+        localStorage.removeItem("firebase_redirect_active");
+
+        console.error("CRITICAL GOOGLE REDIRECT COMPLETION FAILURE: Complete Exception Object:", err);
+        if (err && typeof err === "object") {
+          console.error("Error Code:", err.code);
+          console.error("Error Message:", err.message);
+          console.error("Error Custom Data:", err.customData);
+          console.error("Error Stack:", err.stack);
+        }
         const errorCode = err.code || "unknown-auth-error";
         const errorMessage = err.message || JSON.stringify(err);
         
@@ -290,11 +312,15 @@ export default function App() {
           errorMessage.toLowerCase().includes("state-lost") || 
           errorMessage.toLowerCase().includes("initial-state")
         ) {
-          console.error("Firebase Auth Redirect State Lost Detected:", err);
+          console.error("Firebase Auth Redirect State Lost Details:", err);
           toast.error(`⚠️ 連結驗證狀態已遺失 (Redirect State Lost)\n若在 Safari/iOS，請開啟「允許跨網站追蹤」或改用 Chrome / 電腦版登入。`);
         } else {
-          toast.error(`處理重導向登入失敗：\n${errorCode} - ${errorMessage}`);
+          toast.error("Google 登入失敗，請重新嘗試。\n若持續發生問題，請聯絡家庭管理員。");
         }
+        setAuthError({
+          code: errorCode,
+          message: `Redirect Result Error: ${errorMessage} (Details: ${JSON.stringify(err)})`,
+        });
         localStorage.removeItem("pending_bind_member_uid");
         localStorage.removeItem("pending_bind_family_id");
         localStorage.removeItem("pending_invite_join");
@@ -601,6 +627,25 @@ export default function App() {
     }, 5000);
     return () => clearTimeout(timer);
   }, [isLoadingAuth]);
+
+  // Admin Diagnostic / Debug route detection
+  const [isDebugView, setIsDebugView] = useState(false);
+
+  useEffect(() => {
+    const checkPath = () => {
+      const path = window.location.pathname;
+      const hash = window.location.hash;
+      const isDebug = path === "/admin/debug-login" || path === "/settings/debug" || hash === "#/admin/debug-login" || hash === "#/settings/debug";
+      setIsDebugView(isDebug);
+    };
+    checkPath();
+    window.addEventListener("popstate", checkPath);
+    window.addEventListener("hashchange", checkPath);
+    return () => {
+      window.removeEventListener("popstate", checkPath);
+      window.removeEventListener("hashchange", checkPath);
+    };
+  }, []);
 
   // Family Onboarding states
   const [onboardingChoice, setOnboardingChoice] = useState<"none" | "create" | "join">("none");
@@ -2007,28 +2052,45 @@ export default function App() {
     setAuthError({ code: null, message: null });
     try {
       const provider = new GoogleAuthProvider();
-      if (isMobileDevice()) {
-        console.log("Redirect Login (Mobile device detected)");
-        await signInWithRedirect(auth, provider);
-      } else {
-        console.log("Popup Login (Desktop device detected)");
+      console.log("Attempting Popup-based Google Sign-In...");
+      
+      try {
         const result = await signInWithPopup(auth, provider);
         console.log("Popup Login success user:", result?.user);
         toast.success("Google 帳號登入成功！");
+      } catch (popupErr: any) {
+        console.warn("Popup Sign-In failed or was blocked. Checking for Redirect fallback option...", popupErr);
+        const isCancellation = popupErr.code === "auth/popup-closed-by-user" || popupErr.message?.includes("closed-by-user");
+        
+        if (isCancellation) {
+          console.log("Popup closed by user itself. Aborting sign-in chain.");
+          // No error message, user willingly dismissed
+        } else {
+          // Fall back to Redirect sign-in (sets active flag)
+          console.log("Falling back securely to Redirect sign-in...");
+          localStorage.setItem("firebase_redirect_active", "true");
+          await signInWithRedirect(auth, provider);
+        }
       }
     } catch (err: any) {
-      console.error("Google Authenticator error:", err);
+      console.error("CRITICAL GOOGLE AUTHENTICATOR FAILURE: Complete Error Object:", err);
+      if (err && typeof err === "object") {
+        console.error("Error Code:", err.code);
+        console.error("Error Message:", err.message);
+        console.error("Error Custom Data:", err.customData);
+        console.error("Error Stack:", err.stack);
+      }
       const errorCode = err.code || "unknown-auth-error";
       let errorMessage = err.message || "您取消了登入，或登入重導向被瀏覽器封鎖。";
       if (errorCode === "auth/popup-closed-by-user" || err.message?.includes("popup-closed-by-user")) {
         errorMessage = "瀏覽器阻擋登入視窗，請重新登入";
         toast.error("瀏覽器阻擋登入視窗，請重新登入");
       } else {
-        toast.error(`登入失敗 (${errorCode}) - 請重新嘗試。`);
+        toast.error("Google 登入失敗，請重新嘗試。\n若持續發生問題，請聯絡家庭管理員。");
       }
       setAuthError({
         code: errorCode,
-        message: errorMessage,
+        message: `${errorMessage} (Complete status: ${JSON.stringify(err)})`,
       });
     } finally {
       setIsLoggingIn(false);
@@ -2042,15 +2104,12 @@ export default function App() {
       if (currentUserProfile?.familyId) {
         localStorage.setItem("pending_bind_family_id", currentUserProfile.familyId);
       }
-      console.log("Google Login Start");
+      console.log("Google Login Start (Binding Member)");
 
-      if (isMobileDevice()) {
-        toast("正在重導向至 Google 登入以綁定此成員...", { duration: 4000 });
-        console.log("Redirect Login");
-        await signInWithRedirect(auth, provider);
-      } else {
-        toast("正在開啟 Google 登入視窗以綁定此成員...", { duration: 4000 });
-        console.log("Popup Login");
+      toast("正在開啟 Google 登入以綁定此成員...", { duration: 4000 });
+      console.log("Popup Login");
+
+      try {
         const result = await signInWithPopup(auth, provider);
         if (result && result.user) {
           const googleUser = result.user;
@@ -2083,6 +2142,18 @@ export default function App() {
           localStorage.removeItem("pending_bind_member_uid");
           localStorage.removeItem("pending_bind_family_id");
           toast.success("🎉 已成功將 Google 帳號與此成員綁定完成！");
+        }
+      } catch (popupErr: any) {
+        console.warn("Popup-based Google binding was blocked or failed. Using Redirect fallback...", popupErr);
+        const isCancellation = popupErr.code === "auth/popup-closed-by-user" || popupErr.message?.includes("closed-by-user");
+        if (isCancellation) {
+          console.log("User closed binding popup.");
+          localStorage.removeItem("pending_bind_member_uid");
+          localStorage.removeItem("pending_bind_family_id");
+        } else {
+          toast("正在重導向至 Google 登入以綁定此成員...", { duration: 4000 });
+          localStorage.setItem("firebase_redirect_active", "true");
+          await signInWithRedirect(auth, provider);
         }
       }
     } catch (err: any) {
@@ -2428,15 +2499,12 @@ export default function App() {
           // Requires specific Google login accounts
           localStorage.setItem("pending_invite_join", JSON.stringify(invite));
           const provider = new GoogleAuthProvider();
-          console.log("Google Login Start");
-          if (isMobileDevice()) {
-            toast("正在重導向至 Google 登入以加入家庭...", { duration: 4000 });
-            console.log("Redirect Login");
-            await signInWithRedirect(auth, provider);
-            return;
-          } else {
-            toast("正在開啟 Google 登入視窗以加入家庭...", { duration: 4000 });
-            console.log("Popup Login");
+          console.log("Google Login Start (Accepting Family Invitation)");
+          
+          toast("正在開啟 Google 登入以加入家庭...", { duration: 4000 });
+          console.log("Popup Login");
+
+          try {
             const result = await signInWithPopup(auth, provider);
             if (result && result.user) {
               const googleUser = result.user;
@@ -2454,6 +2522,20 @@ export default function App() {
               }
             } else {
               setIsOnboardingBusy(false);
+              return;
+            }
+          } catch (popupErr: any) {
+            console.warn("Popup-based Google login for invitation was blocked or failed. Checking for Redirect fallback...", popupErr);
+            const isCancellation = popupErr.code === "auth/popup-closed-by-user" || popupErr.message?.includes("closed-by-user");
+            if (isCancellation) {
+              console.log("User closed the invitation popup.");
+              localStorage.removeItem("pending_invite_join");
+              setIsOnboardingBusy(false);
+              return;
+            } else {
+              toast("正在重導向至 Google 登入以加入家庭...", { duration: 4000 });
+              localStorage.setItem("firebase_redirect_active", "true");
+              await signInWithRedirect(auth, provider);
               return;
             }
           }
@@ -4739,6 +4821,82 @@ function generateTemplateDates(startDateStr: string, weekdays: number[], count: 
   const currentModeValue = activeModeDetails.modeValue;
   const activeModeConfig = activeModeDetails.config;
 
+  if (isDebugView) {
+    const isSuperAdminUser = user && (
+      user.email?.toLowerCase() === "juwen616@gmail.com" ||
+      (currentUserProfile && (
+        currentUserProfile.email === "juwen616@gmail.com" || 
+        currentUserProfile.role === UserRole.SUPER_ADMIN || 
+        (currentUserProfile as any).systemRole === "SUPER_ADMIN" ||
+        (currentUserProfile as any).role === "SUPER_ADMIN"
+      ))
+    );
+
+    return (
+      <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-4 py-12 gap-6 font-sans text-slate-100 selection:bg-indigo-500 selection:text-white">
+        <div className="max-w-md w-full bg-slate-900 border border-slate-800 rounded-3xl p-6 text-center space-y-4 shadow-2xl">
+          <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+            <div className="flex items-center gap-2">
+              <ShieldAlert className="h-5 w-5 text-indigo-450" />
+              <h1 className="text-sm font-black text-slate-100 tracking-wider">🔒 系統管理員專用診斷模式</h1>
+            </div>
+            <button
+              onClick={() => { window.location.href = "/"; }}
+              className="text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold px-2.5 py-1 rounded-lg border border-slate-700 transition cursor-pointer"
+            >
+              返回首頁
+            </button>
+          </div>
+
+          <p className="text-xs text-slate-400 font-bold leading-relaxed text-left">
+            此頁面為系統與登入狀態排查調試專用。僅限系統管理員 (Email: juwen616@gmail.com) 存取。
+          </p>
+
+          {!user ? (
+            <div className="bg-slate-950 border border-indigo-950/40 rounded-2xl p-5 text-center space-y-4">
+              <div className="text-xs font-extrabold text-indigo-400 flex items-center justify-center gap-1.5 leading-snug">
+                <span>您目前未登入 Google 帳號</span>
+              </div>
+              <button
+                onClick={handleGoogleLogin}
+                className="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold rounded-xl shadow-md transition flex items-center justify-center gap-2 text-xs"
+              >
+                🔑 Google 快速登入 (Debug 模式)
+              </button>
+            </div>
+          ) : !isSuperAdminUser ? (
+            <div className="bg-rose-950/40 border border-rose-900/60 rounded-2xl p-5 text-left space-y-3">
+              <div className="text-xs font-extrabold text-rose-450">
+                ⚠️ 存取被拒 (Access Denied)
+              </div>
+              <p className="text-xs text-rose-300 leading-relaxed font-semibold">
+                您登入的 Google 帳戶是 <b>({user.email})</b>，但此帳號沒有本系統的管理員權限。
+              </p>
+              <button
+                onClick={handleLogout}
+                className="w-full py-2 bg-rose-950 hover:bg-rose-900 text-white font-black rounded-xl text-xs transition cursor-pointer"
+              >
+                登出目前帳號
+              </button>
+            </div>
+          ) : (
+            <div className="bg-emerald-950/30 border border-emerald-900/60 rounded-2xl p-4 text-left space-y-1">
+              <span className="text-xs font-extrabold text-emerald-400 block">
+                🟢 身份驗證通過
+              </span>
+              <span className="text-[11px] text-emerald-200 block truncate">
+                已登入管理員帳號：{user.email}
+              </span>
+            </div>
+          )}
+        </div>
+
+        {/* Diagnostic Panel container (rendering ALWAYS in debug mode or at least if accessible) */}
+        {(!user || isSuperAdminUser) && renderDiagnosticPanel()}
+      </div>
+    );
+  }
+
   if (authError.code === "family-not-found") {
     return (
       <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-4 py-12 gap-6 font-sans text-gray-800">
@@ -4761,9 +4919,6 @@ function generateTemplateDates(startDateStr: string, weekdays: number[], count: 
             登出並重新登入
           </button>
         </div>
-        
-        {/* Diagnostic Panel */}
-        {renderDiagnosticPanel()}
       </div>
     );
   }
@@ -4965,9 +5120,6 @@ function generateTemplateDates(startDateStr: string, weekdays: number[], count: 
             </div>
           )}
         </div>
-
-        {/* Diagnostic Panel */}
-        {renderDiagnosticPanel()}
       </div>
     );
   }
