@@ -128,6 +128,28 @@ export const getIdentityLabel = (profile: UserProfile | null) => {
   return getRoleLabel(role);
 };
 
+export const getHeaderUserDisplay = (profile: UserProfile | null) => {
+  if (!profile) return "訪客";
+  const name = profile.displayName || "訪客";
+  let emoji = "👤";
+  if (name.includes("爸爸") || name.toLowerCase().includes("father") || name.toLowerCase().includes("dad")) {
+    emoji = "👨";
+  } else if (name.includes("媽媽") || name.includes("媽") || name.toLowerCase().includes("mother") || name.toLowerCase().includes("mom")) {
+    emoji = "👩";
+  } else if (name.includes("金龜子")) {
+    emoji = "🐞";
+  } else if (name.includes("小龜")) {
+    emoji = "🐢";
+  } else if (profile.role === UserRole.KID) {
+    emoji = "🐻";
+  } else if (profile.role === UserRole.PARENT) {
+    emoji = "👨";
+  } else if (profile.role === UserRole.PET) {
+    emoji = "🐾";
+  }
+  return `${emoji} ${name}`;
+};
+
 export function normalizeDbRole(roleStr: string | undefined): UserRole {
   if (!roleStr) return UserRole.VIEWER;
   const lower = roleStr.toLowerCase();
@@ -423,6 +445,29 @@ export default function App() {
               {finalVerdictText}
             </span>
           </div>
+
+          {/* Firebase Current User Details */}
+          {user && (
+            <div className="bg-slate-950 p-3 rounded-xl border border-slate-800 space-y-1.5 shrink-0">
+              <span className="font-extrabold text-indigo-400 block border-b border-indigo-950/40 pb-1.5 mb-1.5 select-none">
+                👤 Firebase Current User (Auth API 回傳)
+              </span>
+              <div className="space-y-1 text-[11px] font-mono leading-tight text-slate-300">
+                <div>
+                  <span className="text-slate-500 font-extrabold mr-1">UID:</span>
+                  <span className="text-emerald-400 select-all font-bold break-all">{user.uid}</span>
+                </div>
+                <div>
+                  <span className="text-slate-500 font-extrabold mr-1">Email:</span>
+                  <span className="text-emerald-400 font-bold break-all whitespace-pre-wrap">{user.email || "（無）"}</span>
+                </div>
+                <div>
+                  <span className="text-slate-500 font-extrabold mr-1">DisplayName:</span>
+                  <span className="text-emerald-400 font-bold">{user.displayName || "（無）"}</span>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
         
         {/* 【家庭驗證資訊】 (Family Verification Info) */}
@@ -914,6 +959,7 @@ export default function App() {
   // 1. Monitor Authentication State Change
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+      console.log("AUTH USER", firebaseUser);
       setIsLoadingAuth(true);
       if (firebaseUser) {
         // Clear all caches on user switch to prevent cross-account leakage
@@ -4643,12 +4689,8 @@ function generateTemplateDates(startDateStr: string, weekdays: number[], count: 
   }
 
   // 4. Render Google/Invite Login Portal (Landing screen)
-  if (!user || !currentUserProfile) {
-    if (user && !currentUserProfile) {
-      console.log("Landing Redirect Reason", "User is logged in to Google but currentUserProfile is null.");
-    } else if (!user) {
-      console.log("Landing Redirect Reason", "No Google/Invite user session is authenticated.");
-    }
+  if (!user) {
+    console.log("Landing Redirect Reason", "No Google/Invite user session is authenticated.");
     return (
       <div className="min-h-screen bg-gradient-to-tr from-sky-50 via-indigo-50/20 to-pink-50 flex flex-col items-center justify-center p-4 py-12 gap-6 font-sans text-gray-800">
         <div className="max-w-md w-full bg-white border border-gray-100 rounded-3xl p-8 shadow-xl text-center space-y-6">
@@ -4785,7 +4827,7 @@ function generateTemplateDates(startDateStr: string, weekdays: number[], count: 
                     </div>
                     <div className="flex justify-between items-center bg-white border border-[#EFEAE2] rounded-xl px-3.5 py-2">
                       <span className="font-extrabold text-gray-500">👤 受邀者</span>
-                      <span className="font-black text-rose-950 bg-rose-50 px-2 py-0.5 rounded border border-rose-100">{foundInvite.memberName || "新成員"}</span>
+                      <span className="font-black text-rose-950 bg-rose-50 px-2 py-0.5 rounded border border-rose-105">{foundInvite.memberName || "新成員"}</span>
                     </div>
                     <div className="flex justify-between items-center bg-white border border-[#EFEAE2] rounded-xl px-3.5 py-2">
                       <span className="font-extrabold text-gray-500">👑 角色關係</span>
@@ -4831,6 +4873,39 @@ function generateTemplateDates(startDateStr: string, weekdays: number[], count: 
               )}
             </div>
           )}
+        </div>
+
+        {/* Diagnostic Panel */}
+        {renderDiagnosticPanel()}
+      </div>
+    );
+  }
+
+  // 4.5. Render Google Profile loading screen if signed in but profile details are not linked/created yet
+  if (!currentUserProfile) {
+    console.log("Landing Redirect Reason", "User is logged in to Google but currentUserProfile is null.");
+    return (
+      <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-4 py-12 gap-6 font-sans text-gray-800 animate-in fade-in duration-200">
+        <div className="max-w-md w-full bg-white border border-gray-100 rounded-3xl p-8 shadow-xl text-center space-y-6">
+          <div className="mx-auto h-16 w-16 bg-indigo-50 text-indigo-600 rounded-px flex items-center justify-center shadow-inner">
+            <Heart className="h-9 w-9 animate-pulse fill-indigo-200 stroke-indigo-600" />
+          </div>
+
+          <div className="space-y-2">
+            <h1 className="text-xl font-black text-gray-900 tracking-tight leading-snug">
+              帳號認證成功，正在讀取您的資料庫設定...
+            </h1>
+            <p className="text-sm text-gray-500 font-bold leading-relaxed">
+              這通常在首次登入或網路存取時需要數秒鐘，請稍候。若持續未回應，請點擊下方按鈕登出並重新登入。
+            </p>
+          </div>
+
+          <button
+            onClick={handleLogout}
+            className="w-full py-3 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-100 font-extrabold rounded-xl text-xs transition cursor-pointer flex items-center justify-center gap-1.5"
+          >
+            登出並重新登入
+          </button>
         </div>
 
         {/* Diagnostic Panel */}
@@ -5161,15 +5236,16 @@ function generateTemplateDates(startDateStr: string, weekdays: number[], count: 
         id="applet-top-header"
         className="sticky top-0 bg-white border-b border-[#E5E1DA] z-40 shadow-sm font-sans flex flex-col"
       >
-        {/* Mobile Header: 3 rows, high-density, native feel, respects mom-focused optimize */}
-        <div className="block md:hidden px-4 py-1.5 border-b border-[#EFEAE2] bg-white text-[#2D2926] z-45 shadow-xs">
-          {/* Row 1: App Title & Bell Alarm */}
+        {/* Mobile Header: respects layout config, dynamic identity */}
+        <div className="block md:hidden px-4 py-2 border-b border-[#EFEAE2] bg-white text-[#2D2926] z-45 shadow-xs">
+          {/* Row 1: Left 🏠 小龜家, Right 👨 爸爸 */}
           <div className="flex items-center justify-between h-7">
-            <span className="font-extrabold text-[14.5px] tracking-tight text-[#2D2926]">🏡 {activeFamily?.name || "家庭生活大小事"}</span>
-            <button className="p-1 text-gray-500 hover:text-amber-500 cursor-pointer relative" title="通知訊息">
-              <Bell className="h-4.5 w-4.5 animate-pulse" />
-              <span className="absolute top-1 right-1 h-1 w-1 bg-rose-500 rounded-full" />
-            </button>
+            <span className="font-extrabold text-[15px] tracking-tight text-[#2D2926]">
+              🏠 {activeFamily?.name || "小龜家"}
+            </span>
+            <span className="font-extrabold text-[14px] text-[#7C6354]">
+              {getHeaderUserDisplay(effectiveUserProfile)}
+            </span>
           </div>
           {/* Row 2: Clock Display */}
           <div className="text-gray-650 text-xs font-mono font-bold leading-tight h-5 flex items-center">
@@ -5191,10 +5267,10 @@ function generateTemplateDates(startDateStr: string, weekdays: number[], count: 
             </div>
             <div>
               <h1 className="text-xs sm:text-sm font-black tracking-tight text-[#2D2926] font-sans flex items-center gap-1 leading-none">
-                🏡 {activeFamily?.name || "家庭生活大小事"}
+                🏠 {activeFamily?.name || "小龜家"}
               </h1>
               <span className="text-[9px] font-sans text-gray-400 mt-0.5 block leading-none">
-                一家人的日常與成長
+                一家人的日常與成長 ｜ 目前登入：{getHeaderUserDisplay(effectiveUserProfile)}
               </span>
             </div>
           </div>
@@ -5931,20 +6007,34 @@ function generateTemplateDates(startDateStr: string, weekdays: number[], count: 
                             </div>
                           </button>
 
-                        {/* 5. 家庭記事 */}
-                        <button
-                          onClick={() => setActivePage("notes")}
-                          className="p-3 bg-white border border-[#EFEAE2] rounded-2xl text-left flex flex-col justify-between min-h-[95px] shadow-xs active:scale-97 hover:border-rose-200 transition cursor-pointer col-span-2 sm:col-span-1"
-                        >
-                          <div className="h-7 w-7 bg-rose-50 rounded-lg flex items-center justify-center text-rose-500">
-                            <BookOpen className="h-4 w-4 text-rose-500" />
-                          </div>
-                          <div>
-                            <h3 className="text-[12px] font-black mt-1.5">📜 家庭記事</h3>
-                            <p className="text-[9px] text-gray-400 leading-tight mt-0.5">保留家庭重要大事記與美好回憶</p>
-                          </div>
-                        </button>
-                      </div>
+                         {/* 5. 家庭記事 */}
+                         <button
+                           onClick={() => setActivePage("notes")}
+                           className="p-3 bg-white border border-[#EFEAE2] rounded-2xl text-left flex flex-col justify-between min-h-[95px] shadow-xs active:scale-97 hover:border-rose-200 transition cursor-pointer"
+                         >
+                           <div className="h-7 w-7 bg-rose-50 rounded-lg flex items-center justify-center text-rose-500">
+                             <BookOpen className="h-4 w-4 text-rose-500" />
+                           </div>
+                           <div>
+                             <h3 className="text-[12px] font-black mt-1.5">📜 家庭記事</h3>
+                             <p className="text-[9px] text-gray-400 leading-tight mt-0.5">保留重要大事與美好回憶</p>
+                           </div>
+                         </button>
+
+                         {/* 6. 通知中心 */}
+                         <button
+                           onClick={() => toast("🔔 通知中心功能（未來規劃中，敬請期待！）", { icon: "💡" })}
+                           className="p-3 bg-white border border-[#EFEAE2] rounded-2xl text-left flex flex-col justify-between min-h-[95px] shadow-xs active:scale-97 hover:border-amber-200 transition cursor-pointer"
+                         >
+                           <div className="h-7 w-7 bg-amber-50 rounded-lg flex items-center justify-center text-amber-500">
+                             <Bell className="h-4 w-4 text-amber-500" />
+                           </div>
+                           <div>
+                             <h3 className="text-[12px] font-black mt-1.5">🔔 通知中心</h3>
+                             <p className="text-[9px] text-gray-400 leading-tight mt-0.5">接收系統通知與即時提醒（規劃中）</p>
+                           </div>
+                         </button>
+                       </div>
 
                       {/* Member Badge Summary card strictly within the view */}
                       <div className="bg-[#FAF9F6] border border-[#EFEAE2] p-2.5 rounded-2xl flex items-center justify-between mt-2">

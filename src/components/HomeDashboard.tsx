@@ -19,7 +19,6 @@ import {
 import { getHolidayForDate } from "../utils/holidayService";
 import { sortEventsForSingleDay } from "../utils/eventSort";
 import {
-  Bell,
   CheckCircle,
   FileText,
   Trash2,
