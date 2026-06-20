@@ -354,8 +354,8 @@ export default function TaskSystem({
             <ClipboardList className="h-4.5 w-4.5 md:h-5 md:w-5" />
           </div>
           <div>
-            <h2 className="text-sm md:text-xl font-extrabold text-[#32453A] font-sans">日常與學習任務</h2>
-            <p className="hidden md:block text-xs text-gray-500 mt-0.5 font-medium">指派日常任務、累積過關星星、與孩子完成約定吧</p>
+            <h2 className="text-sm md:text-xl font-extrabold text-[#32453A] font-sans">小孩專屬任務</h2>
+            <p className="hidden md:block text-xs text-gray-500 mt-0.5 font-medium">完成任務獲得星星獎勵</p>
           </div>
         </div>
 

@@ -84,6 +84,24 @@ export const SpecialPeriodsConfig: React.FC<SpecialPeriodsConfigProps> = ({
   const [returnTime, setReturnTime] = useState("");
   const [departureTerminal, setDepartureTerminal] = useState("");
   const [returnTerminal, setReturnTerminal] = useState("");
+
+  // New detailed Departure Information
+  const [departureAirline, setDepartureAirline] = useState("");
+  const [departureFlightNumber, setDepartureFlightNumber] = useState("");
+  const [departureDate, setDepartureDate] = useState("");
+  const [departureArrivalDate, setDepartureArrivalDate] = useState("");
+  const [departureArrivalTime, setDepartureArrivalTime] = useState("");
+  const [departureAirport, setDepartureAirport] = useState("");
+  const [departureArrivalAirport, setDepartureArrivalAirport] = useState("");
+
+  // New detailed Return Information
+  const [returnAirline, setReturnAirline] = useState("");
+  const [returnFlightNumber, setReturnFlightNumber] = useState("");
+  const [returnDate, setReturnDate] = useState("");
+  const [returnArrivalDate, setReturnArrivalDate] = useState("");
+  const [returnArrivalTime, setReturnArrivalTime] = useState("");
+  const [returnAirport, setReturnAirport] = useState("");
+  const [returnArrivalAirport, setReturnArrivalAirport] = useState("");
   const [passportReminder, setPassportReminder] = useState(false);
   const [visaReminder, setVisaReminder] = useState(false);
   const [notes, setNotes] = useState("");
@@ -137,6 +155,24 @@ export const SpecialPeriodsConfig: React.FC<SpecialPeriodsConfigProps> = ({
     setReturnTime("");
     setDepartureTerminal("");
     setReturnTerminal("");
+    
+    // Clear new detailed departure & return variables
+    setDepartureAirline("");
+    setDepartureFlightNumber("");
+    setDepartureDate("");
+    setDepartureArrivalDate("");
+    setDepartureArrivalTime("");
+    setDepartureAirport("");
+    setDepartureArrivalAirport("");
+
+    setReturnAirline("");
+    setReturnFlightNumber("");
+    setReturnDate("");
+    setReturnArrivalDate("");
+    setReturnArrivalTime("");
+    setReturnAirport("");
+    setReturnArrivalAirport("");
+
     setPassportReminder(false);
     setVisaReminder(false);
     setNotes("");
@@ -191,6 +227,24 @@ export const SpecialPeriodsConfig: React.FC<SpecialPeriodsConfigProps> = ({
       setReturnTime(mode.returnTime || "");
       setDepartureTerminal(mode.departureTerminal || "");
       setReturnTerminal(mode.returnTerminal || "");
+
+      // Load detailed, newly supported departure & return flight parameters with fallbacks
+      setDepartureAirline(mode.departureAirline || mode.airline || "");
+      setDepartureFlightNumber(mode.departureFlightNumber || mode.flightNumber || "");
+      setDepartureDate(mode.departureDate || mode.startDate || "");
+      setDepartureArrivalDate(mode.departureArrivalDate || mode.startDate || "");
+      setDepartureArrivalTime(mode.departureArrivalTime || "");
+      setDepartureAirport(mode.departureAirport || "");
+      setDepartureArrivalAirport(mode.departureArrivalAirport || "");
+
+      setReturnAirline(mode.returnAirline || "");
+      setReturnFlightNumber(mode.returnFlightNumber || "");
+      setReturnDate(mode.returnDate || mode.endDate || "");
+      setReturnArrivalDate(mode.returnArrivalDate || mode.endDate || "");
+      setReturnArrivalTime(mode.returnArrivalTime || "");
+      setReturnAirport(mode.returnAirport || "");
+      setReturnArrivalAirport(mode.returnArrivalAirport || "");
+
       setPassportReminder(mode.passportReminder || false);
       setVisaReminder(mode.visaReminder || false);
       setNotes(mode.notes || "");
@@ -248,8 +302,10 @@ export const SpecialPeriodsConfig: React.FC<SpecialPeriodsConfigProps> = ({
 
     if (modeFormType === SystemMode.TRAVEL) {
       payload.travelType = travelType;
-      payload.airline = airLine;
-      payload.flightNumber = flightNumber;
+      
+      // Save legacy compatible properties
+      payload.airline = departureAirline;
+      payload.flightNumber = departureFlightNumber;
       payload.departureTime = departureTime;
       payload.returnTime = returnTime;
       payload.departureTerminal = departureTerminal;
@@ -258,6 +314,24 @@ export const SpecialPeriodsConfig: React.FC<SpecialPeriodsConfigProps> = ({
       payload.visaReminder = visaReminder;
       payload.notes = notes;
       payload.transportation = transportation === "custom" ? (customTransportation || "自訂交通") : transportation;
+
+      // Save detailed Departure Information
+      payload.departureAirline = departureAirline;
+      payload.departureFlightNumber = departureFlightNumber;
+      payload.departureDate = departureDate || modeFormStartDate;
+      payload.departureArrivalDate = departureArrivalDate || modeFormStartDate;
+      payload.departureArrivalTime = departureArrivalTime;
+      payload.departureAirport = departureAirport;
+      payload.departureArrivalAirport = departureArrivalAirport;
+
+      // Save detailed Return Information
+      payload.returnAirline = returnAirline;
+      payload.returnFlightNumber = returnFlightNumber;
+      payload.returnDate = returnDate || modeFormEndDate;
+      payload.returnArrivalDate = returnArrivalDate || modeFormEndDate;
+      payload.returnArrivalTime = returnArrivalTime;
+      payload.returnAirport = returnAirport;
+      payload.returnArrivalAirport = returnArrivalAirport;
     } else if (modeFormType === SystemMode.EXAM) {
       payload.subjects = examSubjects.filter(s => s.name.trim() !== "");
       payload.dailyPlan = examDailyPlans;
@@ -390,7 +464,7 @@ export const SpecialPeriodsConfig: React.FC<SpecialPeriodsConfigProps> = ({
           <div>
             <h2 className="text-sm md:text-base font-black text-[#3C332D]">特別期間計畫看板</h2>
             <p className="text-xs md:text-sm text-gray-400 font-bold mt-1 leading-normal">
-              集中排定旅遊計畫、考試衝刺或寒暑假作息。網格網頁與作息同步換裝，儀式滿滿。
+              集中排定旅遊計畫、考前溫書準備或寒暑假作息。網格網頁與作息同步換裝，幸福滿滿。
             </p>
           </div>
         </div>
@@ -426,7 +500,7 @@ export const SpecialPeriodsConfig: React.FC<SpecialPeriodsConfigProps> = ({
                 <div className="text-3xl shrink-0">🎨</div>
                 <div className="min-w-0">
                   <h4 className="font-black text-xs md:text-sm text-indigo-950 leading-tight">自訂主題計畫</h4>
-                  <p className="text-xs text-indigo-700/88 mt-1 leading-none truncate">打掃拉練或家庭主題打卡儀式</p>
+                  <p className="text-xs text-indigo-700/88 mt-1 leading-none truncate">建立家庭特別計畫活動</p>
                 </div>
               </div>
               <button
@@ -508,7 +582,8 @@ export const SpecialPeriodsConfig: React.FC<SpecialPeriodsConfigProps> = ({
                   className="rounded-2xl p-5.5 transition shadow-xs flex flex-col gap-3.5 relative cursor-pointer hover:bg-white/80 hover:shadow-md"
                   onClick={() => setExpandedModeId(isExpanded ? null : mode.id)}
                 >
-                  <div className="flex justify-between items-center gap-3">
+                  {/* Desktop Layout - Hidden on mobile */}
+                  <div className="hidden md:flex justify-between items-center gap-3">
                     <div className="flex items-center gap-3.5">
                       <span className="text-3xl select-none">{mode.icon || "✈️"}</span>
                       <div>
@@ -583,6 +658,94 @@ export const SpecialPeriodsConfig: React.FC<SpecialPeriodsConfigProps> = ({
                     </div>
                   </div>
 
+                  {/* Mobile Layout - Show only on mobile */}
+                  <div className="md:hidden flex flex-col gap-3.5 w-full">
+                    {/* Row 1: Icon + Title, Status Badge + Category */}
+                    <div className="flex items-start gap-3">
+                      <span className="text-3xl select-none shrink-0">{mode.icon || "✈️"}</span>
+                      <div className="flex-grow min-w-0">
+                        <h4 className="font-extrabold text-[#3C332D] text-base leading-snug break-words">{mode.name}</h4>
+                        <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
+                          <span className={`text-[10px] font-black tracking-wider px-2 py-0.5 rounded-full border ${themeBg}`}>
+                            🏷️ {badgeLabel}
+                          </span>
+                          {isCurrentActive && (
+                            <span className="text-[10px] font-black bg-rose-100 text-rose-700 px-2 py-0.5 rounded-full border border-rose-200 animate-pulse">
+                              🔴 進行中 | 第 {elapsedDays} 天
+                            </span>
+                          )}
+                          {isFuture && (
+                            <span className="text-[10px] font-black bg-blue-50 text-blue-600 px-2 py-0.5 rounded-full border border-blue-200">
+                              🔵 未開始 | 倒數 {Math.round((start.getTime() - today.getTime()) / (1000 * 3600 * 24))} 天
+                            </span>
+                          )}
+                          {isPast && (
+                            <span className="text-[10px] font-normal bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full border border-gray-200">
+                              ⚪ 已結束歷史
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Row 2: Date + Days Range */}
+                    <div className="bg-[#FAF8F5] border border-[#F0ECE4] rounded-xl p-2.5 flex items-center justify-between">
+                      <div className="flex items-center gap-1.5 text-xs text-gray-750 font-bold">
+                        <span className="text-sm">📅</span>
+                        <span>{mode.startDate.replace(/-/g, "/")} ～ {mode.endDate.replace(/-/g, "/")}</span>
+                      </div>
+                      <span className="text-xs font-black bg-amber-50 text-[#8B6B56] border border-amber-200/50 px-2 py-0.5 rounded-md">
+                        共 {totalDays} 天
+                      </span>
+                    </div>
+
+                    {/* Divider line before control buttons */}
+                    <div className="border-t border-[#F0ECE4] my-0.5" />
+
+                    {/* Row 3: Actions buttons wrapper */}
+                    <div className="flex items-center justify-between gap-2 pt-0.5">
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setExpandedModeId(isExpanded ? null : mode.id);
+                        }}
+                        className="h-9 px-4 rounded-xl bg-white hover:bg-gray-100 border border-[#E8E2D8] text-[#7C6354] transition cursor-pointer flex items-center justify-center gap-1 flex-1 shadow-xs"
+                        title="查看詳細計畫手記"
+                      >
+                        <span className="text-xs font-black">詳細</span>
+                        {isExpanded ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+                      </button>
+
+                      {isParent && (
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleOpenEditMode(mode);
+                            }}
+                            className="h-9 w-9 flex items-center justify-center rounded-xl bg-white hover:bg-sky-50 border border-[#E8E2D8] text-sky-600 transition cursor-pointer shadow-xs shrink-0"
+                            title="編輯此計畫"
+                          >
+                            <Edit3 className="h-4 w-4" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDeleteModeClick(mode.id, mode.name);
+                            }}
+                            className="h-9 w-9 flex items-center justify-center rounded-xl bg-white hover:bg-rose-50 border border-[#E8E2D8] text-rose-500 transition cursor-pointer shadow-xs shrink-0"
+                            title="刪除此計畫"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
                   {/* Expanded Plan Details Container */}
                   {isExpanded && (
                     <div className="mt-3.5 pt-4.5 border-t border-dashed border-[#E8E2D8] space-y-4" onClick={(e) => e.stopPropagation()}>
@@ -608,133 +771,97 @@ export const SpecialPeriodsConfig: React.FC<SpecialPeriodsConfigProps> = ({
                           </div>
 
                           <span className="font-black text-[#5E4029] block mt-1.5 text-xs md:text-sm uppercase tracking-wider">
-                            🗺️ 每日詳細行程與食宿安排 {isParent && "(家長Blur直接儲存)"}：
+                            🗺️ 每日詳細行程與食宿精簡表 (家長可點擊直接輸入且 Blur 儲存)：
                           </span>
                           
-                          <div className="space-y-3.5 bg-white p-4 rounded-2xl border-2 border-gray-150 max-h-[400px] overflow-y-auto">
+                          <div className="space-y-6 bg-white p-5 rounded-2xl border border-orange-200 max-h-[450px] overflow-y-auto">
                             {Object.keys(mode.itinerary || {}).sort().map((date, idx) => {
                               const item = mode.itinerary?.[date] || {};
-                              const isTargetEdit = activeItineraryDate === `${mode.id}-${date}`;
                               
                               return (
-                                <div key={date} className="pb-4 border-b-2 border-gray-100 last:border-b-0 last:pb-0 space-y-2 text-sm md:text-base">
-                                  <div className="flex items-center gap-2 justify-between flex-wrap">
-                                    <span className="bg-[#FFF8F5] text-orange-950 border border-orange-150 px-3 py-1 rounded-xl font-black shrink-0 text-xs md:text-sm">
+                                <div key={date} className="pb-5 border-b border-gray-150 last:border-b-0 last:pb-0 space-y-3">
+                                  <div className="flex items-center gap-2">
+                                    <span className="bg-[#FFF8F5] text-orange-950 border border-orange-150 px-3 py-1 rounded-xl font-bold text-xs sm:text-sm">
                                       Day {idx + 1} ({date})
                                     </span>
-                                    {isParent ? (
-                                      <button
-                                        type="button"
-                                        onClick={() => {
-                                          setActiveItineraryDate(isTargetEdit ? "" : `${mode.id}-${date}`);
-                                        }}
-                                        className="text-xs md:text-sm text-sky-600 hover:underline font-black cursor-pointer bg-sky-50 px-2 py-1 rounded-lg border border-sky-200"
-                                      >
-                                        {isTargetEdit ? "關閉編輯 ✔" : "🔧 點此編輯食宿與行程"}
-                                      </button>
-                                    ) : (
-                                      <span className="text-xs md:text-sm font-mono text-gray-500 font-extrabold shrink-0">
-                                        🏨 住宿: {item.lodging || "自選"} ｜ 🚗 交通: {item.transport || "安排"}
-                                      </span>
-                                    )}
                                   </div>
 
-                                  {isTargetEdit && isParent ? (
-                                    <div className="bg-[#FAF8F5] p-3.5 rounded-xl border border-orange-200 space-y-3 mt-2">
-                                      {/* 今日重點 & 提醒 edit block at the top */}
-                                      <div className="bg-[#FFFDF4] border border-[#EDE2D2] rounded-lg p-3 space-y-2.5">
-                                        <div>
-                                          <span className="text-xs text-gray-500 font-bold block mb-1">🌴 今日主題:</span>
-                                          <input
-                                            type="text"
-                                            defaultValue={item.todayTheme || ""}
-                                            onBlur={(e) => handleUpdateExpandedItinerary(mode, date, "todayTheme", e.target.value)}
-                                            placeholder="例如：放空海灘日、文化探索日..."
-                                            className="w-full bg-white border border-[#E8E2D8] rounded-lg p-2 text-sm focus:outline-none focus:ring-1 focus:ring-orange-250 font-bold text-gray-800"
-                                          />
-                                        </div>
-                                        <div>
-                                          <span className="text-xs text-gray-500 font-bold block mb-1">📝 今日備註:</span>
-                                          <textarea
-                                            rows={2}
-                                            defaultValue={item.todayRemarks || ""}
-                                            onBlur={(e) => handleUpdateExpandedItinerary(mode, date, "todayRemarks", e.target.value)}
-                                            placeholder="例如：14:00 SPA預約、17:30 看夕陽、記得帶防蚊液"
-                                            className="w-full bg-white border border-[#E8E2D8] rounded-lg p-2 text-sm focus:outline-none focus:ring-1 focus:ring-orange-250 font-medium resize-none text-gray-800 leading-normal"
-                                          />
-                                        </div>
-                                      </div>
+                                  <div className="space-y-2.5 pl-1.5 font-sans">
+                                    {/* Row 1: 早上行程 */}
+                                    <div className="flex items-center gap-2.5">
+                                      <span className="text-gray-600 font-bold text-xs sm:text-sm shrink-0 w-[72px] text-right">
+                                        早上行程：
+                                      </span>
+                                      <input
+                                        type="text"
+                                        defaultValue={item.morning || ""}
+                                        disabled={!isParent}
+                                        onBlur={(e) => handleUpdateExpandedItinerary(mode, date, "morning", e.target.value)}
+                                        placeholder={isParent ? "輸入行程，例：搭飛機前往北海道..." : "（未設定）"}
+                                        className="flex-grow bg-transparent border-b-2 border-transparent hover:border-gray-200 focus:border-orange-400 focus:bg-orange-50/15 rounded px-2 py-1 text-xs sm:text-sm font-semibold text-gray-850 transition-all focus:outline-none"
+                                      />
+                                    </div>
 
-                                      <div className="grid grid-cols-2 gap-2.5">
-                                        <div>
-                                          <span className="text-xs text-gray-455 font-bold block mb-1">☀️ 早上活動:</span>
-                                          <input
-                                            type="text"
-                                            defaultValue={item.morning || ""}
-                                            onBlur={(e) => handleUpdateExpandedItinerary(mode, date, "morning", e.target.value)}
-                                            className="w-full bg-white border border-[#E8E2D8] rounded-lg p-2 text-sm focus:outline-none focus:ring-1 focus:ring-orange-250 font-medium"
-                                          />
-                                        </div>
-                                        <div>
-                                          <span className="text-xs text-gray-455 font-bold block mb-1">⛅ 下午活動:</span>
-                                          <input
-                                            type="text"
-                                            defaultValue={item.afternoon || ""}
-                                            onBlur={(e) => handleUpdateExpandedItinerary(mode, date, "afternoon", e.target.value)}
-                                            className="w-full bg-white border border-[#E8E2D8] rounded-lg p-2 text-sm focus:outline-none focus:ring-1 focus:ring-orange-250 font-medium"
-                                          />
-                                        </div>
-                                      </div>
-                                      <div className="grid grid-cols-2 gap-2.5">
-                                        <div>
-                                          <span className="text-xs text-gray-455 font-bold block mb-1">🏨 入住宿宿:</span>
-                                          <input
-                                            type="text"
-                                            defaultValue={item.lodging || ""}
-                                            onBlur={(e) => handleUpdateExpandedItinerary(mode, date, "lodging", e.target.value)}
-                                            className="w-full bg-white border border-[#E8E2D8] rounded-lg p-2 text-sm focus:outline-none focus:ring-1 focus:ring-orange-250 font-medium"
-                                          />
-                                        </div>
-                                        <div>
-                                          <span className="text-xs text-gray-455 font-bold block mb-1">🚌 交通轉乘:</span>
-                                          <input
-                                            type="text"
-                                            defaultValue={item.transport || ""}
-                                            onBlur={(e) => handleUpdateExpandedItinerary(mode, date, "transport", e.target.value)}
-                                            className="w-full bg-white border border-[#E8E2D8] rounded-lg p-2 text-sm focus:outline-none focus:ring-1 focus:ring-orange-250 font-medium"
-                                          />
-                                        </div>
-                                      </div>
+                                    {/* Row 2: 下午行程 */}
+                                    <div className="flex items-center gap-2.5">
+                                      <span className="text-gray-600 font-bold text-xs sm:text-sm shrink-0 w-[72px] text-right">
+                                        下午行程：
+                                      </span>
+                                      <input
+                                        type="text"
+                                        defaultValue={item.afternoon || ""}
+                                        disabled={!isParent}
+                                        onBlur={(e) => handleUpdateExpandedItinerary(mode, date, "afternoon", e.target.value)}
+                                        placeholder={isParent ? "輸入行程，例：小樽運河散步..." : "（未設定）"}
+                                        className="flex-grow bg-transparent border-b-2 border-transparent hover:border-gray-200 focus:border-orange-400 focus:bg-orange-50/15 rounded px-2 py-1 text-xs sm:text-sm font-semibold text-gray-850 transition-all focus:outline-none"
+                                      />
                                     </div>
-                                  ) : (
-                                    <div className="p-3.5 bg-gray-50 rounded-xl border border-gray-150 text-gray-750 leading-relaxed space-y-2 text-sm md:text-base">
-                                      {/* Today's Key Points and Remarks at the top of daily plan */}
-                                      {(item.todayTheme || item.todayRemarks) && (
-                                        <div className="bg-[#FFFDF6] border border-[#EDE2D2] p-3 rounded-lg text-xs md:text-sm space-y-1.5 text-[#5E3F27] mb-1.5">
-                                          {item.todayTheme && (
-                                            <p className="font-extrabold flex items-center gap-1.5">
-                                              <span>🌴 今日主題：</span>
-                                              <span className="font-black text-[#9A3412] bg-[#FFFBEB] px-2.5 py-1 rounded-lg border border-[#FDE68A]">{item.todayTheme}</span>
-                                            </p>
-                                          )}
-                                          {item.todayRemarks && (
-                                            <div className="font-semibold text-xs md:text-sm text-gray-650 bg-white/70 p-2.5 rounded border border-dashed border-[#EDE2D2] whitespace-pre-wrap leading-relaxed">
-                                              📝 今日備註：{item.todayRemarks}
-                                            </div>
-                                          )}
-                                        </div>
-                                      )}
-                                      <p className="font-bold">
-                                        🌅 <b>早餐：</b>{item.breakfast || "（未設定）"} ｜ <b>上午：</b>{item.morning || "（未設定）"}
-                                      </p>
-                                      <p className="font-bold">
-                                        🍜 <b>午餐：</b>{item.lunch || "（未設定）"} ｜ <b>下午：</b>{item.afternoon || "（未設定）"}
-                                      </p>
-                                      <p className="font-bold">
-                                        🍖 <b>晚餐：</b>{item.dinner || "（未設定）"} ｜ <b>晚上：</b>{item.night || "（未設定）"}
-                                      </p>
+
+                                    {/* Row 3: 午餐安排 */}
+                                    <div className="flex items-center gap-2.5">
+                                      <span className="text-gray-600 font-bold text-xs sm:text-sm shrink-0 w-[72px] text-right">
+                                        午餐安排：
+                                      </span>
+                                      <input
+                                        type="text"
+                                        defaultValue={item.lunch || ""}
+                                        disabled={!isParent}
+                                        onBlur={(e) => handleUpdateExpandedItinerary(mode, date, "lunch", e.target.value)}
+                                        placeholder={isParent ? "輸入午餐，例：機場餐廳..." : "（未設定）"}
+                                        className="flex-grow bg-transparent border-b-2 border-transparent hover:border-gray-200 focus:border-orange-400 focus:bg-orange-50/15 rounded px-2 py-1 text-xs sm:text-sm font-semibold text-gray-850 transition-all focus:outline-none"
+                                      />
                                     </div>
-                                  )}
+
+                                    {/* Row 4: 晚餐安排 */}
+                                    <div className="flex items-center gap-2.5">
+                                      <span className="text-gray-600 font-bold text-xs sm:text-sm shrink-0 w-[72px] text-right">
+                                        晚餐安排：
+                                      </span>
+                                      <input
+                                        type="text"
+                                        defaultValue={item.dinner || ""}
+                                        disabled={!isParent}
+                                        onBlur={(e) => handleUpdateExpandedItinerary(mode, date, "dinner", e.target.value)}
+                                        placeholder={isParent ? "輸入晚餐，例：海鮮丼飯..." : "（未設定）"}
+                                        className="flex-grow bg-transparent border-b-2 border-transparent hover:border-gray-200 focus:border-orange-400 focus:bg-orange-50/15 rounded px-2 py-1 text-xs sm:text-sm font-semibold text-gray-850 transition-all focus:outline-none"
+                                      />
+                                    </div>
+
+                                    {/* Row 5: 住宿 */}
+                                    <div className="flex items-center gap-2.5">
+                                      <span className="text-gray-600 font-bold text-xs sm:text-sm shrink-0 w-[72px] text-right">
+                                        住宿：
+                                      </span>
+                                      <input
+                                        type="text"
+                                        defaultValue={item.lodging || ""}
+                                        disabled={!isParent}
+                                        onBlur={(e) => handleUpdateExpandedItinerary(mode, date, "lodging", e.target.value)}
+                                        placeholder={isParent ? "輸入住宿，例：札幌王子飯店..." : "（未設定）"}
+                                        className="flex-grow bg-transparent border-b-2 border-transparent hover:border-gray-200 focus:border-orange-400 focus:bg-orange-50/15 rounded px-2 py-1 text-xs sm:text-sm font-semibold text-gray-850 transition-all focus:outline-none"
+                                      />
+                                    </div>
+                                  </div>
                                 </div>
                               );
                             })}
@@ -1113,74 +1240,229 @@ export const SpecialPeriodsConfig: React.FC<SpecialPeriodsConfigProps> = ({
                       </div>
                     </div>
 
-                    {travelType === "international" ? (
-                      <div className="space-y-2.5">
-                        <div className="grid grid-cols-2 gap-2">
-                          <div>
-                            <label className="text-[10px] text-gray-450 font-bold">✈️ 航空公司：</label>
-                            <input
-                              type="text"
-                              value={airLine}
-                              onChange={(e) => setAirLine(e.target.value)}
-                              placeholder="例如：星宇航空"
-                              className="w-full bg-white rounded-lg p-1.5 border border-gray-200 focus:outline-none text-[11px] font-bold"
-                            />
+                    {travelType === "international" ? ( // Verified Flight Block Extension
+                      <div className="space-y-4">
+                        {/* 去程資訊 */}
+                        <div className="bg-[#FAF8F5] border border-[#E9E4DB] rounded-xl p-3 space-y-2.5">
+                          <h5 className="font-extrabold text-[#7C6250] text-[11.5px] pb-1 border-b border-[#E9E4DB]/60 flex items-center gap-1">
+                            ✈️ 去程航班 (Departure Flight)
+                          </h5>
+                          
+                          <div className="grid grid-cols-2 gap-2">
+                            <div>
+                              <label className="text-[10px] text-gray-400 font-extrabold block">航空公司：</label>
+                              <input
+                                type="text"
+                                value={departureAirline}
+                                onChange={(e) => {
+                                  setDepartureAirline(e.target.value);
+                                  setAirLine(e.target.value);
+                                }}
+                                placeholder="例如：中華航空"
+                                className="w-full bg-white rounded-lg p-1.5 border border-gray-200 focus:outline-none text-[11px] font-semibold text-gray-750"
+                              />
+                            </div>
+                            <div>
+                              <label className="text-[10px] text-gray-400 font-extrabold block">航班號碼：</label>
+                              <input
+                                type="text"
+                                value={departureFlightNumber}
+                                onChange={(e) => {
+                                  setDepartureFlightNumber(e.target.value);
+                                  setFlightNumber(e.target.value);
+                                }}
+                                placeholder="例如：CI771"
+                                className="w-full bg-[#FCFBF8] rounded-lg p-1.5 border border-gray-200 focus:outline-none text-[11px] font-semibold text-gray-750"
+                              />
+                            </div>
                           </div>
-                          <div>
-                            <label className="text-[10px] text-gray-455 font-bold">🛫 去程班號：</label>
-                            <input
-                              type="text"
-                              value={flightNumber}
-                              onChange={(e) => setFlightNumber(e.target.value)}
-                              placeholder="例如：JX721"
-                              className="w-full bg-white rounded-lg p-1.5 border border-gray-200 focus:outline-none text-[11px] font-bold"
-                            />
+
+                          <div className="grid grid-cols-2 gap-2">
+                            <div>
+                              <label className="text-[10px] text-gray-400 font-extrabold block">出發日期：</label>
+                              <input
+                                type="text"
+                                value={departureDate}
+                                onChange={(e) => setDepartureDate(e.target.value)}
+                                placeholder="YYYY-MM-DD"
+                                className="w-full bg-white rounded-lg p-1.5 border border-gray-200 focus:outline-none text-[11px] font-semibold text-gray-750"
+                              />
+                            </div>
+                            <div>
+                              <label className="text-[10px] text-gray-400 font-extrabold block">出發時間：</label>
+                              <input
+                                type="text"
+                                value={departureTime}
+                                onChange={(e) => setDepartureTime(e.target.value)}
+                                placeholder="例如：09:10"
+                                className="w-full bg-[#FCFBF8] rounded-lg p-1.5 border border-gray-200 focus:outline-none text-[11px] font-semibold text-gray-750"
+                              />
+                            </div>
+                          </div>
+
+                          <div className="grid grid-cols-3 gap-1.5">
+                            <div className="col-span-2">
+                              <label className="text-[10px] text-gray-400 font-extrabold block">抵達日期：</label>
+                              <input
+                                type="text"
+                                value={departureArrivalDate}
+                                onChange={(e) => setDepartureArrivalDate(e.target.value)}
+                                placeholder="YYYY-MM-DD"
+                                className="w-full bg-white rounded-lg p-1.5 border border-gray-200 focus:outline-none text-[11px] font-semibold text-gray-750"
+                              />
+                            </div>
+                            <div>
+                              <label className="text-[10px] text-gray-400 font-extrabold block">抵達時間：</label>
+                              <input
+                                type="text"
+                                value={departureArrivalTime}
+                                onChange={(e) => setDepartureArrivalTime(e.target.value)}
+                                placeholder="14:35"
+                                className="w-full bg-[#FCFBF8] rounded-lg p-1.5 border border-gray-200 focus:outline-none text-[11px] font-semibold text-gray-750"
+                              />
+                            </div>
+                          </div>
+
+                          <div className="grid grid-cols-3 gap-1.5">
+                            <div>
+                              <label className="text-[10px] text-gray-400 font-extrabold block">出發機場：</label>
+                              <input
+                                type="text"
+                                value={departureAirport}
+                                onChange={(e) => setDepartureAirport(e.target.value)}
+                                placeholder="例如：桃園機場"
+                                className="w-full bg-white rounded-lg p-1.5 border border-gray-200 focus:outline-none text-[11px] font-semibold text-gray-750"
+                              />
+                            </div>
+                            <div>
+                              <label className="text-[10px] text-gray-400 font-extrabold block">抵達機場：</label>
+                              <input
+                                type="text"
+                                value={departureArrivalAirport}
+                                onChange={(e) => setDepartureArrivalAirport(e.target.value)}
+                                placeholder="新千歲機場"
+                                className="w-full bg-white rounded-lg p-1.5 border border-gray-200 focus:outline-none text-[11px] font-semibold text-gray-750"
+                              />
+                            </div>
+                            <div>
+                              <label className="text-[10px] text-gray-400 font-extrabold block">Terminal：</label>
+                              <input
+                                type="text"
+                                value={departureTerminal}
+                                onChange={(e) => setDepartureTerminal(e.target.value)}
+                                placeholder="T2"
+                                className="w-full bg-white rounded-lg p-1.5 border border-gray-200 focus:outline-none text-[11px] font-semibold text-gray-750"
+                              />
+                            </div>
                           </div>
                         </div>
 
-                        <div className="grid grid-cols-2 gap-2">
-                          <div>
-                            <label className="text-[10px] text-gray-450 font-bold">出發起飛時間：</label>
-                            <input
-                              type="text"
-                              value={departureTime}
-                              placeholder="例如：09:50"
-                              onChange={(e) => setDepartureTime(e.target.value)}
-                              className="w-full bg-white rounded-lg p-1.5 border border-gray-200 focus:outline-none text-[11px] font-bold"
-                            />
+                        {/* 回程資訊 */}
+                        <div className="bg-[#F5F8FA] border border-[#DCE4E9] rounded-xl p-3 space-y-2.5">
+                          <h5 className="font-extrabold text-[#4A6076] text-[11.5px] pb-1 border-b border-[#DCE4E9]/60 flex items-center gap-1">
+                            ✈️ 回程航班 (Return Flight)
+                          </h5>
+                          
+                          <div className="grid grid-cols-2 gap-2">
+                            <div>
+                              <label className="text-[10px] text-gray-400 font-extrabold block">航空公司：</label>
+                              <input
+                                type="text"
+                                value={returnAirline}
+                                onChange={(e) => setReturnAirline(e.target.value)}
+                                placeholder="例如：中華航空"
+                                className="w-full bg-white rounded-lg p-1.5 border border-gray-200 focus:outline-none text-[11px] font-semibold text-gray-750"
+                              />
+                            </div>
+                            <div>
+                              <label className="text-[10px] text-gray-400 font-extrabold block">航班號碼：</label>
+                              <input
+                                type="text"
+                                value={returnFlightNumber}
+                                onChange={(e) => setReturnFlightNumber(e.target.value)}
+                                placeholder="例如：CI772"
+                                className="w-full bg-white rounded-lg p-1.5 border border-gray-200 focus:outline-none text-[11px] font-semibold text-gray-750"
+                              />
+                            </div>
                           </div>
-                          <div>
-                            <label className="text-[10px] text-gray-450 font-bold">回程降落時間：</label>
-                            <input
-                              type="text"
-                              value={returnTime}
-                              placeholder="例如：16:45"
-                              onChange={(e) => setReturnTime(e.target.value)}
-                              className="w-full bg-white rounded-lg p-1.5 border border-gray-200 focus:outline-none text-[11px] font-bold"
-                            />
-                          </div>
-                        </div>
 
-                        <div className="grid grid-cols-2 gap-2">
-                          <div>
-                            <label className="text-[10px] text-gray-450 font-bold">起飛 Terminal：</label>
-                            <input
-                              type="text"
-                              value={departureTerminal}
-                              placeholder="例如：第一航廈"
-                              onChange={(e) => setDepartureTerminal(e.target.value)}
-                              className="w-full bg-white rounded-lg p-1.5 border border-gray-200 focus:outline-none text-[11px] font-bold"
-                            />
+                          <div className="grid grid-cols-2 gap-2">
+                            <div>
+                              <label className="text-[10px] text-gray-400 font-extrabold block">出發日期：</label>
+                              <input
+                                type="text"
+                                value={returnDate}
+                                onChange={(e) => setReturnDate(e.target.value)}
+                                placeholder="YYYY-MM-DD"
+                                className="w-full bg-white rounded-lg p-1.5 border border-gray-200 focus:outline-none text-[11px] font-semibold text-gray-750"
+                              />
+                            </div>
+                            <div>
+                              <label className="text-[10px] text-gray-400 font-extrabold block">出發時間：</label>
+                              <input
+                                type="text"
+                                value={returnTime}
+                                onChange={(e) => setReturnTime(e.target.value)}
+                                placeholder="例如：15:20"
+                                className="w-full bg-[#FCFBF8] rounded-lg p-1.5 border border-gray-200 focus:outline-none text-[11px] font-semibold text-gray-750"
+                              />
+                            </div>
                           </div>
-                          <div>
-                            <label className="text-[10px] text-gray-450 font-bold">降落 Terminal：</label>
-                            <input
-                              type="text"
-                              value={returnTerminal}
-                              placeholder="例如：Terminal 2"
-                              onChange={(e) => setReturnTerminal(e.target.value)}
-                              className="w-full bg-white rounded-lg p-1.5 border border-gray-200 focus:outline-none text-[11px] font-bold"
-                            />
+
+                          <div className="grid grid-cols-3 gap-1.5">
+                            <div className="col-span-2">
+                              <label className="text-[10px] text-gray-400 font-extrabold block">抵達日期：</label>
+                              <input
+                                type="text"
+                                value={returnArrivalDate}
+                                onChange={(e) => setReturnArrivalDate(e.target.value)}
+                                placeholder="YYYY-MM-DD"
+                                className="w-full bg-white rounded-lg p-1.5 border border-gray-200 focus:outline-none text-[11px] font-semibold text-gray-750"
+                              />
+                            </div>
+                            <div>
+                              <label className="text-[10px] text-gray-400 font-extrabold block">抵達時間：</label>
+                              <input
+                                type="text"
+                                value={returnArrivalTime}
+                                onChange={(e) => setReturnArrivalTime(e.target.value)}
+                                placeholder="18:45"
+                                className="w-full bg-[#FCFBF8] rounded-lg p-1.5 border border-gray-200 focus:outline-none text-[11px] font-semibold text-gray-750"
+                              />
+                            </div>
+                          </div>
+
+                          <div className="grid grid-cols-3 gap-1.5">
+                            <div>
+                              <label className="text-[10px] text-gray-400 font-extrabold block">出發機場：</label>
+                              <input
+                                type="text"
+                                value={returnAirport}
+                                onChange={(e) => setReturnAirport(e.target.value)}
+                                placeholder="例如：新千歲機場"
+                                className="w-full bg-white rounded-lg p-1.5 border border-gray-200 focus:outline-none text-[11px] font-semibold text-gray-750"
+                              />
+                            </div>
+                            <div>
+                              <label className="text-[10px] text-gray-400 font-extrabold block">抵達機場：</label>
+                              <input
+                                type="text"
+                                value={returnArrivalAirport}
+                                onChange={(e) => setReturnArrivalAirport(e.target.value)}
+                                placeholder="桃園機場"
+                                className="w-full bg-white rounded-lg p-1.5 border border-gray-200 focus:outline-none text-[11px] font-semibold text-gray-750"
+                              />
+                            </div>
+                            <div>
+                              <label className="text-[10px] text-gray-400 font-extrabold block">Terminal：</label>
+                              <input
+                                type="text"
+                                value={returnTerminal}
+                                onChange={(e) => setReturnTerminal(e.target.value)}
+                                placeholder="T2"
+                                className="w-full bg-white rounded-lg p-1.5 border border-gray-200 focus:outline-none text-[11px] font-semibold text-gray-750"
+                              />
+                            </div>
                           </div>
                         </div>
 

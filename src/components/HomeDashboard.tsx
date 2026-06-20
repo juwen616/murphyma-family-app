@@ -17,6 +17,7 @@ import {
   Redemption,
 } from "../types";
 import { getHolidayForDate } from "../utils/holidayService";
+import { sortEventsForSingleDay } from "../utils/eventSort";
 import {
   Bell,
   CheckCircle,
@@ -979,32 +980,8 @@ export default function HomeDashboard({
       return true;
     });
 
-    // 4. Sort based on priority:
-    //    - Priority 1: Ongoing timed events
-    //    - Priority 2: Upcoming timed events
-    //    - Priority 3: No-time events
-    // (And sort within categories by start time mins)
-    filtered.sort((a, b) => {
-      const getPriority = (x: typeof a) => {
-        if (x.status.hasTime && x.status.isOngoing) return 1;
-        if (x.status.hasTime && x.status.isUpcoming) return 2;
-        return 3; // no-time / all-day
-      };
-
-      const priA = getPriority(a);
-      const priB = getPriority(b);
-
-      if (priA !== priB) {
-        return priA - priB;
-      }
-
-      // Within same priority, sort by actual start time if available
-      if (a.status.hasTime && b.status.hasTime) {
-        return a.status.startTimeMins - b.status.startTimeMins;
-      }
-
-      return 0;
-    });
+    // Sort chronologically using the unified sortEventsForSingleDay helper
+    filtered.sort((a, b) => sortEventsForSingleDay(a.event, b.event));
 
     return filtered.map((item) => item.event);
   }, [allEvents, todayDateStr]);
@@ -1056,6 +1033,9 @@ export default function HomeDashboard({
         return e.date === dateStr;
       });
 
+      // Sort dayEvents chronologically
+      const sortedDayEvents = [...dayEvents].sort(sortEventsForSingleDay);
+
       const dayOfWeek = ["星期日", "星期一", "星期二", "星期三", "星期四", "星期五", "星期六"][dow];
       const holiday = getHolidayForDate(dateStr);
 
@@ -1063,7 +1043,7 @@ export default function HomeDashboard({
         dateStr,
         displayDate: `${mm}月${dd}日（${dayOfWeek}）`,
         isToday: i === 0,
-        events: dayEvents,
+        events: sortedDayEvents,
         holiday,
       });
     }
@@ -1411,68 +1391,86 @@ export default function HomeDashboard({
               )}
             </div>
 
-            <div className="mt-3 flex-1 flex flex-col justify-center">
+            <div className="mt-3 flex-1 flex flex-col justify-start">
               {announcements.length === 0 ? (
                 <div className="text-center py-4 bg-white/40 border border-dashed border-[#F3CDC4]/50 rounded-2xl">
                   <p className="text-xs text-gray-400 font-bold">目前沒有公告事項</p>
                 </div>
               ) : (
-                (() => {
-                  const ann = announcements[0];
-                  return (
-                    <div
-                      key={ann.id}
-                      onClick={() => setSelectedAnnouncement(ann)}
-                      className="relative block text-left cursor-pointer transition hover:scale-[1.002] flex-1 flex flex-col justify-between"
-                    >
-                      <div className="flex items-start gap-2.5 min-w-0 pr-16">
-                        <span className="text-lg shrink-0 mt-0.5">📌</span>
-                        <div className="min-w-0 flex-1">
-                          <h4 className="text-sm md:text-base font-black text-rose-955 leading-tight tracking-tight">
-                            {ann.title}
-                          </h4>
-                          {ann.content && (
-                            <p className="text-xs md:text-sm font-bold text-rose-900/90 mt-1 break-words whitespace-pre-wrap leading-snug">
-                              {ann.content}
-                            </p>
+                <div className="space-y-3 w-full">
+                  <div className="space-y-2.5">
+                    {announcements.slice(0, 3).map((ann) => {
+                      const annDate = ann.createdAt?.seconds
+                        ? new Date(ann.createdAt.seconds * 1000).toLocaleDateString("zh-TW", { year: "numeric", month: "2-digit", day: "2-digit" })
+                        : new Date().toLocaleDateString("zh-TW", { year: "numeric", month: "2-digit", day: "2-digit" });
+
+                      return (
+                        <div
+                          key={ann.id}
+                          onClick={() => setSelectedAnnouncement(ann)}
+                          className="p-3.5 bg-[#FFF9F8] hover:bg-[#FFF5F3] border border-[#FADCD2]/80 rounded-xl relative transition hover:scale-[1.002] cursor-pointer"
+                        >
+                          <div className="flex items-start gap-2 pr-12">
+                            <span className="text-sm shrink-0 select-none">📌</span>
+                            <div className="min-w-0 flex-1">
+                              <h4 className="text-xs sm:text-sm font-black text-[#5C2B21] leading-tight break-words">
+                                {ann.title}
+                              </h4>
+                              {ann.content && (
+                                <p className="text-[11px] md:text-xs font-bold text-[#8C5A4E] mt-1 break-words whitespace-pre-wrap leading-snug">
+                                  {ann.content}
+                                </p>
+                              )}
+                              <p className="text-[9.5px] font-mono font-bold text-[#A88076] mt-1.5 select-none">
+                                {annDate}
+                              </p>
+                            </div>
+                          </div>
+
+                          {canEditAnnouncement(ann) && (
+                            <div className="absolute right-2 top-2.5 flex items-center gap-0.5" onClick={(e) => e.stopPropagation()}>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setEditingAnnouncement(ann);
+                                  setNewAnnTitle(ann.title);
+                                  setNewAnnContent(ann.content);
+                                  setShowAddAnnModal(true);
+                                }}
+                                className="p-1 text-[#8C5A4E] hover:text-rose-700 hover:bg-white rounded-md cursor-pointer transition"
+                                title="修改公告"
+                              >
+                                <Edit3 className="h-3 w-3" />
+                              </button>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setAnnouncementToDelete(ann);
+                                  setDeleteAnnError(null);
+                                  setShowDeleteAnnConfirm(true);
+                                }}
+                                className="p-1 text-rose-500 hover:text-rose-800 hover:bg-[#FFE5E0]/30 rounded-md cursor-pointer transition"
+                                title="刪除公告"
+                              >
+                                <Trash2 className="h-3 w-3" />
+                              </button>
+                            </div>
                           )}
                         </div>
-                      </div>
-                      
-                      {canEditAnnouncement(ann) && (
-                        <div className="flex items-center justify-end gap-1.5 mt-2" onClick={(e) => e.stopPropagation()}>
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setEditingAnnouncement(ann);
-                              setNewAnnTitle(ann.title);
-                              setNewAnnContent(ann.content);
-                              setShowAddAnnModal(true);
-                            }}
-                            className="p-1 px-2 text-[10px] text-rose-500 hover:text-rose-800 bg-white/75 hover:bg-white border border-rose-200/50 rounded-lg cursor-pointer transition flex items-center gap-1 font-bold"
-                            title="修改公告"
-                          >
-                            <Edit3 className="h-3 w-3" />
-                            <span>修改</span>
-                          </button>
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setAnnouncementToDelete(ann);
-                              setDeleteAnnError(null);
-                              setShowDeleteAnnConfirm(true);
-                            }}
-                            className="p-1 px-2 text-[10px] text-rose-500 hover:text-rose-800 bg-rose-100 hover:bg-rose-205 rounded-lg cursor-pointer transition flex items-center gap-1 font-bold"
-                            title="刪除"
-                          >
-                            <Trash2 className="h-3 w-3" />
-                            <span>刪除</span>
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                  );
-                })()
+                      );
+                    })}
+                  </div>
+
+                  {announcements.length > 3 && (
+                    <button
+                      type="button"
+                      onClick={() => setShowAllAnnouncements(true)}
+                      className="w-full mt-2 py-1.5 text-center text-[11px] font-black text-[#8C3E32] hover:text-[#5B1F16] bg-[#FFF2F0] hover:bg-[#FFE5E0] border border-[#FADCD2]/70 rounded-lg transition cursor-pointer select-none"
+                    >
+                      【 查看全部公告 】 (共 {announcements.length} 則)
+                    </button>
+                  )}
+                </div>
               )}
             </div>
           </section>
@@ -1760,8 +1758,9 @@ export default function HomeDashboard({
                               }
                             </h4>
                             <div className="flex flex-wrap items-center gap-1 mt-0.5">
-                              <p className="text-[10px] font-mono text-gray-500 font-bold">
-                                {evt.time || "全天時間"}
+                              <p className="text-[10px] font-mono text-gray-500 font-bold flex items-center gap-0.5">
+                                <span>🕘</span>
+                                <span>{evt.time || "全天"}</span>
                               </p>
                               {timeStatus.hasTime && timeStatus.isOngoing && (
                                 <span className="text-emerald-755 bg-emerald-50 border border-emerald-200 rounded px-1.5 py-0.2 text-[8px] font-black tracking-wider flex items-center gap-0.5 animate-pulse">
@@ -1769,6 +1768,23 @@ export default function HomeDashboard({
                                 </span>
                               )}
                             </div>
+                            {evt.location && (
+                              <div 
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  const trimmed = evt.location ? evt.location.trim() : "";
+                                  if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) {
+                                    window.open(trimmed, "_blank");
+                                  } else {
+                                    window.open(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(trimmed)}`, "_blank");
+                                  }
+                                }}
+                                className="text-[10.5px] font-bold text-[#C76A5A] hover:underline cursor-pointer flex items-center gap-0.5 mt-1 select-none"
+                              >
+                                <span>📍</span>
+                                <span className="truncate">{evt.location}</span>
+                              </div>
+                            )}
                             {isMultiDayEvent(evt) && evt.dailyNotes?.[todayDateStr] && (
                               <div className="text-[10px] text-[#004B8F] font-bold bg-[#E1F0FF]/60 px-1.5 py-0.5 rounded border border-sky-100 mt-1 inline-block truncate max-w-full">
                                 📘 {evt.dailyNotes[todayDateStr]}
@@ -1883,22 +1899,42 @@ export default function HomeDashboard({
                                     </span>
 
                                     {/* 名稱與細節 */}
-                                    <div className="flex items-center gap-1.5 min-w-0 flex-wrap">
-                                      <span className={`text-[13px] font-black leading-snug truncate ${isBday ? "text-rose-850" : "text-[#2D2926]"}`}>
-                                        {isBday 
-                                          ? `🎂 ${((evt as any).birthdayMemberName || evt.title.replace("🎂", "").trim().replace("生日", "")).trim()}生日快樂！` 
-                                          : evt.title
-                                        }
-                                      </span>
-                                      {evt.isPublic === false && !isBday && (
-                                        <span className="bg-amber-50 text-amber-700 text-[9px] px-1 rounded border border-amber-100 font-bold shrink-0">
-                                          🔒 私人
+                                    <div className="flex flex-col min-w-0">
+                                      <div className="flex items-center gap-1.5 min-w-0 flex-wrap">
+                                        <span className={`text-[13px] font-black leading-snug truncate ${isBday ? "text-rose-850" : "text-[#2D2926]"}`}>
+                                          {isBday 
+                                            ? `🎂 ${((evt as any).birthdayMemberName || evt.title.replace("🎂", "").trim().replace("生日", "")).trim()}生日快樂！` 
+                                            : evt.title
+                                          }
                                         </span>
-                                      )}
-                                      {evt.isFixed && !isBday && (
-                                        <span className="bg-rose-50 text-rose-500 text-[9px] px-1 rounded border border-rose-100 shrink-0 font-medium">
-                                          日常
-                                        </span>
+                                        {evt.isPublic === false && !isBday && (
+                                          <span className="bg-amber-50 text-amber-700 text-[9px] px-1 rounded border border-amber-100 font-bold shrink-0">
+                                            🔒 私人
+                                          </span>
+                                        )}
+                                        {evt.isFixed && !isBday && (
+                                          <span className="bg-rose-50 text-rose-500 text-[9px] px-1 rounded border border-rose-100 shrink-0 font-medium">
+                                            日常
+                                          </span>
+                                        )}
+                                      </div>
+                                      
+                                      {evt.location && (
+                                        <div 
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            const trimmed = evt.location ? evt.location.trim() : "";
+                                            if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) {
+                                              window.open(trimmed, "_blank");
+                                            } else {
+                                              window.open(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(trimmed)}`, "_blank");
+                                            }
+                                          }}
+                                          className="text-[11px] font-extrabold text-[#C76A5A] hover:underline flex items-center gap-0.5 mt-0.5 select-none"
+                                        >
+                                          <span>📍</span>
+                                          <span className="truncate max-w-[200px]">{evt.location}</span>
+                                        </div>
                                       )}
                                     </div>
                                   </div>
@@ -2044,6 +2080,25 @@ export default function HomeDashboard({
                                       <span className="text-xs shrink-0 font-sans">🕒</span>
                                       <span>{evt.time || "無指定時間"}</span>
                                     </div>
+
+                                    {/* 📍 Location info */}
+                                    {evt.location && (
+                                      <div 
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          const trimmed = evt.location ? evt.location.trim() : "";
+                                          if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) {
+                                            window.open(trimmed, "_blank");
+                                          } else {
+                                            window.open(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(trimmed)}`, "_blank");
+                                          }
+                                        }}
+                                        className="text-xs font-bold text-[#C76A5A] hover:underline cursor-pointer flex items-center gap-1 mt-0.5 select-none"
+                                      >
+                                        <span>📍</span>
+                                        <span className="truncate">{evt.location}</span>
+                                      </div>
+                                    )}
 
                                     {/* 📝 Note container */}
                                     {hasNote && (
@@ -3242,9 +3297,27 @@ export default function HomeDashboard({
                         <p className={`text-xs font-bold truncate ${isBday ? "text-rose-800" : "text-[#3C332D]"}`}>
                           {evt.title}
                         </p>
-                        <p className="text-[9.5px] text-gray-400 font-mono mt-0.5 font-bold">
-                          {isBday ? "全天生日慶祝" : (evt.time || "全天")}
+                        <p className="text-[9.5px] text-gray-400 font-mono mt-0.5 font-bold flex items-center gap-0.5">
+                          <span>🕘</span>
+                          <span>{isBday ? "全天生日慶祝" : (evt.time || "全天")}</span>
                         </p>
+                        {evt.location && (
+                          <p 
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              const trimmed = evt.location ? evt.location.trim() : "";
+                              if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) {
+                                window.open(trimmed, "_blank");
+                              } else {
+                                window.open(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(trimmed)}`, "_blank");
+                              }
+                            }}
+                            className="text-[9.5px] text-[#C76A5A] hover:underline flex items-center gap-0.5 mt-0.5 font-bold truncate cursor-pointer select-none"
+                          >
+                            <span>📍</span>
+                            <span>{evt.location}</span>
+                          </p>
+                        )}
                       </div>
                     </div>
                     <ChevronRight className={`h-3.5 w-3.5 shrink-0 ${isBday ? "text-rose-400" : "text-gray-400"}`} />

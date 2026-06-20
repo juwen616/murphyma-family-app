@@ -52,6 +52,7 @@ export interface Family {
   name: string;
   adminUid: string;
   createdAt: any;
+  createdByEmail?: string;
 }
 
 export interface FamilyMember {
@@ -200,6 +201,25 @@ export interface ConfiguredMode {
   visaReminder?: boolean;
   notes?: string;
   transportation?: string; // drive, hightrain, train, bus, rent, custom or custom text
+
+  // Detailed Departure Information
+  departureAirline?: string;
+  departureFlightNumber?: string;
+  departureDate?: string;
+  departureArrivalDate?: string;
+  departureArrivalTime?: string;
+  departureAirport?: string;
+  departureArrivalAirport?: string;
+
+  // Detailed Return Information
+  returnAirline?: string;
+  returnFlightNumber?: string;
+  returnDate?: string;
+  returnArrivalDate?: string;
+  returnArrivalTime?: string;
+  returnAirport?: string;
+  returnArrivalAirport?: string;
+
   itinerary?: {
     [dateStr: string]: {
       breakfast?: string;

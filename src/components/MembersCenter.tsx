@@ -1714,158 +1714,99 @@ https://murphyma-family-app.vercel.app/`;
                                 const activeDate = activeItineraryDate || dates[0] || "";
                                 if (!activeDate) return null;
 
-                                const dayData = mode.itinerary?.[activeDate] || {
-                                  breakfast: "無安排", morning: "無安排", lunch: "無安排",
-                                  afternoon: "無安排", dinner: "無安排", night: "無安排",
-                                  lodging: "無安排", transport: "無安排", customNotes: ""
-                                };
+                                const dayData = mode.itinerary?.[activeDate] || {};
 
                                 return (
-                                  <div className="space-y-2 bg-white p-2.5 rounded-lg border border-gray-200 shadow-sm text-[11px]">
-                                    {/* Today Theme & Today Remarks Block */}
-                                    <div className="bg-[#FFFDF4] border border-[#F0E6D2] rounded-lg p-2 space-y-2 mb-2">
-                                      <div className="text-[10px] text-[#A27B5C] font-black border-b border-[#F0E6D2]/50 pb-1">
-                                        📌 今日主題 & 備註提醒
-                                      </div>
-                                      <div>
-                                        <label className="text-[9px] text-[#7C6354] font-black flex items-center gap-0.5">
-                                          <span>🌴</span> 今日主題：
-                                        </label>
-                                        <input
-                                          type="text"
-                                          value={dayData.todayTheme || ""}
-                                          disabled={!isParent}
-                                          placeholder="例如：放空海灘日、文化探索日..."
-                                          onChange={(e) => handleUpdateExpandedItinerary(mode, activeDate, "todayTheme", e.target.value)}
-                                          className="w-full bg-white rounded p-1 text-gray-700 border border-[#EAC4A8] focus:border-[#A27B5C] focus:outline-none text-[11px] font-bold"
-                                        />
-                                      </div>
-                                      <div>
-                                        <label className="text-[9px] text-[#7C6354] font-black flex items-center gap-0.5">
-                                          <span>📝</span> 今日備註：
-                                        </label>
-                                        <textarea
-                                          rows={2}
-                                          value={dayData.todayRemarks || ""}
-                                          disabled={!isParent}
-                                          placeholder="例如：14:00 SPA預約、記得帶防蚊液..."
-                                          onChange={(e) => handleUpdateExpandedItinerary(mode, activeDate, "todayRemarks", e.target.value)}
-                                          className="w-full bg-white rounded p-1 text-gray-700 border border-[#EAC4A8] focus:border-[#A27B5C] focus:outline-none text-[11px] font-semibold resize-none"
-                                        />
-                                      </div>
-                                    </div>
-                                    <div className="flex justify-between items-center text-[10px] text-gray-400 font-extrabold border-b border-gray-100 pb-1 mb-2">
-                                      <span>📅 日期：{activeDate} 當日安排</span>
+                                  <div className="space-y-3 bg-white p-3.5 rounded-xl border border-orange-100 shadow-sm text-[11px] font-sans">
+                                    <div className="flex justify-between items-center text-[10px] text-gray-500 font-extrabold border-b border-orange-50 pb-1.5 mb-2.5">
+                                      <span>📅 日期：{activeDate} 行程規劃表</span>
                                       {activeDate === simulatedTodayDate && (
                                         <span className="text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded animate-pulse">
                                           ● 模擬今天
                                         </span>
                                       )}
                                     </div>
-                                    <div className="grid grid-cols-2 gap-2">
-                                      <div>
-                                        <label className="text-[9px] text-[#7C6354] font-black">🍳 早餐：</label>
-                                        <input
-                                          type="text"
-                                          value={dayData.breakfast || ""}
-                                          disabled={!isParent}
-                                          placeholder="無安排"
-                                          onChange={(e) => handleUpdateExpandedItinerary(mode, activeDate, "breakfast", e.target.value)}
-                                          className="w-full bg-gray-50/50 rounded p-1 text-gray-700 border border-gray-200 focus:border-indigo-300 focus:bg-white focus:outline-none"
-                                        />
-                                      </div>
-                                      <div>
-                                        <label className="text-[9px] text-[#7C6354] font-black">🌅 上午：</label>
+
+                                    <div className="space-y-2.5 pl-0.5">
+                                      {/* Row 1: 早上行程 */}
+                                      <div className="flex items-center gap-2">
+                                        <span className="text-gray-500 font-bold shrink-0 w-[56px] text-right">
+                                          早上行程：
+                                        </span>
                                         <input
                                           type="text"
                                           value={dayData.morning || ""}
                                           disabled={!isParent}
-                                          placeholder="無安排"
+                                          placeholder={isParent ? "輸入行程，例：搭飛機..." : "（未設定）"}
                                           onChange={(e) => handleUpdateExpandedItinerary(mode, activeDate, "morning", e.target.value)}
-                                          className="w-full bg-gray-50/50 rounded p-1 text-gray-700 border border-gray-200 focus:border-indigo-300 focus:bg-white focus:outline-none"
+                                          className="flex-grow bg-transparent border-b border-transparent hover:border-gray-200 focus:border-orange-400 focus:bg-orange-50/15 rounded px-2 py-1 font-semibold text-gray-800 transition-all focus:outline-none text-[11px]"
                                         />
                                       </div>
-                                      <div>
-                                        <label className="text-[9px] text-[#7C6354] font-black">🍱 午餐：</label>
-                                        <input
-                                          type="text"
-                                          value={dayData.lunch || ""}
-                                          disabled={!isParent}
-                                          placeholder="無安排"
-                                          onChange={(e) => handleUpdateExpandedItinerary(mode, activeDate, "lunch", e.target.value)}
-                                          className="w-full bg-gray-50/50 rounded p-1 text-gray-700 border border-gray-200 focus:border-indigo-300 focus:bg-white focus:outline-none"
-                                        />
-                                      </div>
-                                      <div>
-                                        <label className="text-[9px] text-[#7C6354] font-black">🏄 下午：</label>
+
+                                      {/* Row 2: 下午行程 */}
+                                      <div className="flex items-center gap-2">
+                                        <span className="text-gray-500 font-bold shrink-0 w-[56px] text-right">
+                                          下午行程：
+                                        </span>
                                         <input
                                           type="text"
                                           value={dayData.afternoon || ""}
                                           disabled={!isParent}
-                                          placeholder="無安排"
+                                          placeholder={isParent ? "輸入行程，例：漫步散步..." : "（未設定）"}
                                           onChange={(e) => handleUpdateExpandedItinerary(mode, activeDate, "afternoon", e.target.value)}
-                                          className="w-full bg-gray-50/50 rounded p-1 text-gray-700 border border-gray-200 focus:border-indigo-300 focus:bg-white focus:outline-none"
+                                          className="flex-grow bg-transparent border-b border-transparent hover:border-gray-200 focus:border-orange-400 focus:bg-orange-50/15 rounded px-2 py-1 font-semibold text-gray-800 transition-all focus:outline-none text-[11px]"
                                         />
                                       </div>
-                                      <div>
-                                        <label className="text-[9px] text-[#7C6354] font-black">🍛 晚餐：</label>
+
+                                      {/* Row 3: 午餐安排 */}
+                                      <div className="flex items-center gap-2">
+                                        <span className="text-gray-500 font-bold shrink-0 w-[56px] text-right">
+                                          午餐安排：
+                                        </span>
+                                        <input
+                                          type="text"
+                                          value={dayData.lunch || ""}
+                                          disabled={!isParent}
+                                          placeholder={isParent ? "輸入午餐，例：拉麵屋..." : "（未設定）"}
+                                          onChange={(e) => handleUpdateExpandedItinerary(mode, activeDate, "lunch", e.target.value)}
+                                          className="flex-grow bg-transparent border-b border-transparent hover:border-gray-200 focus:border-orange-400 focus:bg-orange-50/15 rounded px-2 py-1 font-semibold text-gray-800 transition-all focus:outline-none text-[11px]"
+                                        />
+                                      </div>
+
+                                      {/* Row 4: 晚餐安排 */}
+                                      <div className="flex items-center gap-2">
+                                        <span className="text-gray-500 font-bold shrink-0 w-[56px] text-right">
+                                          晚餐安排：
+                                        </span>
                                         <input
                                           type="text"
                                           value={dayData.dinner || ""}
                                           disabled={!isParent}
-                                          placeholder="無安排"
+                                          placeholder={isParent ? "輸入晚餐，例：燒肉享用..." : "（未設定）"}
                                           onChange={(e) => handleUpdateExpandedItinerary(mode, activeDate, "dinner", e.target.value)}
-                                          className="w-full bg-gray-50/50 rounded p-1 text-gray-700 border border-gray-200 focus:border-indigo-300 focus:bg-white focus:outline-none"
+                                          className="flex-grow bg-transparent border-b border-transparent hover:border-gray-200 focus:border-orange-400 focus:bg-orange-50/15 rounded px-2 py-1 font-semibold text-gray-800 transition-all focus:outline-none text-[11px]"
                                         />
                                       </div>
-                                      <div>
-                                        <label className="text-[9px] text-[#7C6354] font-black">🌃 晚上：</label>
-                                        <input
-                                          type="text"
-                                          value={dayData.night || ""}
-                                          disabled={!isParent}
-                                          placeholder="無安排"
-                                          onChange={(e) => handleUpdateExpandedItinerary(mode, activeDate, "night", e.target.value)}
-                                          className="w-full bg-gray-50/50 rounded p-1 text-gray-700 border border-gray-200 focus:border-indigo-300 focus:bg-white focus:outline-none"
-                                        />
-                                      </div>
-                                      <div>
-                                        <label className="text-[9px] text-[#7C6354] font-black">🏠 住宿地區：</label>
+
+                                      {/* Row 5: 住宿 */}
+                                      <div className="flex items-center gap-2">
+                                        <span className="text-gray-500 font-bold shrink-0 w-[56px] text-right">
+                                          住宿：
+                                        </span>
                                         <input
                                           type="text"
                                           value={dayData.lodging || ""}
                                           disabled={!isParent}
-                                          placeholder="無安排"
+                                          placeholder={isParent ? "輸入住宿，例：王子飯店..." : "（未設定）"}
                                           onChange={(e) => handleUpdateExpandedItinerary(mode, activeDate, "lodging", e.target.value)}
-                                          className="w-full bg-gray-50/50 rounded p-1 text-gray-700 border border-gray-200 focus:border-indigo-300 focus:bg-white focus:outline-none"
-                                        />
-                                      </div>
-                                      <div>
-                                        <label className="text-[9px] text-[#7C6354] font-black">🚲 當日交通公具：</label>
-                                        <input
-                                          type="text"
-                                          value={dayData.transport || ""}
-                                          disabled={!isParent}
-                                          placeholder="無安排"
-                                          onChange={(e) => handleUpdateExpandedItinerary(mode, activeDate, "transport", e.target.value)}
-                                          className="w-full bg-gray-50/50 rounded p-1 text-gray-700 border border-gray-200 focus:border-indigo-300 focus:bg-white focus:outline-none"
-                                        />
-                                      </div>
-                                      <div className="col-span-2">
-                                        <label className="text-[9px] text-[#7C6354] font-black">✍ 備註說明：</label>
-                                        <input
-                                          type="text"
-                                          value={dayData.customNotes || ""}
-                                          disabled={!isParent}
-                                          placeholder="無備註"
-                                          onChange={(e) => handleUpdateExpandedItinerary(mode, activeDate, "customNotes", e.target.value)}
-                                          className="w-full bg-gray-50/50 rounded p-1 text-gray-700 border border-gray-200 focus:border-indigo-300 focus:bg-white focus:outline-none font-extrabold"
+                                          className="flex-grow bg-transparent border-b border-transparent hover:border-gray-200 focus:border-orange-400 focus:bg-orange-50/15 rounded px-2 py-1 font-semibold text-gray-800 transition-all focus:outline-none text-[11px]"
                                         />
                                       </div>
                                     </div>
+
                                     {isParent && (
-                                      <p className="text-[8px] text-gray-450 text-right font-semibold">
-                                        * 行程欄位輸入完成即時自動存檔喔
+                                      <p className="text-[8px] text-gray-400 text-right font-medium">
+                                        * 輸入完成即時自動存檔喔
                                       </p>
                                     )}
                                   </div>

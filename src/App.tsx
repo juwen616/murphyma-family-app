@@ -91,6 +91,42 @@ export const getRoleLabel = (r?: UserRole | string) => {
   return "未知";
 };
 
+export const getIdentityLabel = (profile: UserProfile | null) => {
+  if (!profile) return "載入中";
+  
+  const role = profile.role as any;
+  const displayName = profile.displayName || "";
+  
+  // Admin / Owner
+  if (role === UserRole.ADMIN || role === UserRole.OWNER || role === UserRole.SUPER_ADMIN || role === "Owner" || role === "Admin") {
+    return "管理員";
+  }
+  
+  // Parent
+  if (role === UserRole.PARENT || role === "Parent") {
+    if (displayName.includes("爸爸") || displayName.includes("爸") || displayName.toLowerCase().includes("dad") || displayName.toLowerCase().includes("father")) {
+      return "爸爸";
+    }
+    if (displayName.includes("媽媽") || displayName.includes("媽") || displayName.toLowerCase().includes("mom") || displayName.toLowerCase().includes("mother")) {
+      return "媽媽";
+    }
+    return displayName || "家長";
+  }
+  
+  // Kid / Child
+  if (role === UserRole.KID || role === UserRole.CHILD || role === "Child" || role === "Kid") {
+    return "小孩";
+  }
+  
+  // Fallback check on displayName
+  if (displayName.includes("爸爸") || displayName.includes("爸")) return "爸爸";
+  if (displayName.includes("媽媽") || displayName.includes("媽")) return "媽媽";
+  if (displayName.includes("管理員")) return "管理員";
+  if (displayName.includes("小孩") || displayName.includes("子") || displayName.includes("兒") || displayName.includes("女")) return "小孩";
+
+  return getRoleLabel(role);
+};
+
 export function normalizeDbRole(roleStr: string | undefined): UserRole {
   if (!roleStr) return UserRole.VIEWER;
   const lower = roleStr.toLowerCase();
@@ -129,6 +165,11 @@ export default function App() {
   const [isLoggingIn, setIsLoggingIn] = useState(false);
   const [isSandboxLoggingIn, setIsSandboxLoggingIn] = useState(false);
 
+  const [authError, setAuthError] = useState<{ code: string | null; message: string | null }>({
+    code: null,
+    message: null,
+  });
+
   // New states for the redesigned landing login page
   const [loginTab, setLoginTab] = useState<"google" | "invite">("google");
   const [bindGoogle, setBindGoogle] = useState(true);
@@ -137,6 +178,271 @@ export default function App() {
   const [foundInvite, setFoundInvite] = useState<any | null>(null);
   const [isSearchingInvite, setIsSearchingInvite] = useState(false);
   const [searchInviteError, setSearchInviteError] = useState<string | null>(null);
+
+  const renderDiagnosticPanel = () => {
+    const isWhitelisted = isWhitelistedCreator || (user?.email && user.email.toLowerCase() === "juwen616@gmail.com");
+    
+    // Determine Google Auth State text & color
+    let authText = "🔴 未登入";
+    let authColorClass = "text-rose-600 bg-rose-50 border border-rose-100";
+    if (isLoadingAuth) {
+      authText = "🟡 驗證載入中...";
+      authColorClass = "text-amber-600 bg-amber-50 border border-amber-100";
+    } else if (user) {
+      authText = "🟢 已登入";
+      authColorClass = "text-emerald-700 bg-emerald-50 border border-emerald-100";
+    }
+
+    // Determine Gmail text
+    const gmailText = user?.email || "⚪ 無";
+
+    // Determine User Document status
+    let userDocText = "⚪ 未登入";
+    let userDocColorClass = "text-gray-500 bg-gray-50 border border-gray-150";
+    if (isLoadingAuth) {
+      userDocText = "🟡 查詢中...";
+      userDocColorClass = "text-amber-600 bg-amber-50 border border-amber-100";
+    } else if (user) {
+      if (currentUserProfile) {
+        userDocText = "🟢 已建立";
+        userDocColorClass = "text-emerald-700 bg-emerald-50 border border-emerald-100";
+      } else {
+        userDocText = "🔴 未建立 / 載入失敗 (user-doc-not-found)";
+        userDocColorClass = "text-rose-600 bg-rose-50 border border-rose-100";
+      }
+    }
+
+    // Determine Family 綁定狀態
+    let familyText = "⚪ 未登入";
+    let familyColorClass = "text-gray-500 bg-gray-50 border border-gray-150";
+    if (isLoadingAuth) {
+      familyText = "🟡 查詢中...";
+      familyColorClass = "text-amber-600 bg-amber-50 border border-amber-100";
+    } else if (user) {
+      if (currentUserProfile) {
+        if (currentUserProfile.familyId) {
+          familyText = `🟢 已綁定 familyId (${currentUserProfile.familyId})`;
+          familyColorClass = "text-emerald-700 bg-emerald-50 border border-emerald-100";
+        } else {
+          familyText = "🟡 尚未綁定 familyId";
+          familyColorClass = "text-amber-600 bg-amber-50 border border-amber-100";
+        }
+      } else {
+        familyText = "🔴 尚未綁定 familyId (個人檔案不存在)";
+        familyColorClass = "text-rose-600 bg-rose-50 border border-rose-100";
+      }
+    }
+
+    // Determine 白名單狀態
+    let whitelistText = "⚪ 未登入";
+    let whitelistColorClass = "text-gray-500 bg-gray-50 border border-gray-150";
+    if (isLoadingAuth) {
+      whitelistText = "🟡 查詢中...";
+      whitelistColorClass = "text-amber-600 bg-amber-50 border border-amber-100";
+    } else if (user) {
+      if (isWhitelisted) {
+        whitelistText = "🟢 已通過白名單";
+        whitelistColorClass = "text-emerald-700 bg-emerald-50 border border-emerald-100";
+      } else {
+        whitelistText = "🔴 未通過白名單";
+        whitelistColorClass = "text-rose-600 bg-rose-50 border border-rose-100";
+      }
+    }
+
+    // Determine 系統最後判定結果
+    let finalVerdictText = "⚪ 初始化中...";
+    let finalVerdictColorClass = "text-gray-500 bg-gray-50 border border-gray-150";
+    if (isLoadingAuth) {
+      finalVerdictText = "🟡 載入判定中...";
+      finalVerdictColorClass = "text-amber-600 bg-amber-50 border border-amber-100";
+    } else if (user) {
+      if (currentUserProfile) {
+        if (currentUserProfile.familyId) {
+          finalVerdictText = "🟢 進入家庭首頁 (Home)";
+          finalVerdictColorClass = "text-emerald-700 bg-emerald-50 border border-emerald-100";
+        } else {
+          finalVerdictText = "🟡 進入 Onboarding (需要建立家庭或加入)";
+          finalVerdictColorClass = "text-amber-600 bg-amber-50 border border-amber-100";
+        }
+      } else {
+        finalVerdictText = "🔴 返回登入頁 (Landing - 設定檔讀取錯誤)";
+        finalVerdictColorClass = "text-rose-600 bg-rose-50 border border-rose-100";
+      }
+    } else {
+      finalVerdictText = "🔴 返回登入頁 (Landing)";
+      finalVerdictColorClass = "text-rose-600 bg-rose-50 border border-rose-100";
+    }
+
+    // Determine if there is any inferred error when loaded but not fully ready
+    let displayErrorCode = authError.code;
+    let displayErrorMessage = authError.message;
+
+    if (!isLoadingAuth && user && !currentUserProfile && !displayErrorCode) {
+      displayErrorCode = "user-doc-not-found";
+      displayErrorMessage = `已登入 Google 帳號，但無法在 Firestore 載入或建立您的使用者檔案 (users/${user.uid})。此問題通常是因資料庫安全規則 (firestore.rules) 限制或網路存取異常引起。`;
+    }
+
+    return (
+      <div className="max-w-md w-full bg-slate-900 border border-slate-850 rounded-3xl p-6 text-left shadow-2xl space-y-4 font-sans select-text">
+        <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+          <div className="flex items-center gap-2">
+            <Settings className="h-5 w-5 text-indigo-400 animate-spin" style={{ animationDuration: "3s" }} />
+            <h2 className="text-sm font-black text-slate-100 tracking-wider">🛠️ 登入異常診斷面板</h2>
+          </div>
+          <span className="text-[10px] font-mono text-slate-400 bg-slate-850 px-2 py-0.5 rounded border border-slate-700 select-none">DIAGNOSTIC CONSOLE</span>
+        </div>
+
+        <div className="space-y-2.5 text-xs">
+          {/* 1. Google Auth 狀態 */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between bg-slate-950 p-2.5 rounded-xl border border-slate-800 gap-1.5">
+            <span className="font-extrabold text-slate-400">1. Google Auth 狀態</span>
+            <span className={`font-black px-2.5 py-1 rounded text-[11px] font-sans ${authColorClass}`}>
+              {authText}
+            </span>
+          </div>
+
+          {/* 2. Gmail */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between bg-slate-950 p-2.5 rounded-xl border border-slate-800 gap-1.5">
+            <span className="font-extrabold text-slate-400">2. Gmail 帳號</span>
+            <span className="font-mono text-[11px] text-indigo-300 font-extrabold break-all whitespace-pre-wrap">
+              {gmailText}
+            </span>
+          </div>
+
+          {/* 3. User Document */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between bg-slate-950 p-2.5 rounded-xl border border-slate-800 gap-1.5">
+            <span className="font-extrabold text-slate-400">3. User Document</span>
+            <span className={`font-black px-2.5 py-1 rounded text-[11px] font-sans ${userDocColorClass}`}>
+              {userDocText}
+            </span>
+          </div>
+
+          {/* 4. Family 綁定狀態 */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between bg-slate-950 p-2.5 rounded-xl border border-slate-800 gap-1.5">
+            <span className="font-extrabold text-slate-400">4. Family 綁定狀態</span>
+            <span className={`font-black px-2.5 py-1 rounded text-[11px] font-sans ${familyColorClass}`}>
+              {familyText}
+            </span>
+          </div>
+
+          {/* 5. 白名單狀態 */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between bg-slate-950 p-2.5 rounded-xl border border-slate-800 gap-1.5">
+            <span className="font-extrabold text-slate-400">5. 白名單狀態</span>
+            <span className={`font-black px-2.5 py-1 rounded text-[11px] font-sans ${whitelistColorClass}`}>
+              {whitelistText}
+            </span>
+          </div>
+
+          {/* 6. 系統最後判定結果 */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between bg-slate-950 p-2.5 rounded-xl border border-slate-800 gap-1.5">
+            <span className="font-extrabold text-slate-400">6. 系統最後判定結果</span>
+            <span className={`font-black px-2.5 py-1 rounded text-[11px] font-sans ${finalVerdictColorClass}`}>
+              {finalVerdictText}
+            </span>
+          </div>
+        </div>
+        
+        {/* 【家庭驗證資訊】 (Family Verification Info) */}
+        {user && currentUserProfile && currentUserProfile.familyId && (
+          <div className="border-t border-slate-800 pt-4 space-y-2 select-text">
+            <div className="flex items-center gap-1.5 text-indigo-400 font-extrabold pb-1.5 border-b border-slate-800/50">
+              <span className="text-xs">📋 【家庭驗證資訊】 (Real-time DB Verified)</span>
+            </div>
+            
+            <div className="space-y-2 text-xs">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between bg-slate-950 p-2.5 rounded-xl border border-slate-800 gap-1.2 shrink-0">
+                <span className="font-extrabold text-slate-400">Current Login Email</span>
+                <span className="font-mono text-[11.5px] text-cyan-300 font-extrabold break-all whitespace-pre-wrap">
+                  {user.email || "無"}
+                </span>
+              </div>
+
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between bg-slate-950 p-2.5 rounded-xl border border-slate-800 gap-1.2 shrink-0">
+                <span className="font-extrabold text-slate-400">Current User UID</span>
+                <span className="font-mono text-[11px] text-cyan-400 font-extrabold break-all">
+                  {user.uid}
+                </span>
+              </div>
+
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between bg-slate-950 p-2.5 rounded-xl border border-slate-800 gap-1.2 shrink-0">
+                <span className="font-extrabold text-slate-400">Current FamilyId</span>
+                <span className="font-mono text-[11.5px] text-teal-300 font-extrabold">
+                  {currentUserProfile.familyId}
+                </span>
+              </div>
+
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between bg-slate-950 p-2.5 rounded-xl border border-slate-800 gap-1.2 shrink-0">
+                <span className="font-extrabold text-slate-400">Current Family Name</span>
+                <span className="font-extrabold text-[11.5px] text-emerald-400">
+                  {activeFamily?.name || "載入中..."}
+                </span>
+              </div>
+
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between bg-slate-950 p-2.5 rounded-xl border border-slate-800 gap-1.2 shrink-0">
+                <span className="font-extrabold text-slate-400">Family Owner Email</span>
+                <span className="font-mono text-[11px] text-[#A7C7E7] font-extrabold">
+                  {familyOwnerEmail || "讀取中..."}
+                </span>
+              </div>
+
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between bg-slate-950 p-2.5 rounded-xl border border-slate-800 gap-1.2 shrink-0">
+                <span className="font-extrabold text-slate-400">Family Created Time</span>
+                <span className="font-mono text-[11px] text-amber-300 font-extrabold">
+                  {(() => {
+                    if (!activeFamily?.createdAt) return "未知";
+                    const cat = activeFamily.createdAt;
+                    if (typeof (cat as any).toDate === "function") {
+                      return (cat as any).toDate().toLocaleString("zh-TW");
+                    }
+                    if (cat instanceof Date) {
+                      return cat.toLocaleString("zh-TW");
+                    }
+                    if (typeof cat === "string") {
+                      return new Date(cat).toLocaleString("zh-TW");
+                    }
+                    if (cat && typeof (cat as any).seconds === "number") {
+                      return new Date((cat as any).seconds * 1000).toLocaleString("zh-TW");
+                    }
+                    return "未知";
+                  })()}
+                </span>
+              </div>
+
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between bg-slate-950 p-2.5 rounded-xl border border-slate-800 gap-1.2 shrink-0">
+                <span className="font-extrabold text-slate-400">家庭成員數量 (DB 實測)</span>
+                <span className="font-extrabold text-[11.5px] text-rose-300">
+                  {activeDbMemberCount !== null ? `${activeDbMemberCount} 人` : `${familyMembers.length} 人 (快取計數)`}
+                </span>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* 7. Display Errors */}
+        {displayErrorCode && (
+          <div className="bg-rose-950/80 border border-rose-800/60 rounded-xl p-3.5 space-y-2 select-text animate-in fade-in duration-200">
+            <div className="flex items-center gap-1.5 text-rose-300 font-extrabold">
+              <span className="text-xs">⚠️ 偵測到系統錯誤 / 警告</span>
+            </div>
+            <div className="text-[11px] space-y-1.5 font-sans leading-relaxed">
+              <p className="text-rose-200">
+                <span className="font-extrabold text-rose-400">錯誤代碼：</span>
+                <code className="bg-rose-900/60 px-1.5 py-0.5 rounded font-mono border border-rose-800/40 font-bold">{displayErrorCode}</code>
+              </p>
+              <p className="text-rose-100 font-medium">
+                <span className="font-extrabold text-rose-400">錯誤訊息：</span>
+                {displayErrorMessage}
+              </p>
+            </div>
+          </div>
+        )}
+
+        <p className="text-[10px] text-slate-500 font-medium text-center select-none pt-1">
+          💡 遇登入異常時，請直接 <b>截圖此面板</b> 傳給系統管理員，我們將為您儘速開通授權。
+        </p>
+      </div>
+    );
+  };
 
   // 5-second Auth loading timeout guard to prevent page freezing
   useEffect(() => {
@@ -222,6 +528,8 @@ export default function App() {
 
   // Real-time Database state variables
   const [activeFamily, setActiveFamily] = useState<Family | null>(null);
+  const [activeDbMemberCount, setActiveDbMemberCount] = useState<number | null>(null);
+  const [familyOwnerEmail, setFamilyOwnerEmail] = useState<string | null>(null);
   const [activeSetting, setActiveSetting] = useState<FamilySetting | null>(null);
   const [simulatedTodayDate, setSimulatedTodayDate] = useState<string>(getLocalToday());
   const [familyMembers, setFamilyMembers] = useState<UserProfile[]>([]);
@@ -443,6 +751,11 @@ export default function App() {
     }
     if (user.email.toLowerCase() === "juwen616@gmail.com") {
       setIsWhitelistedCreator(true);
+      console.log("Whitelist Check", {
+        queriedEmail: user.email,
+        whitelistData: { email: "juwen616@gmail.com", status: "active", remark: "System Super User" },
+        isMatched: true
+      });
       return;
     }
     const checkWhitelist = async () => {
@@ -451,14 +764,27 @@ export default function App() {
         const q = query(creatorsRef, where("email", "==", user.email!.toLowerCase()));
         getDocs(q).then((qSnap) => {
           let active = false;
+          let matchedData: any = null;
           qSnap.forEach(docSnap => {
+            matchedData = docSnap.data();
             if (docSnap.data().status === "active") {
               active = true;
             }
           });
           setIsWhitelistedCreator(active);
+          console.log("Whitelist Check", {
+            queriedEmail: user.email,
+            whitelistData: matchedData,
+            isMatched: active
+          });
         }).catch(err => {
           console.error("Error loading whitelist snap:", err);
+          console.log("Whitelist Check", {
+            queriedEmail: user.email,
+            whitelistData: null,
+            isMatched: false,
+            error: err
+          });
         });
       } catch (err) {
         console.error("Error loading whitelist:", err);
@@ -507,6 +833,19 @@ export default function App() {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       setIsLoadingAuth(true);
       if (firebaseUser) {
+        // Clear all caches on user switch to prevent cross-account leakage
+        const lastUid = localStorage.getItem("last_auth_uid");
+        if (lastUid && lastUid !== firebaseUser.uid) {
+          console.log(`👤 User account switched from ${lastUid} to ${firebaseUser.uid}. Pruning caches...`);
+          clearAllUserCaches();
+        }
+        localStorage.setItem("last_auth_uid", firebaseUser.uid);
+
+        console.log("=== Debug: Auth Success ===");
+        console.log("Google User", firebaseUser);
+        console.log("UID", firebaseUser.uid);
+        console.log("Email", firebaseUser.email);
+
         try {
           // Check if there is an existing user doc in "users" collection mapping to this googleUid or email
           let profileDoc: any = null;
@@ -546,12 +885,54 @@ export default function App() {
 
           // Attempt to pull user profile doc
           const userDocRef = doc(db, "users", effectiveUid);
-          const userSnap = matchedProfile ? { exists: () => true, data: () => matchedProfile, id: effectiveUid } : await getDoc(userDocRef);
+          let userSnap: any = null;
+          try {
+            userSnap = matchedProfile ? { exists: () => true, data: () => matchedProfile, id: effectiveUid } : await getDoc(userDocRef);
+            setAuthError((prev) => (prev.code === "user-doc-not-found" || prev.code === "permission-denied" ? { code: null, message: null } : prev));
+          } catch (docErr: any) {
+            console.error("=== Debug: Failed to get user doc from Firestore ===", docErr);
+            console.log("User Doc Exists", false);
+            console.log("User Data", null);
+            setAuthError({
+              code: docErr.code || "permission-denied",
+              message: docErr.message || `讀取或建立使用者資料(users/${effectiveUid})遭拒。請確認帳號已獲得授權且 Firebase 規則已正確設定。`
+            });
+            throw docErr;
+          }
+
+          const hasUserDoc = userSnap && userSnap.exists();
+          console.log("User Doc Exists", hasUserDoc);
+          console.log("User Data", hasUserDoc ? userSnap.data() : null);
 
           // Standard loading flow
-          if (userSnap.exists()) {
+          if (hasUserDoc) {
             const profileData = (matchedProfile ? matchedProfile : userSnap.data()) as UserProfile;
+            console.log("Current User Profile", profileData);
+            console.log("Current FamilyId", profileData.familyId);
+
             if (profileData.familyId) {
+              // Fetch Family Document to double check
+              let familyData: any = null;
+              try {
+                const familyDocSnap = await getDoc(doc(db, "families", profileData.familyId));
+                if (familyDocSnap.exists()) {
+                  familyData = familyDocSnap.data();
+                } else {
+                  setAuthError({
+                    code: "family-not-found",
+                    message: `您的個人帳號設定已關聯家庭群組 ID (${profileData.familyId})，但在資料庫 families 集合中找不到此家庭檔案。`
+                  });
+                }
+              } catch (familyErr: any) {
+                console.error("=== Debug: Failed to query family documentation ===", familyErr);
+                setAuthError({
+                  code: familyErr.code || "permission-denied",
+                  message: familyErr.message || `查詢關聯家庭群組 (${profileData.familyId}) 失敗，可能是安全規則限制或權限不足。`
+                });
+              }
+              console.log("Family Found", profileData.familyId);
+              console.log("Family Data", familyData);
+
               try {
                 const nestedMemberSnap = await getDoc(
                   doc(db, "families", profileData.familyId, "members", effectiveUid)
@@ -568,12 +949,16 @@ export default function App() {
               setCurrentUserProfile(profileData);
               setActivePage("home");
               setOnboardingChoice("none");
+              console.log("Redirect Path", "home");
             } else {
+              console.log("Family Found", null);
+              console.log("Family Data", null);
               setCurrentUserProfile(profileData);
               await checkGoogleInvites(firebaseUser.email);
+              console.log("Redirect Path", "onboarding (choice: none)");
             }
           } else {
-            const initProfile: UserProfile = {
+            const initProfile: any = {
               uid: firebaseUser.uid,
               email: firebaseUser.email || "",
               displayName: firebaseUser.displayName || "家庭成員",
@@ -581,15 +966,39 @@ export default function App() {
               color: "#B4C3B2",
               familyId: null,
               role: UserRole.MEMBER,
-              stars: 0,
               createdAt: serverTimestamp(),
             };
-            await setDoc(userDocRef, initProfile);
-            setCurrentUserProfile(initProfile);
-            await checkGoogleInvites(firebaseUser.email);
+            if (initProfile.role === UserRole.CHILD || initProfile.role === UserRole.KID || String(initProfile.role).toLowerCase() === "child" || String(initProfile.role).toLowerCase() === "kid") {
+              initProfile.stars = 0;
+            }
+            try {
+              await setDoc(userDocRef, initProfile);
+              console.log("=== Debug: User Doc Created ===");
+              console.log("User Doc Exists", true);
+              console.log("User Data", initProfile);
+              console.log("Current User Profile", initProfile);
+              console.log("Current FamilyId", null);
+              console.log("Family Found", null);
+              console.log("Family Data", null);
+              setCurrentUserProfile(initProfile);
+              await checkGoogleInvites(firebaseUser.email);
+              console.log("Redirect Path", "onboarding (choice: none)");
+            } catch (createErr: any) {
+              console.error("=== Debug: Failed to create user doc ===", createErr);
+              setAuthError({
+                code: createErr.code || "permission-denied",
+                message: createErr.message || "嘗試在 /users/ 下自動為此 Google 帳號建立個人設定檔時失敗（權限不足）。"
+              });
+              throw createErr;
+            }
           }
-        } catch (err) {
+        } catch (err: any) {
           console.error("Auth state loading error:", err);
+          console.log("Landing Redirect Reason", "Error during loading: " + (err instanceof Error ? err.message : String(err)));
+          setAuthError({
+            code: err.code || "permission-denied",
+            message: err.message || String(err)
+          });
         }
       } else {
         // First check if we have a saved active login/invite session in localStorage
@@ -645,7 +1054,7 @@ export default function App() {
                 let uSnap = await getDoc(doc(db, "users", targetUid));
                 if (!uSnap.exists()) {
                   console.log("Startup Reconstructing user doc for targetUid:", targetUid);
-                  const reconstructedProfile: UserProfile = removeUndefinedFields({
+                  const reconstructedProfile: any = removeUndefinedFields({
                     uid: targetUid,
                     email: inviteData.email || "",
                     displayName: inviteData.name || inviteData.displayName || "家庭成員",
@@ -653,13 +1062,16 @@ export default function App() {
                     color: "#B4C3B2",
                     familyId: savedFamilyCode,
                     role: (inviteData.role || inviteData.targetRole || "Child") as UserRole,
-                    stars: 0,
                     birthday: inviteData.birthday || null,
                     showAgeInCalendar: inviteData.showAgeInCalendar ?? inviteData.showAge ?? true,
                     gender: inviteData.gender ?? "",
                     createdAt: serverTimestamp(),
                     inviteStatus: "active",
                   });
+                  const targetRole = (inviteData.role || inviteData.targetRole || "Child");
+                  if (targetRole === UserRole.CHILD || targetRole === UserRole.KID || String(targetRole).toLowerCase() === "child" || String(targetRole).toLowerCase() === "kid") {
+                    reconstructedProfile.stars = 0;
+                  }
                   await setDoc(doc(db, "users", targetUid), reconstructedProfile);
                   uSnap = await getDoc(doc(db, "users", targetUid));
                 }
@@ -870,6 +1282,46 @@ export default function App() {
     }
   };
 
+  const clearAllUserCaches = () => {
+    try {
+      const keysToRemove: string[] = [];
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key && (key.startsWith("cache_") || key.startsWith("cached_"))) {
+          keysToRemove.push(key);
+        }
+      }
+      keysToRemove.forEach((key) => localStorage.removeItem(key));
+      localStorage.removeItem("local_guest_profile");
+      localStorage.removeItem("local_guest_uid");
+      localStorage.removeItem("familyCode");
+      localStorage.removeItem("inviteCode");
+      localStorage.removeItem("memberId");
+      localStorage.removeItem("familyLogin");
+      
+      // Reset all family/user React states to prevent cross-account leakage
+      setActiveFamily(null);
+      setActiveSetting(null);
+      setFamilyMembers([]);
+      setEvents([]);
+      setTasks([]);
+      setRewards([]);
+      setAnnouncements([]);
+      setFamilyNotes([]);
+      setFavoriteActivities([]);
+      setRedemptions([]);
+      setStarTransactions([]);
+      setActiveDbMemberCount(null);
+      setFamilyOwnerEmail(null);
+      setCurrentUserProfile(null);
+      setAuthError({ code: null, message: null });
+      
+      console.log("🧹 Clear All User Caches and state variables executed due to user switch/logout.");
+    } catch (e) {
+      console.warn("Failed to clear user caches:", e);
+    }
+  };
+
   const loadAppletData = async (forceRefreshMembers = false) => {
     if (!user || !effectiveUserProfile?.familyId) return;
     const famId = effectiveUserProfile.familyId;
@@ -881,12 +1333,44 @@ export default function App() {
       const snap = await getDoc(doc(db, "families", famId));
       incrementQueries(1);
       if (snap.exists()) {
-        setActiveFamily(snap.data() as Family);
+        const familyData = snap.data() as Family;
+        setActiveFamily(familyData);
+        setAuthError({ code: null, message: null });
+
+        // Retrieve and verify Family Owner Email
+        if (familyData.createdByEmail) {
+          setFamilyOwnerEmail(familyData.createdByEmail);
+        } else if (familyData.adminUid) {
+          try {
+            const adminDoc = await getDoc(doc(db, "users", familyData.adminUid));
+            if (adminDoc.exists()) {
+              setFamilyOwnerEmail((adminDoc.data() as any).email || "無信箱");
+            } else {
+              setFamilyOwnerEmail("未知 / 無管理者帳號");
+            }
+          } catch (err) {
+            setFamilyOwnerEmail("未知");
+          }
+        } else {
+          setFamilyOwnerEmail("未知");
+        }
+      } else {
+        setActiveFamily(null);
+        setAuthError({
+          code: "family-not-found",
+          message: `此帳號已綁定不存在的家庭 (ID: ${famId})，請聯絡管理員`
+        });
       }
+      
+      // Calculate active members count directly from db
+      const usersSnap = await getDocs(query(collection(db, "users"), where("familyId", "==", famId)));
+      incrementQueries(1);
+      setActiveDbMemberCount(usersSnap.size);
+
       setDataLoaded((prev) => ({ ...prev, family: true }));
       const loadElapsed = Math.round(performance.now() - startTimeStamp);
       setLoadTimeMs(loadElapsed);
-      logFirestoreOp("get", `families/${famId}`, "success", "載入家庭基本資料");
+      logFirestoreOp("get", `families/${famId}`, "success", "載入家庭基本資料及實時計數");
     } catch (e: any) {
       logFirestoreOp("get", `families/${famId}`, "error", e.message);
       console.error("Master parallel load failed:", e);
@@ -896,6 +1380,21 @@ export default function App() {
   useEffect(() => {
     loadAppletData();
   }, [user?.uid, effectiveUserProfile?.familyId]);
+
+  // 【6】新增診斷日誌：首頁載入時輸出所有相關快取、登入與家庭資料來源資訊
+  useEffect(() => {
+    if (activePage === "home" && user) {
+      const famId = currentUserProfile?.familyId || "";
+      const isLoadedFromCache = false; // 已設定不可優先使用且排除使用 localStorage 快取作為家庭名稱來源
+      
+      console.log("Current Login Email:", user.email || "");
+      console.log("Current User UID:", user.uid || "");
+      console.log("Current FamilyId:", famId || "");
+      console.log("Current Family Name:", activeFamily?.name || "");
+      console.log("Loaded From Cache:", isLoadedFromCache ? "Yes" : "No");
+      console.log("Loaded From Firestore:", activeFamily ? "Yes" : "No");
+    }
+  }, [activePage, user?.uid, currentUserProfile?.familyId, activeFamily?.id, activeFamily?.name]);
 
   // Comprehensive Real-time database sync listener for all tables
   useEffect(() => {
@@ -908,7 +1407,8 @@ export default function App() {
     // Warm-up states instantly from offline localStorage cache for sub-second system load
     const cacheKey = (tbl: string) => `cache_${tbl}_${famId}`;
     
-    const cachedFamily = getCachedData(cacheKey("family"));
+    // 家庭主體資訊不優先且不使用 localStorage 快取，家庭資料/名稱必須永遠以 Firestore family document 為唯一來源
+    const cachedFamily = null;
     if (cachedFamily) {
       setActiveFamily(cachedFamily);
       setDataLoaded((prev) => ({ ...prev, family: true }));
@@ -996,6 +1496,12 @@ export default function App() {
         const list: Announcement[] = [];
         snapshot.forEach((snap) => {
           list.push(snap.data() as Announcement);
+        });
+        // Sort announcements by createdAt descending (newest first)
+        list.sort((a, b) => {
+          const timeA = a.createdAt?.seconds ? a.createdAt.seconds : 0;
+          const timeB = b.createdAt?.seconds ? b.createdAt.seconds : 0;
+          return timeB - timeA;
         });
         setAnnouncements(list);
         setCachedData(cacheKey("announcements"), list);
@@ -1189,6 +1695,7 @@ export default function App() {
           list.push(snap.data() as UserProfile);
         });
         setFamilyMembers(list);
+        setActiveDbMemberCount(list.length);
         setCachedData(cacheKey("members"), list);
         setCachedData(CACHE_KEY_MEMBERS(famId), list);
         const myFreshProfile = list.find((m) => m.uid === user.uid);
@@ -1294,6 +1801,29 @@ export default function App() {
           const fData = snap.data() as Family;
           setActiveFamily(fData);
           setCachedData(cacheKey("family"), fData);
+          setAuthError({ code: null, message: null });
+          
+          if (fData.createdByEmail) {
+            setFamilyOwnerEmail(fData.createdByEmail);
+          } else if (fData.adminUid) {
+            getDoc(doc(db, "users", fData.adminUid)).then((userSnap) => {
+              if (userSnap.exists()) {
+                setFamilyOwnerEmail((userSnap.data() as any).email || "無信箱");
+              } else {
+                setFamilyOwnerEmail("未知 / 無管理者帳號");
+              }
+            }).catch(() => {
+              setFamilyOwnerEmail("未知");
+            });
+          } else {
+            setFamilyOwnerEmail("未知");
+          }
+        } else {
+          setActiveFamily(null);
+          setAuthError({
+            code: "family-not-found",
+            message: `此帳號已綁定不存在的家庭 (ID: ${famId})，請聯絡管理員`
+          });
         }
         setDataLoaded((prev) => ({ ...prev, family: true }));
         logFirestoreOp("get", `families/${famId}`, "success", "同步家庭基本資料");
@@ -1325,13 +1855,22 @@ export default function App() {
   const handleGoogleLogin = async () => {
     if (isLoggingIn) return;
     setIsLoggingIn(true);
+    setAuthError({ code: null, message: null });
     try {
       const provider = new GoogleAuthProvider();
       await signInWithPopup(auth, provider);
-    } catch (err) {
+    } catch (err: any) {
       console.error("Google Authenticator error:", err);
-      if (err instanceof Error && (err.message.includes("auth/cancelled-popup-request") || (err as any).code === "auth/cancelled-popup-request")) {
+      const errorCode = err.code || "unknown-auth-error";
+      const errorMessage = err.message || "您取消了登入，或登入彈出視窗被瀏覽器封鎖。";
+      setAuthError({
+        code: errorCode,
+        message: errorMessage,
+      });
+      if (err instanceof Error && (err.message.includes("auth/cancelled-popup-request") || errorCode === "auth/cancelled-popup-request")) {
         console.warn("Popup login was cancelled or replaced by a new login flow.");
+      } else if (errorCode === "auth/popup-closed-by-user") {
+        console.warn("User closed the popup.");
       } else {
         toast.error("登入失敗\n請重新嘗試 Google 登入。\n若持續失敗請聯絡管理員。");
       }
@@ -2066,12 +2605,8 @@ export default function App() {
 
   const handleLogout = async () => {
     try {
-      localStorage.removeItem("local_guest_profile");
-      localStorage.removeItem("local_guest_uid");
-      localStorage.removeItem("familyCode");
-      localStorage.removeItem("inviteCode");
-      localStorage.removeItem("memberId");
-      localStorage.removeItem("familyLogin");
+      clearAllUserCaches();
+      localStorage.removeItem("last_auth_uid");
       setUser(null);
       setCurrentUserProfile(null);
       await signOut(auth);
@@ -3843,9 +4378,11 @@ function generateTemplateDates(startDateStr: string, weekdays: number[], count: 
         color: memberData.color || "#B4C3B2",
         familyId: currentUserProfile.familyId,
         role: memberData.role,
-        stars: 0,
         createdAt: serverTimestamp(),
       };
+      if ((memberData.role as any) === UserRole.CHILD || (memberData.role as any) === UserRole.KID || String(memberData.role).toLowerCase() === "child" || String(memberData.role).toLowerCase() === "kid") {
+        newProfile.stars = 0;
+      }
       if (memberData.birthday) newProfile.birthday = memberData.birthday;
       if (memberData.color) newProfile.color = memberData.color;
       
@@ -4009,6 +4546,36 @@ function generateTemplateDates(startDateStr: string, weekdays: number[], count: 
 
   const currentModeValue = activeModeDetails.modeValue;
   const activeModeConfig = activeModeDetails.config;
+
+  if (authError.code === "family-not-found") {
+    return (
+      <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-4 py-12 gap-6 font-sans text-gray-800">
+        <div className="max-w-md w-full bg-white border border-rose-100 rounded-[28px] p-8 shadow-xl text-center space-y-6">
+          <div className="mx-auto h-16 w-16 bg-rose-50 text-rose-600 rounded-2xl flex items-center justify-center shadow-inner font-bold text-2xl">
+            ⚠️
+          </div>
+          <div className="space-y-2">
+            <h1 className="text-xl font-black text-gray-900 tracking-tight leading-snug">
+              此帳號已綁定不存在的家庭，請聯絡管理員
+            </h1>
+            <p className="text-sm text-gray-500 font-bold leading-relaxed">
+              您的帳號資料所設定的家庭群組 ID ({currentUserProfile?.familyId || "未知"}) 在資料庫 families 集合中找不到此家庭檔案。
+            </p>
+          </div>
+          <button
+            onClick={handleLogout}
+            className="w-full py-3.5 bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold rounded-xl shadow-md transition text-xs cursor-pointer"
+          >
+            登出並重新登入
+          </button>
+        </div>
+        
+        {/* Diagnostic Panel */}
+        {renderDiagnosticPanel()}
+      </div>
+    );
+  }
+
   if (isLoadingAuth) {
     return (
       <div className="min-h-screen bg-slate-50 flex items-center justify-center font-sans text-gray-800">
@@ -4022,8 +4589,13 @@ function generateTemplateDates(startDateStr: string, weekdays: number[], count: 
 
   // 4. Render Google/Invite Login Portal (Landing screen)
   if (!user || !currentUserProfile) {
+    if (user && !currentUserProfile) {
+      console.log("Landing Redirect Reason", "User is logged in to Google but currentUserProfile is null.");
+    } else if (!user) {
+      console.log("Landing Redirect Reason", "No Google/Invite user session is authenticated.");
+    }
     return (
-      <div className="min-h-screen bg-gradient-to-tr from-sky-50 via-indigo-50/20 to-pink-50 flex items-center justify-center p-4 font-sans text-gray-800">
+      <div className="min-h-screen bg-gradient-to-tr from-sky-50 via-indigo-50/20 to-pink-50 flex flex-col items-center justify-center p-4 py-12 gap-6 font-sans text-gray-800">
         <div className="max-w-md w-full bg-white border border-gray-100 rounded-3xl p-8 shadow-xl text-center space-y-6">
           <div className="mx-auto h-16 w-16 bg-indigo-50 text-indigo-600 rounded-2xl flex items-center justify-center shadow-inner">
             <Heart className="h-9 w-9 animate-pulse fill-indigo-200 stroke-indigo-600" />
@@ -4205,6 +4777,9 @@ function generateTemplateDates(startDateStr: string, weekdays: number[], count: 
             </div>
           )}
         </div>
+
+        {/* Diagnostic Panel */}
+        {renderDiagnosticPanel()}
       </div>
     );
   }
@@ -4273,11 +4848,23 @@ function generateTemplateDates(startDateStr: string, weekdays: number[], count: 
     }
 
     return (
-      <div className="min-h-screen bg-slate-50/60 flex items-center justify-center p-4 font-sans text-gray-800">
-        <div className="max-w-lg w-full bg-white border border-gray-100 rounded-3xl p-8 shadow-2xl space-y-6">
+      <div className="min-h-screen bg-slate-50/60 flex flex-col items-center justify-center p-4 py-12 gap-6 font-sans text-gray-800">
+        <div className="max-w-lg w-full bg-white border border-gray-100 rounded-3xl p-8 shadow-2xl space-y-6 animate-in fade-in duration-200">
           <div className="text-center space-y-1.5">
             <h1 className="text-xl font-extrabold text-gray-900 tracking-tight">您好，{currentUserProfile.displayName}！</h1>
             <p className="text-sm text-gray-500 font-medium">請選擇您的起步站，建立新家庭或加入您家人的暖心小組：</p>
+          </div>
+
+          {/* Whitelisted Success Notice */}
+          <div className="bg-emerald-50 border border-emerald-100 rounded-2xl p-4 text-center space-y-1 select-none">
+            <h2 className="text-emerald-800 font-black text-sm flex items-center justify-center gap-1.5">
+              🌟 【登入成功】
+            </h2>
+            <p className="text-xs text-emerald-700 leading-relaxed font-semibold">
+              此 Gmail ({currentUserProfile.email}) 已通過驗證，但尚未建立家庭資料。
+              <br />
+              請建立新家庭（限白名單發起人）或等待管理員授權。
+            </p>
           </div>
 
           {onboardingChoice === "none" && (
@@ -4493,6 +5080,9 @@ function generateTemplateDates(startDateStr: string, weekdays: number[], count: 
             </button>
           </div>
         </div>
+
+        {/* Diagnostic Panel */}
+        {renderDiagnosticPanel()}
       </div>
     );
   }
@@ -4520,7 +5110,7 @@ function generateTemplateDates(startDateStr: string, weekdays: number[], count: 
         <div className="block md:hidden px-4 py-1.5 border-b border-[#EFEAE2] bg-white text-[#2D2926] z-45 shadow-xs">
           {/* Row 1: App Title & Bell Alarm */}
           <div className="flex items-center justify-between h-7">
-            <span className="font-extrabold text-[14.5px] tracking-tight text-[#2D2926]">🏡 小龜家生活大小事</span>
+            <span className="font-extrabold text-[14.5px] tracking-tight text-[#2D2926]">🏡 {activeFamily?.name || "家庭生活大小事"}</span>
             <button className="p-1 text-gray-500 hover:text-amber-500 cursor-pointer relative" title="通知訊息">
               <Bell className="h-4.5 w-4.5 animate-pulse" />
               <span className="absolute top-1 right-1 h-1 w-1 bg-rose-500 rounded-full" />
@@ -4533,9 +5123,7 @@ function generateTemplateDates(startDateStr: string, weekdays: number[], count: 
           {/* Row 3: Simple identity status line */}
           <div className="text-gray-400 text-[11px] font-semibold mt-0.5 leading-none h-4">
             目前身份：{effectiveUserProfile ? (
-              effectiveUserProfile.role === UserRole.ADMIN ? "管理員" :
-              effectiveUserProfile.role === UserRole.PARENT ? "媽媽" :
-              effectiveUserProfile.role === UserRole.KID ? `小孩 🌟 ${effectiveUserProfile.stars || 0}` : "成員"
+              effectiveUserProfile.role === UserRole.KID ? `小孩 🌟 ${effectiveUserProfile.stars || 0}` : getIdentityLabel(effectiveUserProfile)
             ) : "載入中"}
           </div>
         </div>
@@ -4548,7 +5136,7 @@ function generateTemplateDates(startDateStr: string, weekdays: number[], count: 
             </div>
             <div>
               <h1 className="text-xs sm:text-sm font-black tracking-tight text-[#2D2926] font-sans flex items-center gap-1 leading-none">
-                🏡 小龜家生活大小事
+                🏡 {activeFamily?.name || "家庭生活大小事"}
               </h1>
               <span className="text-[9px] font-sans text-gray-400 mt-0.5 block leading-none">
                 一家人的日常與成長
@@ -4660,7 +5248,7 @@ function generateTemplateDates(startDateStr: string, weekdays: number[], count: 
                     : "bg-white text-[#666666] border-[#E5E1DA] hover:bg-gray-50/55"
                 }`}
               >
-                任務中心
+                小孩專屬任務
               </button>
 
               <button
@@ -4671,7 +5259,7 @@ function generateTemplateDates(startDateStr: string, weekdays: number[], count: 
                     : "bg-white text-[#666666] border-[#E5E1DA] hover:bg-gray-50/55"
                 }`}
               >
-                禮物中心
+                小孩兌換禮物
               </button>
 
                {effectiveUserProfile && (
@@ -4864,6 +5452,7 @@ function generateTemplateDates(startDateStr: string, weekdays: number[], count: 
                   onRestoreTransaction={handleRestoreTransaction}
                   onBatchDeleteTransactions={handleBatchDeleteTransactions}
                   onClearTrashBin={() => setRecentlyDeletedTransactions([])}
+                  onChangePage={(p) => setActivePage(p as any)}
                 />
               )}
 
@@ -5057,6 +5646,7 @@ function generateTemplateDates(startDateStr: string, weekdays: number[], count: 
                         onRestoreTransaction={handleRestoreTransaction}
                         onBatchDeleteTransactions={handleBatchDeleteTransactions}
                         onClearTrashBin={() => setRecentlyDeletedTransactions([])}
+                        onChangePage={(p) => setActivePage(p as any)}
                       />
                     </div>
                   )}
@@ -5314,7 +5904,7 @@ function generateTemplateDates(startDateStr: string, weekdays: number[], count: 
                           </div>
                           <div>
                             <div className="text-xs font-black text-[#2D2926]">{effectiveUserProfile?.displayName}</div>
-                            <div className="text-[10px] text-[#7C6354] font-bold mt-0.5">目前身份：{effectiveUserProfile?.role === UserRole.PARENT ? "媽媽" : "成員"}</div>
+                            <div className="text-[10px] text-[#7C6354] font-bold mt-0.5">目前身份：{getIdentityLabel(effectiveUserProfile)}</div>
                           </div>
                         </div>
 
@@ -5395,7 +5985,7 @@ function generateTemplateDates(startDateStr: string, weekdays: number[], count: 
           }`}
         >
           <ClipboardList className={`h-7 w-7 ${activePage === "tasks" ? "stroke-[2.5px]" : "stroke-[1.8px]"}`} />
-          <span className="text-[14px] mt-0.5 font-semibold">任務</span>
+          <span className="text-[13px] mt-0.5 font-black whitespace-nowrap">專屬任務</span>
         </button>
 
         <button
@@ -5410,7 +6000,7 @@ function generateTemplateDates(startDateStr: string, weekdays: number[], count: 
           }`}
         >
           <Gift className={`h-7 w-7 ${activePage === "rewards" ? "stroke-[2.5px]" : "stroke-[1.8px]"}`} />
-          <span className="text-[14px] mt-0.5 font-semibold">禮物</span>
+          <span className="text-[13px] mt-0.5 font-black whitespace-nowrap">兌換禮物</span>
         </button>
 
         <button

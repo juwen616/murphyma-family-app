@@ -31,6 +31,7 @@ interface RewardCenterProps {
   onRestoreTransaction?: (deletedItem: any) => Promise<void>;
   onBatchDeleteTransactions?: (transactionIds: string[]) => Promise<void>;
   onClearTrashBin?: () => void;
+  onChangePage?: (page: string) => void;
 }
 
 export default function RewardCenter({
@@ -58,6 +59,7 @@ export default function RewardCenter({
   onRestoreTransaction,
   onBatchDeleteTransactions,
   onClearTrashBin,
+  onChangePage,
 }: RewardCenterProps) {
   const [showAddForm, setShowAddForm] = useState(false);
   const [rewardTitle, setRewardTitle] = useState("");
@@ -67,6 +69,7 @@ export default function RewardCenter({
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Star Adjustment Center States
+  const [parentViewMode, setParentViewMode] = useState<"gifts" | "redemptions" | "stats" | "rules">("gifts");
   const [adjustType, setAdjustType] = useState<"increase" | "decrease" | null>(null);
   const [selectedKidUid, setSelectedKidUid] = useState<string>("");
   const [adjustStarsAmount, setAdjustStarsAmount] = useState<number>(1);
@@ -435,6 +438,45 @@ export default function RewardCenter({
     }
   };
 
+  if (kidsOfFamily.length === 0) {
+    return (
+      <div id="reward-center-module" className="bg-[#FFFDF8] rounded-2xl md:rounded-[24px] border border-[#EFEAE2] p-4 md:p-6 lg:p-8 md:soft-journal-shadow space-y-5 md:space-y-6">
+        
+        {/* Page Header */}
+        <div className="flex justify-between items-center border-b border-[#F7F3EB] pb-3">
+          <div className="flex items-center gap-2">
+            <div className="h-9 w-9 md:h-11 md:w-11 bg-pink-50 text-[#EAA59E] rounded-xl border border-pink-100 flex items-center justify-center shrink-0">
+              <Gift className="h-5 w-5" />
+            </div>
+            <div>
+              <h2 className="text-base md:text-xl font-extrabold text-[#3C332D]">🎁 小孩兌換禮物</h2>
+              <p className="hidden md:block text-xs text-gray-400 mt-0.5 font-medium">完成任務累積星星，兌換喜歡的獎勵！</p>
+            </div>
+          </div>
+        </div>
+
+        {/* Empty State Warning */}
+        <div className="flex flex-col items-center justify-center text-center py-12 px-6 bg-[#FCFAF7] border-2 border-dashed border-[#E9E2DB] rounded-[24px] space-y-6 max-w-lg mx-auto font-sans shadow-3xs my-6">
+          <div className="text-5xl animate-bounce font-sans">🌱</div>
+          <div className="space-y-2">
+            <h3 className="text-lg font-extrabold text-[#3C332D]">尚未建立小孩成員</h3>
+            <p className="text-xs md:text-sm text-gray-500 leading-normal font-semibold">
+              🌱 尚未建立小孩成員。建立小孩成員後即可開始使用：星星集點、願望禮物與成長獎勵系統
+            </p>
+          </div>
+          {onChangePage && (
+            <button
+              onClick={() => onChangePage("members")}
+              className="px-6 py-2.5 bg-[#47A875] hover:bg-[#3D9265] text-white text-xs font-black rounded-full transition-all duration-150 cursor-pointer shadow-md transform hover:-translate-y-0.5 active:translate-y-0 flex items-center gap-1.5"
+            >
+              <span>👉 前往新增家庭成員</span>
+            </button>
+          )}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div id="reward-center-module" className="bg-[#FFFDF8] rounded-2xl md:rounded-[24px] border border-[#EFEAE2] p-4 md:p-6 lg:p-8 md:soft-journal-shadow space-y-5 md:space-y-6">
       
@@ -445,8 +487,8 @@ export default function RewardCenter({
             <Gift className="h-5 w-5" />
           </div>
           <div>
-            <h2 className="text-base md:text-xl font-extrabold text-[#3C332D]">願望與禮物中心</h2>
-            <p className="hidden md:block text-xs text-gray-400 mt-0.5 font-medium">累計星星、兌換心願大獎！</p>
+            <h2 className="text-base md:text-xl font-extrabold text-[#3C332D]">🎁 小孩兌換禮物</h2>
+            <p className="hidden md:block text-xs text-[#3C332D]/75 mt-0.5 font-medium">完成任務累積星星，兌換喜歡的獎勵！</p>
           </div>
         </div>
 
@@ -466,15 +508,65 @@ export default function RewardCenter({
             ) : (
               <>
                 <Plus className="h-4 w-4" />
-                <span>新增商品</span>
+                <span>新增小孩禮物</span>
               </>
             )}
           </button>
         )}
       </div>
 
+      {/* 🔐 Admin/Parent Role Navigation tabs */}
+      {isParent && (
+        <div className="flex flex-wrap gap-2 pb-3.5 border-b border-[#F7F3EB] font-sans select-none">
+          <button
+            type="button"
+            onClick={() => setParentViewMode("gifts")}
+            className={`px-4 py-2 text-xs font-black rounded-full transition-all border shrink-0 cursor-pointer ${
+              parentViewMode === "gifts"
+                ? "bg-[#FAF1EC] text-[#8B5E3C] border-[#E8D4C8] shadow-3xs"
+                : "bg-white text-[#666666] border-[#EFEAE2] hover:bg-gray-50/55"
+            }`}
+          >
+            🎁 家庭禮物上架與許願
+          </button>
+          <button
+            type="button"
+            onClick={() => setParentViewMode("redemptions")}
+            className={`px-4 py-2 text-xs font-black rounded-full transition-all border shrink-0 cursor-pointer ${
+              parentViewMode === "redemptions"
+                ? "bg-[#FAF1EC] text-[#8B5E3C] border-[#E8D4C8] shadow-3xs"
+                : "bg-white text-[#666666] border-[#EFEAE2] hover:bg-gray-50/55"
+            }`}
+          >
+            📋 兌換紀錄與異動審核
+          </button>
+          <button
+            type="button"
+            onClick={() => setParentViewMode("stats")}
+            className={`px-4 py-2 text-xs font-black rounded-full transition-all border shrink-0 cursor-pointer ${
+              parentViewMode === "stats"
+                ? "bg-[#FAF1EC] text-[#8B5E3C] border-[#E8D4C8] shadow-3xs"
+                : "bg-white text-[#666666] border-[#EFEAE2] hover:bg-gray-50/55"
+            }`}
+          >
+            👦 孩子星星存摺 & 帳本
+          </button>
+          <button
+            type="button"
+            onClick={() => setParentViewMode("rules")}
+            className={`px-4 py-2 text-xs font-black rounded-full transition-all border shrink-0 cursor-pointer ${
+              parentViewMode === "rules"
+                ? "bg-[#FAF1EC] text-[#8B5E3C] border-[#E8D4C8] shadow-3xs"
+                : "bg-white text-[#666666] border-[#EFEAE2] hover:bg-gray-50/55"
+            }`}
+          >
+            ⚙️ 星星發放規則設定
+          </button>
+        </div>
+      )}
+
       {/* 👦 孩子星星小卡橫向滑動列表 (Horizontal scrolling kid cards) */}
-      {kidsOfFamily.length > 0 && (
+      {(isKid || (isParent && parentViewMode === "stats")) && kidsOfFamily.length > 0 && (
         <div className="w-full space-y-2 border-b border-[#F7F3EB] pb-4">
           <div className="flex items-center justify-between">
             <span className="text-xs font-extrabold text-amber-900 bg-amber-50 px-3 py-1 rounded-full flex items-center gap-1 border border-amber-200/50">
@@ -526,19 +618,123 @@ export default function RewardCenter({
                 </div>
               );
             })}
+            
+            {/* --- Option for All Kids Overview --- */}
+            {kidsOfFamily.length > 1 && (() => {
+              const totalStars = kidsOfFamily.reduce((sum, item) => sum + (item.stars || 0), 0);
+              const totalPendingCost = pendingRedemptions.reduce((sum, item) => sum + (item.starsRequired || 0), 0);
+              const totalAvailable = Math.max(0, totalStars - totalPendingCost);
+              const isSelected = selectedChildUid === "all";
+
+              return (
+                <div
+                  key="all"
+                  onClick={() => setSelectedChildUid("all")}
+                  className={`min-w-[190px] max-w-[220px] p-3 rounded-xl border-2 transition-all cursor-pointer snap-start flex items-center gap-3 select-none shrink-0 ${
+                    isSelected
+                      ? "bg-[#FCFBF4] border-amber-400 shadow-xs ring-1 ring-amber-300"
+                      : "bg-white border-[#EFEAE2] hover:bg-gray-50 hover:border-gray-300"
+                  }`}
+                >
+                  <div className={`h-10 w-10 rounded-lg flex items-center justify-center text-lg shrink-0 font-bold ${
+                    isSelected ? "bg-amber-100 text-amber-800" : "bg-gray-100 text-gray-500"
+                  }`}>
+                    👥
+                  </div>
+                  <div className="space-y-0.5 min-w-0 flex-1">
+                    <p className="font-extrabold text-xs text-[#3C332D] flex items-center gap-1 truncate">
+                      <span>全部孩子總覽</span>
+                    </p>
+                    <p className="text-[10.5px] font-semibold text-gray-400 flex items-center gap-0.5 truncate">
+                      <span>累計總星：</span>
+                      <span className="font-mono text-amber-600 font-black shrink-0">{totalStars} ⭐</span>
+                    </p>
+                    <p className="text-[10.5px] font-semibold text-gray-400 flex items-center gap-0.5 truncate">
+                      <span>總可用星：</span>
+                      <span className="font-mono text-emerald-600 font-black shrink-0">{totalAvailable} 顆</span>
+                    </p>
+                  </div>
+                </div>
+              );
+            })()}
           </div>
         </div>
       )}
 
-      {/* Upgraded Star Balance Card */}
-      <div id="stars-balance-card" className="flex flex-col font-sans bg-[#FAF8F5]/50 border border-amber-200/20 rounded-2xl md:rounded-3xl p-4 md:p-6 lg:p-7 gap-4 select-none shadow-3xs">
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b border-amber-100/50 pb-3">
-          <div className="flex items-center gap-1.5">
-            <span className="text-lg">⭐</span>
-            <h3 className="text-xs md:text-sm font-black text-amber-900 leading-none">
-              {selectedKidObj?.displayName || "孩子"} 的作戰星星與餘額
-            </h3>
-          </div>
+      {/* 📊 星星存摺 & 帳本 (stats) */}
+      {(isKid || (isParent && parentViewMode === "stats")) && (
+        <>
+          {isParent && selectedChildUid === "all" ? (
+            /* ALL KIDS OVERVIEW PANEL */
+            <div className="bg-[#FAF8F5]/50 border border-amber-200/20 rounded-2xl md:rounded-3xl p-4 md:p-6 lg:p-7 space-y-4">
+              <h3 className="text-xs md:text-sm font-black text-amber-900 flex items-center gap-1.5 border-b border-amber-100/50 pb-3">
+                <span>👥</span> 全部孩子星星餘額與管理總覽
+              </h3>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {kidsOfFamily.map((k) => {
+                  const kidPendingCost = pendingRedemptions
+                    .filter(r => r.childUid === k.uid)
+                    .reduce((sum, item) => sum + item.starsRequired, 0);
+                  const availableStars = Math.max(0, (k.stars || 0) - kidPendingCost);
+
+                  return (
+                    <div key={k.uid} className="bg-white border border-[#EFEAE2] rounded-xl p-4 flex flex-col justify-between space-y-3 shadow-3xs hover:border-amber-200 transition-all font-sans">
+                      <div className="flex items-center justify-between font-sans">
+                        <div className="flex items-center gap-2.5">
+                          <div className="h-9 w-9 rounded-lg bg-amber-50 flex items-center justify-center text-lg shrink-0 font-bold">
+                            {k.gender === "female" ? "👧" : "👦"}
+                          </div>
+                          <div>
+                            <h4 className="text-sm font-extrabold text-[#3C332D]">{k.displayName}</h4>
+                            <p className="text-[10px] text-gray-400 font-bold">角色：小孩 (Child)</p>
+                          </div>
+                        </div>
+                        
+                        <div className="text-right">
+                          <span className="text-2xl font-black font-mono text-amber-500">{k.stars || 0}</span>
+                          <span className="text-xs font-bold text-gray-400 ml-0.5">⭐</span>
+                        </div>
+                      </div>
+
+                      <div className="bg-amber-50/30 rounded-lg p-2 flex justify-between items-center text-xs border border-amber-100/10 font-sans">
+                        <span className="text-gray-500 font-bold">可用星星（扣除待審核）：</span>
+                        <span className="font-mono text-emerald-600 font-extrabold">{availableStars} 顆 / ★</span>
+                      </div>
+
+                      {kidPendingCost > 0 && (
+                        <p className="text-[10px] font-extrabold text-rose-500 bg-rose-50 border border-rose-100 px-2.5 py-1 rounded-md font-sans">
+                          ⚠️ 待家長核准之兌換佔用：{kidPendingCost} 顆星
+                        </p>
+                      )}
+
+                      <div className="flex gap-2 pt-1 border-t border-gray-100">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSelectedChildUid(k.uid);
+                          }}
+                          className="flex-1 text-center py-1.5 text-[11px] font-black hover:bg-gray-50 border border-gray-200 rounded-lg transition-all text-[#7C6354] bg-white cursor-pointer shadow-3xs"
+                        >
+                          🔍 進入星星存摺 & 調整明細
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          ) : (
+            <>
+              {/* Upgraded Star Balance Card */}
+              <div id="stars-balance-card" className="flex flex-col font-sans bg-[#FAF8F5]/50 border border-amber-200/20 rounded-2xl md:rounded-3xl p-4 md:p-6 lg:p-7 gap-4 select-none shadow-3xs">
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b border-amber-100/50 pb-3">
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-lg">⭐</span>
+                    <h3 className="text-xs md:text-sm font-black text-amber-900 leading-none">
+                      {selectedKidObj?.displayName ? `${selectedKidObj.displayName} 的星星存摺` : "我的星星存摺"}
+                    </h3>
+                  </div>
           
           {/* Quick Add/Deduct Buttons (Parent / Admin only) */}
           {isParent && (
@@ -623,7 +819,7 @@ export default function RewardCenter({
           <div className="md:col-span-8 bg-amber-50/10 p-6 rounded-2xl border-2 border-amber-200 flex flex-col justify-between shadow-xs">
             <div>
               <h4 className="text-sm md:text-base font-black text-amber-950 mb-3 flex items-center gap-1.5">
-                <span>🎯</span> 距離最近禮物目標進度
+                <span>🎯</span> 禮物目標進度
               </h4>
               
               {/* Calculate dynamic distances to next rewards */}
@@ -845,76 +1041,101 @@ export default function RewardCenter({
           </div>
         )}
       </div>
+            </>
+          )}
+        </>
+      )}
 
-      {/* Parent Approval Notification Box */}
-      {isParent && pendingRedemptions.length > 0 && (
-        <div className="bg-[#FFFBF2] border-2 border-dashed border-[#EDD091] rounded-2xl p-5 space-y-3.5">
-          <h3 className="text-md font-extrabold text-[#3C332D] flex items-center gap-1.5">
-            🔔 待核發之孩子兌禮申請 ({pendingRedemptions.length})
-          </h3>
-          
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {pendingRedemptions.map((red) => (
-              <div
-                key={red.id}
-                className="p-4 bg-white rounded-xl border border-[#FFF59D] flex flex-col justify-between shadow-3xs"
-              >
-                <div>
-                  <div className="flex justify-between items-start">
-                    <span className="text-[10px] font-black text-amber-800 bg-amber-50 px-2 py-0.5 rounded-md border border-amber-200">
-                      👧 申請寶貝: {red.childName}
-                    </span>
-                    <span className="text-[10px] text-gray-400 font-mono flex items-center gap-0.5">
-                      <Clock className="h-3 w-3 animate-pulse" /> 家長待審中
-                    </span>
+      {/* 📋 審核 & 兌領 (redemptions) */}
+      {(isKid || (isParent && parentViewMode === "redemptions")) && (
+        <>
+          {isParent && pendingRedemptions.length > 0 && (
+            <div className="bg-[#FFFBF2] border-2 border-dashed border-[#EDD091] rounded-2xl p-5 space-y-3.5">
+              <h3 className="text-md font-extrabold text-[#3C332D] flex items-center gap-1.5">
+                🔔 待核發之孩子兌禮申請 ({pendingRedemptions.length})
+              </h3>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {pendingRedemptions.map((red) => (
+                  <div
+                    key={red.id}
+                    className="p-4 bg-white rounded-xl border border-[#FFF59D] flex flex-col justify-between shadow-3xs font-sans"
+                  >
+                    <div>
+                      <div className="flex justify-between items-start">
+                        <span className="text-[10px] font-black text-amber-800 bg-amber-50 px-2 py-0.5 rounded-md border border-amber-200">
+                          👧 申請寶貝: {red.childName}
+                        </span>
+                        <span className="text-[10px] text-gray-400 font-mono flex items-center gap-0.5">
+                          <Clock className="h-3 w-3 animate-pulse" /> 家長待審中
+                        </span>
+                      </div>
+                      <h4 className="font-extrabold text-sm text-[#3C332D] mt-2.5 break-all">
+                        🎁 {red.rewardTitle}
+                      </h4>
+                      <p className="text-xs text-gray-400 font-medium mt-1">
+                        扣除星數：<span className="text-[#EAA59E] font-black">{red.starsRequired} 🌟</span>
+                      </p>
+                    </div>
+
+                    <div className="flex gap-2 mt-4 font-sans">
+                      <button
+                        onClick={() => onApproveRedemption(red.id)}
+                        className="flex-1 py-1.5 bg-[#9BB096] hover:bg-[#8CA287] text-white font-extrabold text-xs rounded-lg cursor-pointer transition flex items-center justify-center gap-1 shadow-3xs active:scale-95"
+                      >
+                        <Check className="h-3.5 w-3.5" /> 核發禮物
+                      </button>
+                      <button
+                        onClick={() => onRejectRedemption(red.id)}
+                        className="py-1.5 px-3 bg-rose-50 hover:bg-rose-100 text-rose-500 font-bold text-xs rounded-lg cursor-pointer transition active:scale-95 border border-rose-200/50"
+                      >
+                        駁回
+                      </button>
+                    </div>
                   </div>
-                  <h4 className="font-extrabold text-sm text-[#3C332D] mt-2.5 break-all">
-                    🎁 {red.rewardTitle}
-                  </h4>
-                  <p className="text-xs text-gray-400 font-medium mt-1">
-                    扣除星數：<span className="text-[#EAA59E] font-black">{red.starsRequired} 🌟</span>
-                  </p>
-                </div>
-
-                <div className="flex gap-2 mt-4">
-                  <button
-                    onClick={() => onApproveRedemption(red.id)}
-                    className="flex-1 py-1.5 bg-[#9BB096] hover:bg-[#8CA287] text-white font-extrabold text-xs rounded-lg cursor-pointer transition flex items-center justify-center gap-1 shadow-3xs active:scale-95"
-                  >
-                    <Check className="h-3.5 w-3.5" /> 核發禮物
-                  </button>
-                  <button
-                    onClick={() => onRejectRedemption(red.id)}
-                    className="py-1.5 px-3 bg-rose-50 hover:bg-rose-100 text-rose-500 font-bold text-xs rounded-lg cursor-pointer transition active:scale-95 border border-rose-200/50"
-                  >
-                    駁回
-                  </button>
-                </div>
+                ))}
               </div>
-            ))}
-          </div>
-        </div>
+            </div>
+          )}
+
+          {isParent && pendingRedemptions.length === 0 && (
+            <div className="text-center py-8 bg-emerald-50/20 border-2 border-dashed border-emerald-100 rounded-2xl flex flex-col items-center justify-center gap-2 p-4 font-sans">
+              <Check className="h-8 w-8 text-emerald-500 animate-bounce" />
+              <p className="text-xs text-[#3D9265] font-black">太讚了！目前沒有待家長核准的孩子兌獎申請喔！🥳</p>
+            </div>
+          )}
+        </>
       )}
 
       {/* Main Grid: Store Rewards vs Wishlist Items */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      {(isKid || (isParent && parentViewMode === "gifts")) && (
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         
         {/* Available Reward Store - Takes 2 Columns */}
         <div className="lg:col-span-2 space-y-4">
-          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 border-b pb-2">
+          <div className="flex flex-col gap-1 border-b pb-2">
             <h3 className="text-md font-extrabold text-[#3C332D] tracking-wide flex items-center gap-1.5 border-l-4 border-[#5B7283] pl-2">
-               現貨大禮上架中心
+               🎁 小孩禮物選項
             </h3>
+            <p className="text-xs text-gray-400 font-medium pl-2">
+              家長可新增孩子可兌換的禮物、體驗或獎勵項目。
+            </p>
           </div>
 
           {filteredStoreItems.length === 0 ? (
             <div className="text-center py-12 border-2 border-dashed border-[#EFEAE2] rounded-2xl bg-white p-4">
               <ShoppingBag className="h-10 w-10 text-gray-300 mx-auto mb-2" />
-              <p className="text-sm text-gray-450 font-bold">目前看來沒有此分類的商品項目喔</p>
+              <p className="text-sm text-gray-450 font-bold">目前尚未新增任何禮物選項</p>
               {isParent ? (
-                <p className="text-[10.5px] text-gray-400 mt-0.5">請點選右上角按鈕為孩子寫下第一個精美禮品目標吧！</p>
+                <div className="text-[10.5px] text-gray-450 mt-1 space-y-0.5">
+                  <p>請點選右上角「新增小孩禮物」</p>
+                  <p>建立第一個孩子努力的目標吧！</p>
+                </div>
               ) : (
-                <p className="text-[10.5px] text-gray-400 mt-0.5">點選右上方按鈕跟爸媽「點餐許願」，同意後就上架囉！</p>
+                <div className="text-[10.5px] text-gray-450 mt-1 space-y-0.5">
+                  <p>請點選右上角「我要許願」</p>
+                  <p>向爸媽提出第一個想要努力達成的目標吧！</p>
+                </div>
               )}
             </div>
           ) : (
@@ -1130,15 +1351,17 @@ export default function RewardCenter({
         {/* Wishpool Column */}
         <div className="space-y-4">
           <h3 className="text-md font-extrabold text-[#3C332D] tracking-wide flex items-center gap-1.5 border-l-4 border-[#EAA59E] pl-2">
-             寶貝許願池 (審核新增)
+             🌟 孩子許願清單
           </h3>
 
           {wishListItems.length === 0 ? (
             <div className="text-center py-8 border-2 border-dashed border-[#EFEAE2] rounded-2xl bg-white p-4">
               <Sparkles className="h-8 w-8 text-pink-300 mx-auto mb-2 animate-pulse" />
-              <p className="text-xs text-gray-450 leading-relaxed font-semibold">
-                目前許願池空空如也！<br />點擊右上角「提出許願」新增寶貝的大目標吧
-              </p>
+              <div className="text-xs text-gray-450 leading-relaxed font-semibold space-y-1">
+                <p>目前孩子尚未提出任何許願項目</p>
+                <p className="mt-1">點選右上方「我要許願」</p>
+                <p>向爸媽提出第一個想要努力達成的目標吧！</p>
+              </div>
             </div>
           ) : (
             <div className="space-y-3 font-sans">
@@ -1194,7 +1417,7 @@ export default function RewardCenter({
                           </p>
                         )}
                         <span className="inline-block text-[10px] font-sans font-black bg-amber-50 text-amber-900 border border-amber-200/50 px-2 py-0.5 rounded">
-                          單價: {wish.starsCost} ★
+                          所需星星: {wish.starsCost} ★
                         </span>
                       </div>
                     </div>
@@ -1233,7 +1456,7 @@ export default function RewardCenter({
                               onClick={() => onApproveWish(wish.id)}
                               className="text-[10.5px] font-black text-white bg-[#EAA59E] hover:bg-[#df938c] px-3.5 py-1.5 rounded-full shadow-sm cursor-pointer transition active:scale-95 flex items-center gap-1"
                             >
-                              ✅ 同意上架
+                              ✅ 放入禮物選項
                             </button>
                           </>
                         )}
@@ -1323,7 +1546,7 @@ export default function RewardCenter({
                         <button
                           type="button"
                           onClick={() => {
-                            if (confirm(`【徹底刪除】確定要徹底刪除此筆與 ${log.childName} 兌領商品之歷史紀錄嗎？（不退還星星）`)) {
+                            if (confirm(`【徹底刪除】確定要徹底刪除此筆與 ${log.childName} 兌領獎勵之歷史紀錄嗎？（不退還星星）`)) {
                               if (onDeleteRedemption) onDeleteRedemption(log.id);
                             }
                           }}
@@ -1340,6 +1563,36 @@ export default function RewardCenter({
           </div>
         </div>
       </div>
+      )}
+
+      {/* ⚙️ 星星規則與獎勵說明 (rules) */}
+      {(isKid || (isParent && parentViewMode === "rules")) && (
+        <div className="bg-[#FAF8F5]/85 border border-amber-200/40 rounded-2xl md:rounded-[24px] p-5 space-y-4 font-sans select-none shadow-3xs">
+          <h3 className="text-sm md:text-base font-extrabold text-[#3C332D] flex items-center gap-2 border-b border-amber-100/50 pb-2.5">
+            <span>⚙️</span> 家庭星星賺取與兌換細則
+          </h3>
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="bg-white border border-[#EFEAE2] rounded-xl p-3.5 space-y-2 font-sans">
+              <h4 className="text-xs font-black text-emerald-800 bg-emerald-50 px-2 py-1 rounded-md inline-block">🌟 賺取星星途徑</h4>
+              <ul className="text-xs text-gray-500 font-bold space-y-1.5 list-disc list-inside">
+                <li>完成「✅ 小孩專屬任務」中的日常或課業任務。</li>
+                <li>表現優異、溫馨懂事、或有特別幫忙，經由家長確認給予手動額外加點！</li>
+                <li>特別計畫活動期間（例如考前溫書）可獲得加成或驚喜倍率加點！</li>
+              </ul>
+            </div>
+            
+            <div className="bg-white border border-[#EFEAE2] rounded-xl p-3.5 space-y-2 font-sans">
+              <h4 className="text-xs font-black text-amber-805 bg-amber-50 px-2 py-1 rounded-md inline-block">🎁 兌換禮物與約定</h4>
+              <ul className="text-xs text-gray-500 font-bold space-y-1.5 list-disc list-inside">
+                <li>只要可用星星餘額足夠，即可自行點選兌換心愛禮物或體驗項目！</li>
+                <li>若禮物清單中沒有想要的，可點按右上角「我要許願」向爸媽直接提議。</li>
+                <li>家長將會收到即時通知，等爸媽在後台審核點選「核發」後，即可得到禮物諾言！</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* MODAL 1: Add Reward popup */}
       {showAddForm && (
@@ -1354,16 +1607,16 @@ export default function RewardCenter({
 
             <h3 className="text-lg font-black text-[#3C332D] mb-4 flex items-center gap-1.5">
               <Gift className="h-5 w-5 text-[#EAA59E]" />
-              {isParent ? "新增商品獎勵" : "提出心愛許願"}
+              {isParent ? "新增小孩禮物" : "提出心愛許願"}
             </h3>
 
             <form onSubmit={handleCreateReward} className="space-y-4">
               <div>
-                <label className="block text-xs font-black text-[#5B7283] mb-1">商品名稱</label>
+                <label className="block text-xs font-black text-[#5B7283] mb-1">禮物獎勵名稱</label>
                 <input
                   type="text"
                   required
-                  placeholder={isParent ? "請輸入新增上架的實體獎勵..." : "請輸入你許願想要的禮物..."}
+                  placeholder={isParent ? "請輸入新增的禮物或獎勵項目..." : "請輸入你許願想要的禮物..."}
                   value={rewardTitle}
                   onChange={(e) => setRewardTitle(e.target.value)}
                   className="w-full text-xs border border-[#EFEAE2] rounded-xl px-3 py-2.5 bg-[#FFFDF8] focus:outline-none font-bold"
@@ -1389,7 +1642,7 @@ export default function RewardCenter({
                   placeholder="可寫下禮包備註，例如：週末去遊樂園，或者一杯特別飲料..."
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
-                  className="w-full text-xs border border-[#EFEAE2] rounded-xl px-3 py-2.5 bg-[#FFFDF8] focus:outline-none resize-none font-bold text-gray-600"
+                  className="w-full text-xs border border-[#EFEAE2] rounded-xl px-3 py-2.5 bg-[#FFFDF8] focus:outline-none resize-none font-semibold text-gray-650"
                 />
               </div>
 
@@ -1400,7 +1653,7 @@ export default function RewardCenter({
                   placeholder="https://images.unsplash.com/photo-... (或留下空白)"
                   value={imageUrl}
                   onChange={(e) => setImageUrl(e.target.value)}
-                  className="w-full text-xs border border-[#EFEAE2] rounded-xl px-3 py-2.5 bg-[#FFFDF8] focus:outline-none font-bold text-gray-600"
+                  className="w-full text-xs border border-[#EFEAE2] rounded-xl px-3 py-2.5 bg-[#FFFDF8] focus:outline-none font-semibold text-gray-650"
                 />
               </div>
 
@@ -1415,9 +1668,9 @@ export default function RewardCenter({
                 <button
                   type="submit"
                   disabled={isSubmitting}
-                  className="px-5 py-2 text-xs font-black text-white bg-[#EAA59E] hover:bg-[#df938c] rounded-full transition disabled:opacity-50 font-black cursor-pointer shadow-xs"
+                  className="px-5 py-2 text-xs font-black text-white bg-[#EAA59E] hover:bg-[#df938c] rounded-full transition disabled:opacity-50 cursor-pointer shadow-xs font-black"
                 >
-                  {isSubmitting ? "上傳中..." : isParent ? "新增上架" : "送出許願"}
+                  {isSubmitting ? "儲存中..." : isParent ? "儲存禮物" : "送出許願"}
                 </button>
               </div>
             </form>

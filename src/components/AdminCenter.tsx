@@ -737,7 +737,7 @@ export default function AdminCenter({
       // B. 家庭設定與特別期間安排
       docRefsToDelete.push({ ref: doc(db, "settings", famId), collName: "settings" });
 
-      // C. 相關家庭子集 (日曆、任務、公告、記事、禮物商品、兌換、星星流水、邀請、事項)
+      // C. 相關家庭子集 (日曆、任務、公告、記事、小孩禮物、兌換、星星流水、邀請、事項)
       const collectionsToQuery = [
         "family_members",
         "calendar_events",
@@ -2127,7 +2127,7 @@ export default function AdminCenter({
                       <span className="font-bold text-gray-800">{deleteTarget.announcementCount} 筆</span>
                     </div>
                     <div className="flex justify-between items-center pb-1 border-b border-gray-50">
-                      <span>🎁 禮物商品</span>
+                      <span>🎁 小孩禮物</span>
                       <span className="font-bold text-gray-800">{deleteTarget.giftCount} 筆</span>
                     </div>
                     <div className="flex justify-between items-center pb-1 border-b border-gray-50">

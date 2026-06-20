@@ -9,6 +9,7 @@ import {
   SystemMode,
 } from "../types";
 import { getHolidayForDate } from "../utils/holidayService";
+import { sortEventsForSingleDay } from "../utils/eventSort";
 import {
   ChevronLeft,
   ChevronRight,
@@ -325,20 +326,28 @@ export default function CalendarView({
   }, [selectedMobileDate]);
 
   const getEventsForDate = (dateStr: string) => {
-    return allEvents.filter((e) => {
+    const filtered = allEvents.filter((e) => {
       if (e.isFixed) {
         if (e.exceptionDates?.includes(dateStr)) return false;
         if (e.startDate && dateStr < e.startDate) return false;
         if (e.endDate && dateStr > e.endDate) return false;
         const [y, m, d] = dateStr.split("-").map(Number);
-        const dow = new Date(y, m - 1, d).getDay();
-        return e.weekdays?.includes(dow);
+        
+        // Check repeat Type
+        if ((e as any).repeatType === "monthly") {
+          const startDayNum = e.startDate ? Number(e.startDate.split("-")[2]) : (e.date ? Number(e.date.split("-")[2]) : 1);
+          return d === startDayNum;
+        } else {
+          const dow = new Date(y, m - 1, d).getDay();
+          return e.weekdays?.includes(dow);
+        }
       }
       if (e.startDate && e.endDate) {
         return dateStr >= e.startDate && dateStr <= e.endDate;
       }
       return e.date === dateStr;
     });
+    return filtered.sort(sortEventsForSingleDay);
   };
 
   const [showAddForm, setShowAddForm] = useState(false);
@@ -537,12 +546,23 @@ export default function CalendarView({
   const [endTime, setEndTime] = useState("");
   const [location, setLocation] = useState("");
   const [isFixed, setIsFixed] = useState(false);
+  const [repeatType, setRepeatType] = useState<"weekly" | "monthly" | "custom_weekdays">("weekly");
   const [weekdays, setWeekdays] = useState<number[]>([]);
   const [note, setNote] = useState("");
   const [isPublic, setIsPublic] = useState(true);
   const [selectedFavId, setSelectedFavId] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [editingEvent, setEditingEvent] = useState<CalendarEvent | null>(null);
+
+  const getWeekdayOfDate = (dateStr: string): number => {
+    try {
+      const parts = dateStr.split("-").map(Number);
+      if (parts.length === 3) {
+        return new Date(parts[0], parts[1] - 1, parts[2]).getDay();
+      }
+    } catch (_) {}
+    return 1; // default Monday
+  };
 
   // Modal / Confirm state
   const [eventToDelete, setEventToDelete] = useState<CalendarEvent | null>(null);
@@ -555,6 +575,7 @@ export default function CalendarView({
   const [endDate, setEndDate] = useState("");
   const [formDailyNotes, setFormDailyNotes] = useState<Record<string, string>>({});
   const [isDailyNotesExpanded, setIsDailyNotesExpanded] = useState(false);
+  const [showFullTimeChoices, setShowFullTimeChoices] = useState(false);
 
   const getDatesInRange = (start: string, end: string): string[] => {
     const dates: string[] = [];
@@ -631,7 +652,8 @@ export default function CalendarView({
 
   const TIME_CHOICES = useMemo(() => {
     const list = [];
-    for (let h = 0; h < 24; h++) {
+    const startHour = showFullTimeChoices ? 0 : 7;
+    for (let h = startHour; h < 24; h++) {
       const hh = String(h).padStart(2, "0");
       for (let m = 0; m < 60; m += 15) {
         const mm = String(m).padStart(2, "0");
@@ -639,7 +661,7 @@ export default function CalendarView({
       }
     }
     return list;
-  }, []);
+  }, [showFullTimeChoices]);
 
   const WEEKDAYS_LIST = [
     { label: "週日", value: 0 },
@@ -847,6 +869,7 @@ export default function CalendarView({
     setEndTime("");
     setLocation("");
     setIsFixed(false);
+    setRepeatType("weekly");
     setWeekdays([]);
     setNote("");
     setIsPublic(true);
@@ -856,6 +879,7 @@ export default function CalendarView({
     setEndDate(dateStr);
     setFormDailyNotes({});
     setIsDailyNotesExpanded(false);
+    setShowFullTimeChoices(false);
 
     // Range Picker initialization
     setTempRangeStart(dateStr);
@@ -890,19 +914,57 @@ export default function CalendarView({
     setNote(evt.note || "");
     setIsPublic(evt.isPublic !== false);
     setSelectedFavId("");
+    
+    // Initialize repeatType based on saved properties
+    if (evt.isFixed) {
+      if ((evt as any).repeatType === "monthly") {
+        setRepeatType("monthly");
+      } else if (evt.weekdays && evt.weekdays.length > 0) {
+        const dStr = evt.startDate || evt.date || "";
+        let isSingleWeeklyDow = false;
+        try {
+          if (dStr) {
+            const [y, m, d] = dStr.split("-").map(Number);
+            const dow = new Date(y, m - 1, d).getDay();
+            if (evt.weekdays.length === 1 && evt.weekdays[0] === dow) {
+              isSingleWeeklyDow = true;
+            }
+          }
+        } catch (_) {}
+
+        if ((evt as any).repeatType === "weekly" || isSingleWeeklyDow) {
+          setRepeatType("weekly");
+        } else {
+          setRepeatType("custom_weekdays");
+        }
+      } else {
+        setRepeatType("weekly");
+      }
+    } else {
+      setRepeatType("weekly");
+    }
+
+    let deservesFullChoices = false;
     if (evt.time && evt.time !== "~") {
       if (evt.time.includes("~")) {
         const [start, end] = evt.time.split("~");
         setStartTime(start || "");
         setEndTime(end || "");
+        if ((start && start < "07:00") || (end && end < "07:00")) {
+          deservesFullChoices = true;
+        }
       } else {
         setStartTime(evt.time);
         setEndTime("");
+        if (evt.time < "07:00") {
+          deservesFullChoices = true;
+        }
       }
     } else {
       setStartTime("");
       setEndTime("");
     }
+    setShowFullTimeChoices(deservesFullChoices);
     
     const isCd = !!(evt.startDate && evt.endDate && evt.startDate !== evt.endDate && !evt.isFixed);
     setIsCrossDay(isCd);
@@ -1054,13 +1116,20 @@ export default function CalendarView({
       note: note.trim()
     });
 
+    const computedWeekdays = isFixed
+      ? (repeatType === "weekly"
+          ? [getWeekdayOfDate(selectedDate)]
+          : (repeatType === "custom_weekdays" ? weekdays : []))
+      : [];
+
     const payload = {
       title: title.trim(),
       date: isFixed ? "" : selectedDate,
       time: eventTimeStr,
       location: location.trim(),
       isFixed,
-      weekdays: isFixed ? weekdays : [],
+      repeatType: isFixed ? repeatType : "",
+      weekdays: computedWeekdays,
       note: note.trim(),
       isPublic,
       startDate: isFixed ? selectedDate : selectedDate,
@@ -1107,7 +1176,8 @@ export default function CalendarView({
           location: location.trim(),
           category: "",
           isFixed,
-          weekdays: isFixed ? weekdays : [],
+          repeatType: isFixed ? repeatType : "",
+          weekdays: computedWeekdays,
           startDate: isFixed ? selectedDate : selectedDate,
           endDate: isFixed ? "" : (isCrossDay ? endDate : selectedDate),
           note: note.trim(),
@@ -1477,8 +1547,14 @@ export default function CalendarView({
                   if (e.startDate && cell.dateStr < e.startDate) return false;
                   if (e.endDate && cell.dateStr > e.endDate) return false;
                   const [y, m, d] = cell.dateStr.split("-").map(Number);
-                  const dow = new Date(y, m - 1, d).getDay();
-                  return e.weekdays?.includes(dow);
+                  
+                  if ((e as any).repeatType === "monthly") {
+                    const startDayNum = e.startDate ? Number(e.startDate.split("-")[2]) : (e.date ? Number(e.date.split("-")[2]) : 1);
+                    return d === startDayNum;
+                  } else {
+                    const dow = new Date(y, m - 1, d).getDay();
+                    return e.weekdays?.includes(dow);
+                  }
                 }
                 if (e.startDate && e.endDate) {
                   return cell.dateStr >= e.startDate && cell.dateStr <= e.endDate;
@@ -1533,17 +1609,9 @@ export default function CalendarView({
                   onClick={() => {
                     setSelectedMobileDate(cell.dateStr);
                     if (window.innerWidth < 768) {
-                      if (activeMode && activeMode.type === "travel") {
-                        setSelectedModeForDetail({ mode: activeMode, dateStr: cell.dateStr });
-                      } else {
-                        setIsDrawerOpen(true);
-                      }
+                      setIsDrawerOpen(true);
                     } else {
-                      if (activeMode) {
-                        setSelectedModeForDetail({ mode: activeMode, dateStr: cell.dateStr });
-                      } else {
-                        handleOpenAdd(cell.dateStr);
-                      }
+                      handleOpenAdd(cell.dateStr);
                     }
                   }}
                   className={`min-h-[105px] h-[105px] md:min-h-[160px] md:h-auto p-1 md:p-2.5 flex flex-col justify-start md:justify-between gap-1 md:gap-0 transition group cursor-pointer overflow-hidden border-r border-b border-[#A59D84] ${cellBg} ${
@@ -1586,7 +1654,11 @@ export default function CalendarView({
                     <div className="flex-1 flex flex-col justify-start overflow-hidden space-y-1 mt-0.5 pb-0.5 select-none">
                       {activeMode && (
                         <div 
-                          className={`font-black text-white rounded leading-tight mb-0.5 select-none cursor-pointer ${
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSelectedModeForDetail({ mode: activeMode, dateStr: cell.dateStr });
+                          }}
+                          className={`font-black text-white rounded leading-tight mb-0.5 select-none cursor-pointer hover:opacity-85 transition ${
                             activeMode.type === "travel"
                               ? "text-[10px] px-1 py-[2px]"
                               : "truncate text-[8.5px] px-1 py-[1.5px] animate-pulse"
@@ -1610,7 +1682,7 @@ export default function CalendarView({
                           }}
                           title={activeMode.name}
                         >
-                          {activeMode.type === "travel" ? "" : "🏕 "}{activeMode.name}
+                          {activeMode.type === "travel" ? "✈️ " : "🏕 "}{activeMode.name}
                         </div>
                       )}
                       {(() => {
@@ -1726,11 +1798,16 @@ export default function CalendarView({
                     )}
 
                     {activeMode && (
-                      <div className={`rounded-xl truncate shrink-0 font-sans flex items-center gap-1.5 mt-1.5 whitespace-nowrap overflow-hidden ${
-                        activeMode.type === "travel"
-                          ? "text-[12.6px] py-1.5 md:py-2 px-3 font-extrabold shadow-sm border border-sky-200"
-                          : "text-[10.5px] font-semibold py-1 px-2"
-                      }`}
+                      <div 
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSelectedModeForDetail({ mode: activeMode, dateStr: cell.dateStr });
+                        }}
+                        className={`rounded-xl truncate shrink-0 font-sans flex items-center gap-1.5 mt-1.5 whitespace-nowrap overflow-hidden cursor-pointer hover:opacity-85 transition ${
+                          activeMode.type === "travel"
+                            ? "text-[12.6px] py-1.5 md:py-2 px-3 font-extrabold shadow-sm border border-sky-200"
+                            : "text-[10.5px] font-semibold py-1 px-2"
+                        }`}
                         style={{
                           backgroundColor:
                             activeMode.type === "travel"
@@ -1889,7 +1966,12 @@ export default function CalendarView({
                     </div>
                   </div>
                   {activeMode && (
-                    <div className="text-[10px] w-full p-1 rounded-lg font-bold font-sans mt-2 space-y-0.5 leading-tight truncate select-none shadow-sm"
+                    <div 
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setSelectedModeForDetail({ mode: activeMode, dateStr: wd.dateStr });
+                      }}
+                      className="text-[10px] w-full p-1 rounded-lg font-bold font-sans mt-2 space-y-0.5 leading-tight truncate select-none shadow-sm cursor-pointer hover:opacity-85 transition"
                       style={{
                         backgroundColor:
                           activeMode.type === "travel"
@@ -1971,15 +2053,9 @@ export default function CalendarView({
                   onClick={() => {
                     setSelectedMobileDate(cell.dateStr);
                     if (window.innerWidth < 768) {
-                      if (activeMode && activeMode.type === "travel") {
-                        setSelectedModeForDetail({ mode: activeMode, dateStr: cell.dateStr });
-                      } else {
-                        setIsDrawerOpen(true);
-                      }
+                      setIsDrawerOpen(true);
                     } else {
-                      if (activeMode) {
-                        setSelectedModeForDetail({ mode: activeMode, dateStr: cell.dateStr });
-                      } else if (canCreateCalendar) {
+                      if (canCreateCalendar) {
                         setShowAddTypeSelection({ show: true, dateStr: cell.dateStr });
                       }
                     }
@@ -1992,7 +2068,12 @@ export default function CalendarView({
                         {cell.dateStr.slice(5)}
                       </span>
                       {activeMode && (
-                        <span className="text-[10px] uppercase font-black px-1.5 py-0.5 rounded tracking-wider shadow-none flex items-center gap-0.5"
+                        <span 
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSelectedModeForDetail({ mode: activeMode, dateStr: cell.dateStr });
+                          }}
+                          className="text-[10px] uppercase font-black px-1.5 py-0.5 rounded tracking-wider shadow-none flex items-center gap-0.5 cursor-pointer hover:opacity-85 transition"
                           style={{
                             backgroundColor:
                               activeMode.type === "travel"
@@ -2137,7 +2218,13 @@ export default function CalendarView({
                         </span>
                       )}
                       {activeMode && (
-                        <span className="text-[9px] bg-indigo-50 text-indigo-700 border border-indigo-150 px-1.5 py-0.5 rounded-full font-bold select-none shrink-0">
+                        <span 
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSelectedModeForDetail({ mode: activeMode, dateStr: wd.dateStr });
+                          }}
+                          className="text-[9px] bg-indigo-50 text-indigo-700 border border-indigo-150 px-1.5 py-0.5 rounded-full font-bold cursor-pointer hover:bg-indigo-100 transition select-none shrink-0"
+                        >
                           {activeMode.name}
                         </span>
                       )}
@@ -2408,6 +2495,7 @@ export default function CalendarView({
             
             <div className="space-y-3 pt-2">
               <button
+                type="button"
                 onClick={() => handleApplyRecurringUpdate(false)}
                 className="w-full text-left p-4 text-xs font-bold text-[#5B7283] bg-[#FFFBF0] hover:bg-[#FDF6E2] border border-[#EDD091]/50 rounded-2xl transition cursor-pointer"
               >
@@ -2416,6 +2504,7 @@ export default function CalendarView({
               </button>
               
               <button
+                type="button"
                 onClick={() => handleApplyRecurringUpdate(true)}
                 className="w-full text-left p-4 text-xs font-extrabold text-white bg-[#5B7283] hover:bg-[#4E6170] rounded-2xl transition cursor-pointer soft-journal-shadow"
               >
@@ -2424,6 +2513,7 @@ export default function CalendarView({
               </button>
 
               <button
+                type="button"
                 onClick={() => setUpdatingRecurringEvent(null)}
                 className="w-full text-center py-2 text-xs font-bold text-gray-400 hover:text-gray-600 transition cursor-pointer"
               >
@@ -2439,28 +2529,28 @@ export default function CalendarView({
         <div className="fixed inset-0 bg-[#3C332D]/40 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4 z-[95] animate-in fade-in duration-150 font-sans">
           <form
             onSubmit={handleFormSubmit}
-            className="bg-white rounded-[24px] border border-[#EFEAE2] max-w-md w-full soft-journal-shadow relative flex flex-col max-h-[90vh] md:max-h-[800px]"
+            className="bg-[#FFF8F5] rounded-[24px] border border-[#D8C6B8] max-w-md w-full soft-journal-shadow relative flex flex-col max-h-[90vh] md:max-h-[800px]"
           >
             {/* Header (Fixed) */}
-            <div className="p-4 md:p-6 pb-3 md:pb-4 border-b border-[#EFEAE2] flex items-center justify-between shrink-0 bg-[#FFFDF8]">
-              <h3 className="text-lg font-black text-[#3C332D] flex items-center gap-2">
-                <CalendarDays className="h-5.5 w-5.5 text-[#5B7283]" />
+            <div className="p-4 md:p-6 pb-3 md:pb-4 border-b border-[#D8C6B8] flex items-center justify-between shrink-0 bg-[#FFF8F5]">
+              <h3 className="text-base sm:text-[17px] font-black text-[#5C4D41] flex items-center gap-2">
+                <CalendarDays className="h-5 w-5 text-[#B89B84]" />
                 {editingEvent ? (isReadOnlyForm ? "查看行程細節" : "編輯/查看行程") : "新增行事曆行程"}
               </h3>
               <button
                 type="button"
                 onClick={() => setShowAddForm(false)}
-                className="text-gray-400 hover:text-gray-700 transition cursor-pointer p-1 rounded-full hover:bg-gray-100"
+                className="text-[#8E7E74] hover:text-[#5C4D41] transition cursor-pointer p-1 rounded-full hover:bg-[#FFF2EB]"
               >
-                <X className="h-6 w-6" />
+                <X className="h-5.5 w-5.5" />
               </button>
             </div>
 
             {/* Scrollable Container */}
-            <div className="p-4 md:p-6 overflow-y-auto space-y-4 flex-grow select-none">
+            <div className="p-4 md:p-6 overflow-y-auto space-y-4 flex-grow bg-[#FFF8F5] select-none scrollbar-thin">
               {/* Quick advanced toggles for Switch of Modes */}
               {!editingEvent && (
-                <div className="flex gap-2 mb-2">
+                <div className="flex gap-2">
                   <button
                     type="button"
                     onClick={() => {
@@ -2472,9 +2562,9 @@ export default function CalendarView({
                       setNewTravelType("international");
                       setShowCreateTravelModal({ startDate: d, endDate: d });
                     }}
-                    className="flex-1 py-2 px-3 bg-orange-50 border border-orange-200 hover:bg-orange-100 text-orange-750 text-[11px] font-black rounded-xl transition flex items-center justify-center gap-1 cursor-pointer shadow-xs"
+                    className="flex-1 py-1.5 px-3 bg-[#FFFCFA] border border-[#D8C6B8] hover:bg-[#FFF2EB] text-[#5C4D41] text-xs font-black rounded-lg transition flex items-center justify-center gap-1 cursor-pointer"
                   >
-                    ✨ 切換為旅遊計畫
+                    ✈️ 切換為旅遊計畫
                   </button>
                   <button
                     type="button"
@@ -2484,13 +2574,28 @@ export default function CalendarView({
                         onChangePage("special-periods");
                       }
                     }}
-                    className="flex-1 py-2 px-3 bg-[#EEF2FF] border border-indigo-200 hover:bg-[#E0E7FF] text-[#4F46E5] text-[11px] font-black rounded-xl transition flex items-center justify-center gap-1 cursor-pointer shadow-xs"
+                    className="flex-1 py-1.5 px-3 bg-[#FFFCFA] border border-[#D8C6B8] hover:bg-[#FFF2EB] text-[#5C4D41] text-xs font-black rounded-lg transition flex items-center justify-center gap-1 cursor-pointer"
                   >
-                    ✨ 切換為自訂計畫
+                    🏕️ 切換為自訂計畫
                   </button>
                 </div>
               )}
-              {/* Quick autofill select bar */}
+
+              {/* 1. 活動名稱 */}
+              <div className="space-y-1.5">
+                <label className="block text-base sm:text-[17px] font-bold text-[#6B4F3A]">活動名稱 *</label>
+                <input
+                  type="text"
+                  required
+                  disabled={isReadOnlyForm}
+                  placeholder="請輸入活動名稱 (例如：游泳課、看牙醫)"
+                  value={title}
+                  onChange={(e) => setTitle(e.target.value)}
+                  className="w-full text-base font-bold border border-[#D8C6B8] bg-[#FFFDFC] rounded-xl px-4 py-3 placeholder-[#A59487] text-[#3C332D] focus:outline-none focus:border-[#B89B84] focus:ring-1 focus:ring-[#B89B84] transition"
+                />
+              </div>
+
+              {/* 2. 📋 或直接套用常用事項 */}
               {!editingEvent && favoriteActivities.length > 0 && (() => {
                 const calendarTemplates = favoriteActivities.filter((t) => {
                   const ut = t.usageType || t.type;
@@ -2498,21 +2603,20 @@ export default function CalendarView({
                 });
                 if (calendarTemplates.length === 0) return null;
                 return (
-                  <div id="fav-autofill-section" className="bg-[#FFFDF8] border border-[#EFEAE2] p-4 rounded-2xl mb-1 shadow-inner">
-                    <label className="block text-xs font-bold text-[#5B7283] mb-1.5 flex items-center gap-1 select-none">
-                      <FileSpreadsheet className="h-4 w-4 text-[#EAA59E]" />
-                      💡 快速載入常用事項資料：
+                  <div className="space-y-1.5">
+                    <label className="block text-xs sm:text-[13px] font-bold text-[#6B4F3A]">
+                      或直接套用常用事項
                     </label>
                     <select
                       value={selectedFavId}
                       disabled={isReadOnlyForm}
                       onChange={(e) => handleSelectFavItem(e.target.value)}
-                      className="w-full text-xs font-bold border border-[#EFEAE2] bg-white rounded-xl px-3 py-2.5 focus:outline-none disabled:opacity-75"
+                      className="w-full text-base font-bold border border-[#D8C6B8] bg-[#FFF7F2] rounded-xl px-3.5 py-2.5 text-[#3C332D] focus:outline-none focus:border-[#B89B84] focus:ring-1 focus:ring-[#B89B84] transition cursor-pointer"
                     >
-                      <option value="">-- 點擊選擇載入常用事項 --</option>
+                      <option value="">▼ 選擇常用事項</option>
                       {calendarTemplates.map((fav) => (
                         <option key={fav.id} value={fav.id}>
-                          {fav.title} ({fav.isRecurring ? "每週固定" : "單次固定"} {fav.defaultStartTime ? `| ${fav.defaultStartTime}~${fav.defaultEndTime}` : ""})
+                          {fav.title} ({fav.isRecurring ? "每週固定" : "單次固定"}{fav.defaultStartTime ? ` | ${fav.defaultStartTime}~${fav.defaultEndTime}` : ""})
                         </option>
                       ))}
                     </select>
@@ -2520,70 +2624,202 @@ export default function CalendarView({
                 );
               })()}
 
-              <div>
-                <label className="block text-xs font-bold text-[#5B7283] mb-1.5">活動名稱</label>
-                <input
-                  type="text"
-                  required
-                  disabled={isReadOnlyForm}
-                  placeholder="請輸入活動名稱... (例如：畫畫課)"
-                  value={title}
-                  onChange={(e) => setTitle(e.target.value)}
-                  className="w-full text-sm border border-[#EFEAE2] rounded-xl px-3.5 py-2.5 bg-[#FFFDF8] focus:outline-none focus:ring-2 focus:ring-[#5B7283] disabled:bg-gray-50/50"
-                />
+              {/* 3. 加入常用事項？ (僅限手動輸入時顯示) */}
+              {!editingEvent && onAddFavorite && !selectedFavId && title.trim().length > 0 && (
+                <div className="bg-[#FFF6EE] border border-[#E8D6C8] p-3.5 rounded-xl flex items-center justify-between gap-4 animate-in fade-in duration-200">
+                  <div className="space-y-0.5">
+                    <span className="text-sm font-bold text-[#6B4F3A]">加入常用事項？</span>
+                    <p className="text-[11px] text-[#8A7A6B]">將此新行程儲存為常用範本，方便日後一鍵套用</p>
+                  </div>
+                  <div className="flex gap-4 shrink-0">
+                    <label className="flex items-center gap-1.5 cursor-pointer text-xs sm:text-sm font-bold text-[#6B4F3A]">
+                      <input
+                        type="radio"
+                        name="saveAsFavRadio"
+                        checked={saveAsFav === true}
+                        onChange={() => setSaveAsFav(true)}
+                        className="h-4 w-4 accent-[#B89B84] cursor-pointer"
+                      />
+                      <span>是</span>
+                    </label>
+                    <label className="flex items-center gap-1.5 cursor-pointer text-xs sm:text-sm font-bold text-[#6B4F3A]">
+                      <input
+                        type="radio"
+                        name="saveAsFavRadio"
+                        checked={saveAsFav === false}
+                        onChange={() => setSaveAsFav(false)}
+                        className="h-4 w-4 accent-[#B89B84] cursor-pointer"
+                      />
+                      <span>否</span>
+                    </label>
+                  </div>
+                </div>
+              )}
+
+              {/* 4. 此活動是否為固定活動／週課表？ */}
+              <div className="space-y-1.5">
+                <div className="flex items-center gap-2 py-1">
+                  <input
+                    type="checkbox"
+                    id="isFixed"
+                    checked={isFixed}
+                    disabled={isReadOnlyForm}
+                    onChange={(e) => {
+                      setIsFixed(e.target.checked);
+                      if (e.target.checked) {
+                        setRepeatType("weekly");
+                        try {
+                          const dStr = selectedDate || getLocalToday();
+                          const [y, m, d] = dStr.split("-").map(Number);
+                          const dow = new Date(y, m - 1, d).getDay();
+                          setWeekdays([dow]);
+                        } catch (_) {
+                          setWeekdays([1]);
+                        }
+                      } else {
+                        setWeekdays([]);
+                      }
+                    }}
+                    className="h-4 w-4 rounded border-[#D8C6B8] focus:ring-[#B89B84] text-[#B89B84] cursor-pointer disabled:opacity-55"
+                  />
+                  <label htmlFor="isFixed" className="text-base font-bold text-[#6B4F3A] cursor-pointer select-none">
+                    此活動是否為固定活動／週課表？
+                  </label>
+                </div>
+
+                {isFixed && (
+                  <div className="border border-[#D8C6B8] p-3.5 rounded-xl bg-[#FFFDFC] space-y-3 animate-in fade-in duration-150">
+                    <span className="block text-xs font-bold text-[#8A7A6B]">選擇重複方式：</span>
+                    <div className="grid grid-cols-3 gap-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setRepeatType("weekly");
+                          try {
+                            const dStr = selectedDate || getLocalToday();
+                            const [y, m, d] = dStr.split("-").map(Number);
+                            const dow = new Date(y, m - 1, d).getDay();
+                            setWeekdays([dow]);
+                          } catch (_) {
+                            setWeekdays([1]);
+                          }
+                        }}
+                        className={`py-1.5 px-2 text-xs font-bold border rounded-lg transition cursor-pointer text-center ${
+                          repeatType === "weekly"
+                            ? "bg-[#B89B84] text-white border-[#B89B84]"
+                            : "bg-[#FFFDFC] text-[#6B4F3A] border-[#D8C6B8] hover:bg-[#FFF2EB]"
+                        }`}
+                      >
+                        每週重覆
+                      </button>
+                      
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setRepeatType("monthly");
+                          setWeekdays([]);
+                        }}
+                        className={`py-1.5 px-2 text-xs font-bold border rounded-lg transition cursor-pointer text-center ${
+                          repeatType === "monthly"
+                            ? "bg-[#B89B84] text-white border-[#B89B84]"
+                            : "bg-[#FFFDFC] text-[#6B4F3A] border-[#D8C6B8] hover:bg-[#FFF2EB]"
+                        }`}
+                      >
+                        每月重覆
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setRepeatType("custom_weekdays");
+                          if (weekdays.length === 0) {
+                            try {
+                              const dStr = selectedDate || getLocalToday();
+                              const [y, m, d] = dStr.split("-").map(Number);
+                              const dow = new Date(y, m - 1, d).getDay();
+                              setWeekdays([dow]);
+                            } catch (_) {
+                              setWeekdays([1]);
+                            }
+                          }
+                        }}
+                        className={`py-1.5 px-2 text-xs font-bold border rounded-lg transition cursor-pointer text-center ${
+                          repeatType === "custom_weekdays"
+                            ? "bg-[#B89B84] text-white border-[#B89B84]"
+                            : "bg-[#FFFDFC] text-[#6B4F3A] border-[#D8C6B8] hover:bg-[#FFF2EB]"
+                        }`}
+                      >
+                        指定星期
+                      </button>
+                    </div>
+
+                    {repeatType === "custom_weekdays" && (
+                      <div className="space-y-1.5 pt-1 animate-in fade-in duration-150">
+                        <label className="block text-xs font-bold text-[#8A7A6B]">選擇每週重複星期數（可複選）：</label>
+                        <div className="flex flex-wrap gap-1.5">
+                          {WEEKDAYS_LIST.map((wd) => {
+                            const isActive = weekdays.includes(wd.value);
+                            return (
+                              <button
+                                type="button"
+                                key={wd.value}
+                                disabled={isReadOnlyForm}
+                                onClick={() => toggleWeekday(wd.value)}
+                                className={`px-2.5 py-1 text-xs font-bold border rounded-md transition cursor-pointer disabled:opacity-75 ${
+                                  isActive
+                                    ? "bg-[#B89B84] text-white border-[#B89B84]"
+                                    : "bg-[#FFFDFC] text-[#8A7A6B] border-[#D8C6B8] hover:bg-[#FFF2EB]"
+                                }`}
+                              >
+                                {wd.label}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
 
-              <div className="flex items-center gap-2 py-1">
-                <input
-                  type="checkbox"
-                  id="isFixed"
-                  checked={isFixed}
-                  disabled={isReadOnlyForm}
-                  onChange={(e) => setIsFixed(e.target.checked)}
-                  className="h-5 w-5 bg-[#FFFDF8] border-[#EFEAE2] text-[#5B7283] rounded-lg cursor-pointer disabled:opacity-55"
-                />
-                <label htmlFor="isFixed" className="text-xs font-bold text-[#3C332D] select-none cursor-pointer">
-                  🔄 固定活動 / 週課表 (每週重複)
-                </label>
-              </div>
-
+              {/* 5. 📅 活動日期 */}
               {!isFixed ? (
                 <div className="space-y-4">
                   {isCrossDay ? (
                     <div className="space-y-4">
                       <div className="relative">
-                        <label className="block text-xs font-bold text-[#5B7283] mb-1.5">期間日期</label>
+                        <label className="block text-base sm:text-[17px] font-bold text-[#6B4F3A] mb-1.5">期間日期 *</label>
                         <button
                           type="button"
                           onClick={() => setShowRangePicker(!showRangePicker)}
-                          className="w-full text-left font-mono font-bold text-sm border border-[#EFEAE2] rounded-xl px-4 py-3 bg-[#FFFDF8] hover:bg-[#FAF8F5] transition duration-150 focus:outline-none flex items-center justify-between cursor-pointer shadow-sm select-none"
+                          className="w-full text-left font-mono font-bold text-base border border-[#D8C6B8] rounded-xl px-4 py-3 bg-[#FFFDFC] hover:bg-[#FFF2EB] transition duration-150 focus:outline-none focus:border-[#B89B84] flex items-center justify-between cursor-pointer select-none"
                         >
-                          <span className="text-[#3C332D] flex items-center gap-2">
-                            <span>📅</span> {selectedDate.replace(/-/g, "/")} ～ {endDate.replace(/-/g, "/")}
+                          <span className="text-[#3C332D] flex items-center gap-2 text-base">
+                            📅 {selectedDate.replace(/-/g, "/")} ～ {endDate.replace(/-/g, "/")}
                           </span>
-                          <span className="text-xs text-amber-600 font-extrabold bg-amber-50 px-2 py-1 rounded-lg">
+                          <span className="text-xs font-bold text-[#8A7A6B] bg-[#FFF2EB] border border-[#D8C6B8] px-2.5 py-1 rounded-lg shrink-0">
                             共 {calcDurationDays(selectedDate, endDate)} 天
                           </span>
                         </button>
                         
                         {/* Interactive mini Month Calendar dropdown */}
                         {showRangePicker && (
-                          <div className="mt-2.5 p-4 bg-white border border-[#EFEAE2] rounded-2xl space-y-3.5 shadow-xl animate-in fade-in slide-in-from-top-1.5 duration-200">
+                          <div className="mt-2.5 p-4 bg-[#FFFDFC] border border-[#D8C6B8] rounded-2xl space-y-3 shadow-md animate-in fade-in slide-in-from-top-1.5 duration-200 z-10 relative">
                             <div className="flex items-center justify-between">
                               <button
                                 type="button"
                                 onClick={() => handleRangeMonthChange(-1)}
-                                className="p-1.5 px-3 border border-[#EFEAE2]/80 bg-white hover:bg-gray-50 rounded-lg text-xs font-bold transition cursor-pointer select-none"
+                                className="p-1 px-2.5 border border-[#D8C6B8] bg-[#FFFDFC] hover:bg-[#FFF2EB] rounded-lg text-xs font-bold transition cursor-pointer select-none"
                               >
                                 上個月
                               </button>
-                              <span className="text-xs font-bold text-[#3C332D] select-none">
+                              <span className="text-sm font-bold text-[#6B4F3A] select-none">
                                 {rangePickerYear}年 {rangePickerMonth + 1}月
                               </span>
                               <button
                                 type="button"
                                 onClick={() => handleRangeMonthChange(1)}
-                                className="p-1.5 px-3 border border-[#EFEAE2]/80 bg-white hover:bg-gray-50 rounded-lg text-xs font-bold transition cursor-pointer select-none"
+                                className="p-1 px-2.5 border border-[#D8C6B8] bg-[#FFFDFC] hover:bg-[#FFF2EB] rounded-lg text-xs font-bold transition cursor-pointer select-none"
                               >
                                 下個月
                               </button>
@@ -2592,7 +2828,7 @@ export default function CalendarView({
                             {/* Mini calendar grid */}
                             <div className="grid grid-cols-7 gap-1 text-center font-sans">
                               {["日", "一", "二", "三", "四", "五", "六"].map((w, index) => (
-                                <span key={index} className={`font-bold text-[10px] py-1 ${(index === 0 || index === 6) ? "text-rose-500" : "text-gray-400"}`}>
+                                <span key={index} className={`font-bold text-xs py-1 ${(index === 0 || index === 6) ? "text-rose-500" : "text-[#8A7A6B]"}`}>
                                   {w}
                                 </span>
                               ))}
@@ -2611,15 +2847,11 @@ export default function CalendarView({
                                 const isSelectedEnd = dateStr === tempRangeEnd;
                                 const isInRange = tempRangeStart && tempRangeEnd && dateStr > tempRangeStart && dateStr < tempRangeEnd;
                                 
-                                let dayClass = "text-[#3C332D] hover:bg-[#FAF6F0] rounded-lg";
-                                if (isSelectedStart) {
-                                  dayClass = "bg-[#7C6354] hover:bg-[#7C6354] text-white font-black rounded-lg shadow-sm";
-                                } else if (isSelectedEnd) {
-                                  dayClass = "bg-[#7C6354] hover:bg-[#7C6354] text-white font-black rounded-lg shadow-sm";
+                                let dayClass = "text-[#3C332D] hover:bg-[#FFF2EB] rounded-lg";
+                                if (isSelectedStart || isSelectedEnd) {
+                                  dayClass = "bg-[#B89B84] hover:bg-[#B89B84] text-white font-bold rounded-lg shadow-xs";
                                 } else if (isInRange) {
-                                  dayClass = "bg-[#FAF0E6] hover:bg-[#FAF0E6] text-[#7C6354] font-bold rounded-none";
-                                } else if (tempRangeStart && dateStr === tempRangeStart) {
-                                  dayClass = "bg-[#7C6354] hover:bg-[#7C6354] text-white font-black rounded-lg shadow-sm";
+                                  dayClass = "bg-[#FFF2EB] hover:bg-[#FFF2EB] text-[#B89B84] font-bold rounded-none";
                                 }
                                 
                                 return (
@@ -2627,7 +2859,7 @@ export default function CalendarView({
                                     type="button"
                                     key={day}
                                     onClick={() => handleRangeDayClick(dateStr)}
-                                    className={`py-1.5 transition font-mono relative text-[11px] font-bold flex items-center justify-center cursor-pointer ${dayClass}`}
+                                    className={`py-2 transition font-mono relative text-xs font-bold flex items-center justify-center cursor-pointer ${dayClass}`}
                                   >
                                     {day}
                                   </button>
@@ -2636,14 +2868,14 @@ export default function CalendarView({
                             </div>
                             
                             {/* Tips */}
-                            <div className="text-[10px] text-gray-400 font-bold text-center select-none pt-1 border-t border-[#FAF6F0]">
+                            <div className="text-[11px] text-[#8A7A6B] font-medium text-center select-none pt-2 border-t border-[#D8C6B8]">
                               {!tempRangeStart ? "💡 點選第一個日期作為【開始日期】" : !tempRangeEnd ? "💡 點選第二個日期作為【結束日期】" : "✅ 區間已選妥，可點擊日期重新選取"}
                             </div>
                           </div>
                         )}
                       </div>
 
-                      <div className="flex items-center gap-2 py-0.5">
+                      <div className="flex items-center gap-2 py-1">
                         <input
                           type="checkbox"
                           id="isCrossDay"
@@ -2653,17 +2885,17 @@ export default function CalendarView({
                             setIsCrossDay(e.target.checked);
                             if (!e.target.checked) setEndDate(selectedDate);
                           }}
-                          className="h-4 w-4 bg-[#FFFDF8] border-[#EFEAE2] text-[#5B7283] rounded cursor-pointer disabled:opacity-55"
+                          className="h-4 w-4 rounded border-[#D8C6B8] focus:ring-[#B89B84] text-[#B89B84] cursor-pointer disabled:opacity-55"
                         />
-                        <label htmlFor="isCrossDay" className="text-xs font-bold text-[#5B7283] select-none cursor-pointer">
-                          📅 跨日行程（多天行程）
+                        <label htmlFor="isCrossDay" className="text-base font-bold text-[#6B4F3A] select-none cursor-pointer">
+                          跨日行程（多天行程）
                         </label>
                       </div>
                     </div>
                   ) : (
                     <div className="space-y-4">
                       <div>
-                        <label className="block text-xs font-bold text-[#5B7283] mb-1.5">活動日期</label>
+                        <label className="block text-base sm:text-[17px] font-bold text-[#6B4F3A] mb-1.5">活動日期 *</label>
                         <input
                           type="date"
                           required
@@ -2675,11 +2907,11 @@ export default function CalendarView({
                             setTempRangeStart(e.target.value);
                             setTempRangeEnd(e.target.value);
                           }}
-                          className="w-full text-sm border border-[#EFEAE2] rounded-xl px-3.5 py-2.5 bg-[#FFFDF8] focus:outline-none focus:ring-2 focus:ring-[#5B7283] font-mono disabled:bg-gray-50/50"
+                          className="w-full text-base font-bold border border-[#D8C6B8] bg-[#FFFDFC] rounded-xl px-4 py-3 placeholder-[#A59487] text-[#3C332D] focus:outline-none focus:border-[#B89B84] focus:ring-1 focus:ring-[#B89B84] font-mono shadow-xs"
                         />
                       </div>
 
-                      <div className="flex items-center gap-2 py-0.5">
+                      <div className="flex items-center gap-2 py-1">
                         <input
                           type="checkbox"
                           id="isCrossDay"
@@ -2692,7 +2924,6 @@ export default function CalendarView({
                               setEndDate(selectedDate);
                               setTempRangeEnd(selectedDate);
                             } else {
-                              // If checked, default to tomorrow
                               try {
                                 const d = new Date(selectedDate);
                                 d.setDate(d.getDate() + 1);
@@ -2703,25 +2934,25 @@ export default function CalendarView({
                               } catch (_) {}
                             }
                           }}
-                          className="h-4 w-4 bg-[#FFFDF8] border-[#EFEAE2] text-[#5B7283] rounded cursor-pointer disabled:opacity-55"
+                          className="h-4 w-4 rounded border-[#D8C6B8] focus:ring-[#B89B84] text-[#B89B84] cursor-pointer disabled:opacity-55"
                         />
-                        <label htmlFor="isCrossDay" className="text-xs font-bold text-[#5B7283] select-none cursor-pointer">
-                          📅 跨日行程（多天行程）
+                        <label htmlFor="isCrossDay" className="text-base font-bold text-[#6B4F3A] select-none cursor-pointer">
+                          跨日行程（多天行程）
                         </label>
                       </div>
                     </div>
                   )}
 
                   {isCrossDay && calcDurationDays(selectedDate, endDate) >= 3 && (
-                    <div className="bg-[#FAF6F0] border border-[#E7DCD0] p-3 rounded-2xl space-y-2 animate-in fade-in duration-200">
-                      <div className="text-[11px] leading-relaxed text-[#846A55] font-medium">
-                        💡 跨日行程已超過 2 天（共 <span className="font-bold text-[#A87243]">{calcDurationDays(selectedDate, endDate)}</span> 天），建議將其快速轉換為「特別期間安排（旅遊/考試/放假）」，享受專屬一鍵管理！
+                    <div className="bg-[#FFFDFC] border border-[#D8C6B8] p-3.5 rounded-xl space-y-2 animate-in fade-in duration-200">
+                      <div className="text-xs sm:text-[13px] leading-relaxed text-[#8A7A6B] font-bold">
+                        💡 跨日行程已超過 2 天（共 <span className="font-extrabold text-[#B89B84]">{calcDurationDays(selectedDate, endDate)}</span> 天），建議將其快速轉換為「特別期間安排」，享受專屬一鍵管理！
                       </div>
                       {!isReadOnlyForm && (
                         <button
                           type="button"
                           onClick={handleQuickConvertToSpecialPeriod}
-                          className="w-full text-center py-1.5 px-3 bg-[#E7DCD0] hover:bg-[#D9CDBF] text-[#5C4535] rounded-xl text-xs font-bold transition cursor-pointer"
+                          className="w-full text-center py-2 px-4 bg-[#FFFDFC] border border-[#D8C6B8] hover:bg-[#FFF2EB] text-[#6B4F3A] rounded-xl text-xs font-bold transition cursor-pointer"
                         >
                           ⚡ 快速建立為「特別期間安排」
                         </button>
@@ -2730,86 +2961,98 @@ export default function CalendarView({
                   )}
                 </div>
               ) : (
-                <div className="space-y-2">
-                  <label className="block text-xs font-bold text-[#5B7283]">重複星期幾 (可複選)</label>
-                  <div className="flex flex-wrap gap-1.5">
-                    {WEEKDAYS_LIST.map((wd) => {
-                      const isActive = weekdays.includes(wd.value);
-                      return (
-                        <button
-                          type="button"
-                          key={wd.value}
-                          disabled={isReadOnlyForm}
-                          onClick={() => toggleWeekday(wd.value)}
-                          className={`px-3 py-1.5 text-xs font-bold border rounded-lg transition cursor-pointer disabled:opacity-75 ${
-                            isActive
-                              ? "bg-[#5B7283] text-white border-[#5B7283]"
-                              : "bg-[#FFFDF8] text-gray-500 border-[#EFEAE2] hover:bg-[#F7F3EB]"
-                          }`}
-                        >
-                          {wd.label}
-                        </button>
-                      );
-                    })}
+                <div className="space-y-4">
+                  {/* Fixed activity reference start date */}
+                  <div>
+                    <label className="block text-base sm:text-[17px] font-bold text-[#6B4F3A] mb-1.5">固定活動開始生效日期 *</label>
+                    <input
+                      type="date"
+                      required
+                      disabled={isReadOnlyForm}
+                      value={selectedDate}
+                      onChange={(e) => {
+                        setSelectedDate(e.target.value);
+                      }}
+                      className="w-full text-base font-bold border border-[#D8C6B8] bg-[#FFFDFC] rounded-xl px-4 py-3 placeholder-[#A59487] text-[#3C332D] focus:outline-none focus:border-[#B89B84] focus:ring-1 focus:ring-[#B89B84] font-mono shadow-xs"
+                    />
                   </div>
                 </div>
               )}
 
-               <div className="grid grid-cols-2 gap-3.5">
-                <div>
-                  <label className="block text-xs font-bold text-[#5B7283] mb-1.5">開始時間（選填）</label>
-                  <select
-                    value={startTime}
-                    disabled={isReadOnlyForm}
-                    onChange={(e) => setStartTime(e.target.value)}
-                    className="w-full text-xs border border-[#EFEAE2] rounded-xl px-3.5 py-2.5 bg-[#FFFDF8] focus:outline-none font-mono cursor-pointer disabled:opacity-75"
-                  >
-                    <option value="">請選擇或無</option>
-                    {TIME_CHOICES.map((tc) => (
-                      <option key={tc} value={tc}>
-                        {tc}
-                      </option>
-                    ))}
-                  </select>
+              {/* 6. 開始時間 & 結束時間 (grid) */}
+              <div className="space-y-1.5">
+                <div className="grid grid-cols-2 gap-3.5">
+                  <div>
+                    <label className="block text-base sm:text-[17px] font-bold text-[#6B4F3A] mb-1.5">開始時間</label>
+                    <select
+                      value={startTime}
+                      disabled={isReadOnlyForm}
+                      onChange={(e) => setStartTime(e.target.value)}
+                      className="w-full text-base font-bold border border-[#D8C6B8] bg-[#FFFDFC] rounded-xl px-3 py-2.5 cursor-pointer text-[#3C332D] focus:outline-none focus:border-[#B89B84] focus:ring-1 focus:ring-[#B89B84]"
+                    >
+                      <option value="">選擇時間 (選填)</option>
+                      {TIME_CHOICES.map((tc) => (
+                        <option key={tc} value={tc}>
+                          {tc}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-base sm:text-[17px] font-bold text-[#6B4F3A] mb-1.5">結束時間</label>
+                    <select
+                      value={endTime}
+                      disabled={isReadOnlyForm}
+                      onChange={(e) => setEndTime(e.target.value)}
+                      className="w-full text-base font-bold border border-[#D8C6B8] bg-[#FFFDFC] rounded-xl px-3 py-2.5 cursor-pointer text-[#3C332D] focus:outline-none focus:border-[#B89B84] focus:ring-1 focus:ring-[#B89B84]"
+                    >
+                      <option value="">選擇時間 (選填)</option>
+                      {TIME_CHOICES.map((tc) => (
+                        <option key={tc} value={tc}>
+                          {tc}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
                 </div>
-                <div>
-                  <label className="block text-xs font-bold text-[#5B7283] mb-1.5">結束時間（選填）</label>
-                  <select
-                    value={endTime}
-                    disabled={isReadOnlyForm}
-                    onChange={(e) => setEndTime(e.target.value)}
-                    className="w-full text-xs border border-[#EFEAE2] rounded-xl px-3.5 py-2.5 bg-[#FFFDF8] focus:outline-none font-mono cursor-pointer disabled:opacity-75"
-                  >
-                    <option value="">請選擇或無</option>
-                    {TIME_CHOICES.map((tc) => (
-                      <option key={tc} value={tc}>
-                        {tc}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+
+                {!isReadOnlyForm && (
+                  <div className="flex items-center gap-2 pt-1 animate-in fade-in duration-200">
+                    <input
+                      type="checkbox"
+                      id="showFullTimeChoicesCheckbox"
+                      checked={showFullTimeChoices}
+                      onChange={(e) => setShowFullTimeChoices(e.target.checked)}
+                      className="h-4 w-4 rounded border-[#D8C6B8] focus:ring-[#B89B84] text-[#B89B84] accent-[#B89B84] cursor-pointer"
+                    />
+                    <label htmlFor="showFullTimeChoicesCheckbox" className="text-xs sm:text-sm font-bold text-[#8A7A6B] cursor-pointer select-none">
+                      顯示 00:00 ~ 06:45 凌晨時段 (如旅遊、跨夜活動等)
+                    </label>
+                  </div>
+                )}
               </div>
 
-              <div>
-                <label className="block text-xs font-bold text-[#5B7283] mb-1.5">📍 活動地點</label>
-                <div className="space-y-1.5">
+              {/* 7. 活動地點 */}
+              <div className="space-y-1.5">
+                <label className="block text-base sm:text-[17px] font-bold text-[#6B4F3A] mb-1.5">活動地點</label>
+                <div className="space-y-2">
                   <input
                     type="text"
                     disabled={isReadOnlyForm}
-                    placeholder="請輸入地點 (例如：台北市立動物園、大安森林公園)"
+                    placeholder="請輸入地點 (例如：大安森林公園、畫畫教室)"
                     value={location}
                     onChange={(e) => setLocation(e.target.value)}
-                    className="w-full text-sm border border-[#EFEAE2] rounded-xl px-3.5 py-2.5 bg-[#FFFDF8] focus:outline-none focus:ring-2 focus:ring-[#5B7283] disabled:bg-gray-50/50"
+                    className="w-full text-base font-bold border border-[#D8C6B8] bg-[#FFFDFC] rounded-xl px-4 py-3 placeholder-[#A59487] text-[#3C332D] focus:outline-none focus:border-[#B89B84] focus:ring-1 focus:ring-[#B89B84] transition shadow-xs"
                   />
                   {location.trim() && (
-                    <div className="flex justify-end animate-in fade-in slide-in-from-top-1 duration-200">
+                    <div className="flex justify-end animate-in fade-in duration-200">
                       <button
                         type="button"
                         onClick={() => {
                           const url = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(location.trim())}`;
                           window.open(url, '_blank');
                         }}
-                        className="inline-flex items-center gap-1.5 text-xs font-extrabold text-sky-850 hover:text-sky-900 bg-sky-50 hover:bg-sky-100 border border-sky-150 rounded-xl px-3.5 py-2 transition-all shadow-2xs hover:shadow-xs cursor-pointer focus:outline-none active:scale-95"
+                        className="inline-flex items-center gap-1 text-xs font-bold text-[#6B4F3A] bg-[#FFFDFC] hover:bg-[#FFF2EB] border border-[#D8C6B8] rounded-xl px-3 py-1.5 transition-all cursor-pointer shadow-xs"
                       >
                         🗺 開啟地圖
                       </button>
@@ -2818,48 +3061,50 @@ export default function CalendarView({
                 </div>
               </div>
 
-              <div>
-                <label className="block text-xs font-bold text-[#5B7283] mb-1.5">備註說明</label>
+              {/* 8. 備註說明 */}
+              <div className="space-y-1.5">
+                <label className="block text-base sm:text-[17px] font-bold text-[#6B4F3A] mb-1.5">備註說明</label>
                 <textarea
                   rows={2}
                   disabled={isReadOnlyForm}
-                  placeholder="可在此輸入事項備註細節..."
+                  placeholder="可在此輸入其它相關說明或備註..."
                   value={note}
                   onChange={(e) => setNote(e.target.value)}
-                  className="w-full text-sm border border-[#EFEAE2] rounded-xl px-3.5 py-2.5 bg-[#FFFDF8] focus:outline-none focus:ring-2 focus:ring-[#5B7283] resize-none disabled:bg-gray-50/50"
+                  className="w-full text-base font-bold border border-[#D8C6B8] bg-[#FFFDFC] rounded-xl px-4 py-3 placeholder-[#A59487] text-[#3C332D] focus:outline-none focus:border-[#B89B84] focus:ring-1 focus:ring-[#B89B84] resize-none"
                 />
               </div>
 
+              {/* Daily contents planner for Cross Day events */}
               {isCrossDay && !isFixed && selectedDate && endDate && (
-                <div className="border border-sky-150 bg-[#F0F8FF]/80 p-4 rounded-xl space-y-3 animate-in fade-in duration-150">
+                <div className="border border-[#D8C6B8] bg-[#FFFDFC] p-4 rounded-xl space-y-3 animate-in fade-in duration-150">
                   <button
                     type="button"
                     onClick={() => setIsDailyNotesExpanded(!isDailyNotesExpanded)}
-                    className="w-full text-left flex items-center justify-between text-xs font-black text-[#004B8F] select-none cursor-pointer focus:outline-none"
+                    className="w-full text-left flex items-center justify-between text-xs sm:text-sm font-bold text-[#6B4F3A] select-none cursor-pointer focus:outline-none"
                   >
-                    <span className="flex items-center gap-1 text-[11px]">
+                    <span className="flex items-center gap-1">
                       <span>📘</span> 每日內容規劃（{calcDurationDays(selectedDate, endDate)} 天）
                     </span>
-                    <span className="text-[10px] text-sky-600 font-bold bg-sky-100 hover:bg-[#E1F0FF] px-2 py-0.5 rounded-md flex items-center gap-0.5 transition select-none shrink-0 border border-sky-200">
-                      {isDailyNotesExpanded ? "▲ 點擊收合" : "▼ 點擊展開"}
+                    <span className="text-[10px] sm:text-xs text-[#8A7A6B] bg-[#FFFDFC] border border-[#D8C6B8] px-2 py-0.5 rounded-md flex items-center gap-0.5 transition select-none shrink-0">
+                      {isDailyNotesExpanded ? "收合 ↑" : "展開 ↓"}
                     </span>
                   </button>
 
                   {isDailyNotesExpanded && (
-                    <div className="space-y-2.5 max-h-[190px] overflow-y-auto pr-1 border-t border-sky-200 pt-3 animate-in slide-in-from-top-1 duration-150">
+                    <div className="space-y-2.5 max-h-[190px] overflow-y-auto pr-1 border-t border-[#D8C6B8] pt-3 animate-in slide-in-from-top-1 duration-150">
                       {getDatesInRange(selectedDate, endDate).map((dateStr, idx) => {
                         const dayNum = idx + 1;
-                        const dateDisplay = dateStr.replace(/-/g, "/").slice(5); // e.g. "06/23"
+                        const dateDisplay = dateStr.replace(/-/g, "/").slice(5);
                         return (
-                          <div key={dateStr} className="p-2.5 bg-white/70 border border-sky-100 rounded-xl space-y-1.5 shadow-sm max-h-[92px]">
-                            <div className="flex justify-between items-center text-[11px] font-extrabold text-sky-800">
+                          <div key={dateStr} className="p-2.5 bg-[#FFF9F6] border border-[#D8C6B8] rounded-xl space-y-1.5 shadow-xs">
+                            <div className="flex justify-between items-center text-[11px] font-bold text-[#6B4F3A]">
                               <span className="flex items-center gap-1 shrink-0">📘 第 {dayNum} 天 ({dateDisplay})</span>
                               <span className="text-[10px] font-mono text-gray-400 font-normal shrink-0">{dateStr}</span>
                             </div>
                             <input
                               type="text"
                               disabled={isReadOnlyForm}
-                              placeholder={`例如：期末考 Day${dayNum} 考科/自訂安排...`}
+                              placeholder={`例：Day${dayNum} 的詳細事項、活動大綱...`}
                               value={formDailyNotes[dateStr] || ""}
                               onChange={(e) => {
                                 setFormDailyNotes({
@@ -2867,7 +3112,7 @@ export default function CalendarView({
                                   [dateStr]: e.target.value,
                                 });
                               }}
-                              className="w-full text-xs border border-sky-200 rounded-lg px-2.5 py-1.5 bg-[#FFFDF8] focus:outline-none focus:ring-1 focus:ring-sky-300 font-bold disabled:bg-gray-50/50"
+                              className="w-full text-xs sm:text-sm border border-[#D8C6B8] rounded-lg px-2.5 py-1.5 bg-[#FFFDFC] focus:outline-none focus:border-[#B89B84] focus:ring-1 focus:ring-[#B89B84] font-bold"
                             />
                           </div>
                         );
@@ -2877,50 +3122,33 @@ export default function CalendarView({
                 </div>
               )}
 
-              <div>
-                <label className="block text-xs font-bold text-[#5B7283] mb-1.5">隱私限制</label>
+              {/* 9. 公開設定 */}
+              <div className="space-y-1.5">
+                <label className="block text-base sm:text-[17px] font-bold text-[#6B4F3A] mb-1.5">公開設定</label>
                 <select
                   value={isPublic ? "true" : "false"}
                   disabled={isReadOnlyForm}
                   onChange={(e) => setIsPublic(e.target.value === "true")}
-                  className="w-full text-sm border border-[#EFEAE2] rounded-xl px-3.5 py-2.5 bg-[#FFFDF8] focus:outline-none cursor-pointer disabled:opacity-75"
+                  className="w-full text-base font-bold border border-[#D8C6B8] bg-[#FFFDFC] rounded-xl px-4 py-3 focus:outline-none focus:border-[#B89B84] cursor-pointer text-[#3C332D]"
                 >
                   <option value="true">🔓 公開 (家庭全員皆可見)</option>
                   <option value="false">🔒 私人 (僅自己與家庭管理員可見)</option>
                 </select>
                 {!isPublic && (
-                  <p className="mt-1.5 text-xs text-amber-600 bg-amber-50/50 rounded-lg p-2 border border-amber-100 font-medium leading-relaxed">
+                  <p className="mt-2 text-xs sm:text-sm text-[#8A7A6B] bg-[#FFF2EB] border border-[#D8C6B8] rounded-xl p-3 font-bold leading-relaxed">
                     🔒 私人行程說明：勾選後僅建立者本人與家庭管理員可查看。其他家庭成員將完全無法看到此行程。
                   </p>
                 )}
               </div>
-
-              {!editingEvent && onAddFavorite && (
-                <div className="border-t border-[#EFEAE2] pt-4">
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="checkbox"
-                      id="saveAsFav"
-                      checked={saveAsFav}
-                      disabled={isReadOnlyForm}
-                      onChange={(e) => setSaveAsFav(e.target.checked)}
-                      className="h-5 w-5 bg-[#FFFDF8] border-[#EFEAE2] text-[#5B7283] rounded-lg cursor-pointer disabled:opacity-55"
-                    />
-                    <label htmlFor="saveAsFav" className="text-xs font-bold text-[#5B7283] select-none cursor-pointer">
-                      ⭐ 順便存入常用事項清單
-                    </label>
-                  </div>
-                </div>
-              )}
             </div>
 
             {/* Footer (Fixed) */}
-            <div className="p-4 md:p-6 border-t border-[#EFEAE2] flex justify-between items-center bg-[#FFFDF8] shrink-0 rounded-b-[24px]">
+            <div className="p-4 md:p-6 border-t border-[#D8C6B8] flex justify-between items-center bg-[#FFF8F5] shrink-0 rounded-b-[24px]">
               {editingEvent && isUserAllowedToDelete(editingEvent) && !isReadOnlyForm ? (
                 <button
                   type="button"
                   onClick={() => triggerDeleteConfirm(editingEvent)}
-                  className="px-4.5 py-2.5 text-xs font-bold text-white bg-rose-500 hover:bg-rose-600 rounded-full transition cursor-pointer flex items-center gap-1.5 shadow-sm shrink-0"
+                  className="px-4 py-2 text-xs font-bold text-white bg-rose-500 hover:bg-rose-600 rounded-full transition cursor-pointer flex items-center gap-1 shadow-xs shrink-0"
                 >
                   <Trash2 className="h-4 w-4" />
                   刪除日程
@@ -2934,14 +3162,14 @@ export default function CalendarView({
                     <button
                       type="button"
                       onClick={() => setShowAddForm(false)}
-                      className="px-5 py-2.5 text-xs font-bold text-gray-500 hover:bg-gray-100 border border-[#EFEAE2] rounded-full transition cursor-pointer"
+                      className="px-4.5 py-2 text-xs font-bold text-neutral-500 hover:bg-[#FFF2EB] border border-[#D8C6B8] rounded-full transition cursor-pointer"
                     >
                       取消
                     </button>
                     <button
                       type="submit"
                       disabled={isSubmitting}
-                      className="px-5 py-2.5 text-xs font-black text-white bg-[#5B7283] hover:bg-[#4E6170] rounded-full transition disabled:opacity-50 cursor-pointer soft-journal-shadow"
+                      className="px-4.5 py-2 text-xs font-black text-white bg-[#5B7283] hover:bg-[#4E6170] rounded-full transition disabled:opacity-50 cursor-pointer soft-journal-shadow"
                     >
                       {isSubmitting ? "正在儲存..." : editingEvent ? "確認修改" : "新增事項"}
                     </button>
@@ -2950,7 +3178,7 @@ export default function CalendarView({
                   <button
                     type="button"
                     onClick={() => setShowAddForm(false)}
-                    className="px-6 py-2.5 text-xs font-black text-white bg-[#5B7283] hover:bg-[#4E6170] rounded-full transition cursor-pointer soft-journal-shadow font-bold"
+                    className="px-5 py-2 text-xs font-black text-white bg-[#5B7283] hover:bg-[#4E6170] rounded-full transition cursor-pointer soft-journal-shadow font-bold"
                   >
                     關閉
                   </button>
@@ -2993,8 +3221,9 @@ export default function CalendarView({
       {selectedModeForDetail && (() => {
         const { mode, dateStr } = selectedModeForDetail;
         
-        // Calculate day count
+        // Calculate day count and total days
         let modeDayCount = 1;
+        let totalDays = 1;
         try {
           const parseDateStr = (str: string) => {
             const parts = str.split("-");
@@ -3002,7 +3231,9 @@ export default function CalendarView({
           };
           const startD = parseDateStr(mode.startDate);
           const clickD = parseDateStr(dateStr);
+          const endD = parseDateStr(mode.endDate);
           modeDayCount = Math.floor((clickD.getTime() - startD.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+          totalDays = Math.floor((endD.getTime() - startD.getTime()) / (1000 * 60 * 60 * 24)) + 1;
         } catch (e) {
           // fallback
         }
@@ -3062,219 +3293,164 @@ export default function CalendarView({
                 <div className="border-t border-dashed border-gray-200 pt-5 space-y-4">
                   {isTravel && (
                     <div className="space-y-6 font-sans">
-                      {/* Day 1 Flight Ticket Information (Only for international/國外旅遊 and first day) */}
-                      {modeDayCount === 1 && mode.travelType === "international" && (
-                        <div className="bg-[#FAF6F0] border border-[#E3DCD0] rounded-2xl p-5 space-y-4 animate-fade-in shadow-sm relative overflow-hidden">
+                      {/* 自動顯示去程航班 (第一天旅程開始日) */}
+                      {modeDayCount === 1 && (mode.departureAirline || mode.departureFlightNumber) && (
+                        <div className="bg-[#FAF8F5] border-2 border-[#E9E4DB] rounded-2xl p-5 space-y-3.5 animate-fade-in shadow-sm relative overflow-hidden font-sans">
                           {/* Boarding pass styled decor */}
-                          <div className="absolute right-4 top-2 text-[#E2D8C9] font-black text-[13px] tracking-widest pointer-events-none select-none opacity-40">
-                            BOARDING PASS / 國外機票
+                          <div className="absolute right-4 top-2 text-[#E9E4DB] font-extrabold text-[10px] tracking-widest pointer-events-none select-none opacity-50">
+                            BOARDING PASS / DEPARTURE
                           </div>
                           
-                          <div className="font-extrabold text-[#7C6250] text-sm flex items-center gap-1.5 pb-2 border-b border-dashed border-[#E3DCD0]">
-                            <span>✈️</span> 機票重要資訊
+                          <div className="font-extrabold text-[#7C6250] text-xs sm:text-sm flex items-center gap-1.5 pb-2 border-b border-dashed border-[#E3DCD0]">
+                            <span>✈️</span> 去程航班
                           </div>
                           
-                          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3.5 text-xs text-[#5B4E44]">
-                            <div>
-                              <label className="text-[11px] text-[#8C7A6B] font-bold block mb-1">航空公司</label>
-                              <input
-                                id="travel-edit-airline"
-                                type="text"
-                                value={editingItinerary?.airline || ""}
-                                onChange={(e) => setEditingItinerary(prev => prev ? { ...prev, airline: e.target.value } : null)}
-                                placeholder="例如：星宇航空"
-                                className="w-full bg-white/95 rounded-xl px-3 py-2 text-xs text-gray-700 border border-[#D5CDBD] focus:border-[#7C6250] focus:ring-1 focus:ring-[#7C6250] focus:outline-none transition-all placeholder:text-gray-300 font-bold"
-                              />
+                          <div className="space-y-2 pt-0.5">
+                            <div className="text-sm font-black text-gray-800">
+                              {mode.departureAirline || ""} {mode.departureFlightNumber || ""}
                             </div>
-                            <div>
-                              <label className="text-[11px] text-[#8C7A6B] font-bold block mb-1">航班</label>
-                              <input
-                                id="travel-edit-flight-no"
-                                type="text"
-                                value={editingItinerary?.flightNumber || ""}
-                                onChange={(e) => setEditingItinerary(prev => prev ? { ...prev, flightNumber: e.target.value } : null)}
-                                placeholder="例如：JX800"
-                                className="w-full bg-white/95 rounded-xl px-3 py-2 text-xs text-gray-700 border border-[#D5CDBD] focus:border-[#7C6250] focus:ring-1 focus:ring-[#7C6250] focus:outline-none transition-all placeholder:text-gray-300 font-bold"
-                              />
+                            
+                            <div className="text-xs font-bold text-[#7C6250] flex flex-wrap items-center gap-1">
+                              <span>📍</span> {mode.departureAirport || "出發機場"}{mode.departureTerminal ? ` T${mode.departureTerminal}` : ""}
+                              <span className="text-gray-400 font-extrabold mx-1">→</span>
+                              <span>📍</span> {mode.departureArrivalAirport || "抵達機場"}
                             </div>
-                            <div>
-                              <label className="text-[11px] text-[#8C7A6B] font-bold block mb-1">出發時間</label>
-                              <input
-                                id="travel-edit-dep-time"
-                                type="text"
-                                value={editingItinerary?.departureTime || ""}
-                                onChange={(e) => setEditingItinerary(prev => prev ? { ...prev, departureTime: e.target.value } : null)}
-                                placeholder="例如：08:30"
-                                className="w-full bg-white/95 rounded-xl px-3 py-2 text-xs text-gray-700 border border-[#D5CDBD] focus:border-[#7C6250] focus:ring-1 focus:ring-[#7C6250] focus:outline-none transition-all placeholder:text-gray-300 font-bold"
-                              />
-                            </div>
-                            <div>
-                              <label className="text-[11px] text-[#8C7A6B] font-bold block mb-1">回程時間</label>
-                              <input
-                                id="travel-edit-ret-time"
-                                type="text"
-                                value={editingItinerary?.returnTime || ""}
-                                onChange={(e) => setEditingItinerary(prev => prev ? { ...prev, returnTime: e.target.value } : null)}
-                                placeholder="例如：19:20"
-                                className="w-full bg-white/95 rounded-xl px-3 py-2 text-xs text-gray-700 border border-[#D5CDBD] focus:border-[#7C6250] focus:ring-1 focus:ring-[#7C6250] focus:outline-none transition-all placeholder:text-gray-300 font-bold"
-                              />
-                            </div>
-                            <div className="col-span-2 sm:col-span-1">
-                              <label className="text-[11px] text-[#8C7A6B] font-bold block mb-1">航廈</label>
-                              <input
-                                id="travel-edit-dep-terminal"
-                                type="text"
-                                value={editingItinerary?.departureTerminal || ""}
-                                onChange={(e) => setEditingItinerary(prev => prev ? { ...prev, departureTerminal: e.target.value } : null)}
-                                placeholder="例如：第二航廈"
-                                className="w-full bg-white/95 rounded-xl px-3 py-2 text-xs text-gray-700 border border-[#D5CDBD] focus:border-[#7C6250] focus:ring-1 focus:ring-[#7C6250] focus:outline-none transition-all placeholder:text-gray-300 font-bold"
-                              />
+
+                            <div className="flex gap-4 pt-1 text-xs text-slate-600 font-bold">
+                              {mode.departureTime && (
+                                <div className="bg-emerald-50 text-emerald-800 px-2.5 py-1 rounded-lg">
+                                  🛫 {mode.departureTime} 起飛
+                                </div>
+                              )}
+                              {mode.departureArrivalTime && (
+                                <div className="bg-indigo-50 text-indigo-850 px-2.5 py-1 rounded-lg">
+                                  🛬 {mode.departureArrivalTime} 抵達
+                                </div>
+                              )}
                             </div>
                           </div>
                         </div>
                       )}
 
-                      {/* 今日重點&提醒 section */}
-                      <div className="bg-[#FFF8F0] border-2 border-dashed border-[#E3DCD0] rounded-3xl p-5 space-y-4 shadow-xs">
-                        <div className="font-extrabold text-[15px] text-[#A27B5C] flex items-center gap-1.5 pb-1 select-none border-b border-[#E3DCD0]/50">
-                          <span className="text-base">📌</span> 今日主題 & 備註提醒
+                      {/* 自動顯示回程航班 (最後一天旅程結束日) */}
+                      {modeDayCount === totalDays && totalDays > 1 && (mode.returnAirline || mode.returnFlightNumber) && (
+                        <div className="bg-[#F5F8FA] border-2 border-[#DCE4E9] rounded-2xl p-5 space-y-3.5 animate-fade-in shadow-sm relative overflow-hidden font-sans">
+                          {/* Boarding pass styled decor */}
+                          <div className="absolute right-4 top-2 text-[#DCE4E9] font-extrabold text-[10px] tracking-widest pointer-events-none select-none opacity-50">
+                            BOARDING PASS / RETURN
+                          </div>
+                          
+                          <div className="font-extrabold text-[#4A6076] text-xs sm:text-sm flex items-center gap-1.5 pb-2 border-b border-dashed border-[#DCE4E9]">
+                            <span>✈️</span> 回程航班
+                          </div>
+                          
+                          <div className="space-y-2 pt-0.5">
+                            <div className="text-sm font-black text-gray-800">
+                              {mode.returnAirline || ""} {mode.returnFlightNumber || ""}
+                            </div>
+                            
+                            <div className="text-xs font-bold text-[#4A6076] flex flex-wrap items-center gap-1">
+                              <span>📍</span> {mode.returnAirport || "出發機場"}{mode.returnTerminal ? ` T${mode.returnTerminal}` : ""}
+                              <span className="text-gray-400 font-extrabold mx-1">→</span>
+                              <span>📍</span> {mode.returnArrivalAirport || "抵達機場"}
+                            </div>
+
+                            <div className="flex gap-4 pt-1 text-xs text-slate-600 font-bold">
+                              {mode.returnTime && (
+                                <div className="bg-emerald-50 text-emerald-800 px-2.5 py-1 rounded-lg">
+                                  🛫 {mode.returnTime} 起飛
+                                </div>
+                              )}
+                              {mode.returnArrivalTime && (
+                                <div className="bg-indigo-50 text-indigo-850 px-2.5 py-1 rounded-lg">
+                                  🛬 {mode.returnArrivalTime} 抵達
+                                </div>
+                              )}
+                            </div>
+                          </div>
                         </div>
-                        <div className="space-y-3.5">
-                          <div>
-                            <label className="block text-xs font-black text-[#8C7A6B] mb-1.5 flex items-center gap-1">
-                              <span>🌴</span> 今日主題：
-                            </label>
+                      )}
+
+                      {/* Simplified Travel Notebook Excel-like form */}
+                      <div className="bg-white border border-orange-200 rounded-3xl p-6 space-y-4 shadow-sm font-sans">
+                        <div className="text-[#8C7A6B] font-black text-xs md:text-sm border-b border-orange-100 pb-2 mb-2 select-none">
+                          📋 每日行程與食宿精簡表:
+                        </div>
+                        
+                        <div className="space-y-3.5 pl-1">
+                          {/* Row 1: 早上行程 */}
+                          <div className="flex items-center gap-2.5">
+                            <span className="text-gray-600 font-bold text-xs sm:text-sm shrink-0 w-[72px] text-right">
+                              早上行程：
+                            </span>
                             <input
-                              id="travel-notebook-today-theme"
+                              id="travel-notebook-morning"
                               type="text"
-                              value={editingItinerary?.todayTheme || ""}
-                              onChange={(e) => setEditingItinerary(prev => prev ? { ...prev, todayTheme: e.target.value } : null)}
-                              placeholder="例如：放空海灘日、文化探索日、親子樂園日..."
-                              className="w-full bg-white border border-[#E3DCD0] rounded-xl px-3.5 py-2.5 text-xs text-gray-700 focus:border-[#A27B5C] focus:ring-1 focus:ring-[#A27B5C] focus:outline-none transition-all placeholder:text-gray-300 font-bold"
+                              value={editingItinerary?.morning || ""}
+                              onChange={(e) => setEditingItinerary(prev => prev ? { ...prev, morning: e.target.value } : null)}
+                              placeholder="輸入行程，例：搭飛機前往北海道..."
+                              className="flex-grow bg-transparent border-b-2 border-transparent hover:border-gray-200 focus:border-orange-400 focus:bg-orange-50/15 rounded px-2.5 py-1.5 text-xs sm:text-sm font-semibold text-gray-805 transition-all focus:outline-none"
                             />
                           </div>
-                          <div>
-                            <label className="block text-xs font-black text-[#8C7A6B] mb-1.5 flex items-center gap-1">
-                              <span>📝</span> 今日備註：
-                            </label>
-                            <textarea
-                              id="travel-notebook-today-remarks"
-                              rows={3}
-                              value={editingItinerary?.todayRemarks || ""}
-                              onChange={(e) => setEditingItinerary(prev => prev ? { ...prev, todayRemarks: e.target.value } : null)}
-                              placeholder="例如：&#10;14:00 SPA預約&#10;17:30 看夕陽&#10;記得帶防蚊液"
-                              className="w-full bg-white border border-[#E3DCD0] rounded-xl px-3.5 py-2.5 text-xs text-gray-700 focus:border-[#A27B5C] focus:ring-1 focus:ring-[#A27B5C] focus:outline-none transition-all placeholder:text-gray-300 font-semibold"
+
+                          {/* Row 2: 下午行程 */}
+                          <div className="flex items-center gap-2.5">
+                            <span className="text-gray-600 font-bold text-xs sm:text-sm shrink-0 w-[72px] text-right">
+                              下午行程：
+                            </span>
+                            <input
+                              id="travel-notebook-afternoon"
+                              type="text"
+                              value={editingItinerary?.afternoon || ""}
+                              onChange={(e) => setEditingItinerary(prev => prev ? { ...prev, afternoon: e.target.value } : null)}
+                              placeholder="輸入行程，例：小樽運河散步..."
+                              className="flex-grow bg-transparent border-b-2 border-transparent hover:border-gray-200 focus:border-orange-400 focus:bg-orange-50/15 rounded px-2.5 py-1.5 text-xs sm:text-sm font-semibold text-gray-805 transition-all focus:outline-none"
                             />
                           </div>
-                        </div>
-                      </div>
 
-                      {/* Travel Notebook: Three Large Cards */}
-                      <div className="space-y-4">
-                        {/* Card 1: 🌅 早上 */}
-                        <div className="bg-[#FFFDF6] border border-[#E9E4DC] rounded-3xl p-5 space-y-3.5 shadow-sm">
-                          <div className="font-extrabold text-[14px] text-[#A27B5C] flex items-center gap-1.5 pb-1 select-none">
-                            <span className="text-base">🌅</span> 早上
+                          {/* Row 3: 午餐安排 */}
+                          <div className="flex items-center gap-2.5">
+                            <span className="text-gray-600 font-bold text-xs sm:text-sm shrink-0 w-[72px] text-right">
+                              午餐安排：
+                            </span>
+                            <input
+                              id="travel-notebook-lunch"
+                              type="text"
+                              value={editingItinerary?.lunch || ""}
+                              onChange={(e) => setEditingItinerary(prev => prev ? { ...prev, lunch: e.target.value } : null)}
+                              placeholder="輸入午餐，例：機場餐廳..."
+                              className="flex-grow bg-transparent border-b-2 border-transparent hover:border-gray-200 focus:border-orange-400 focus:bg-orange-50/15 rounded px-2.5 py-1.5 text-xs sm:text-sm font-semibold text-gray-805 transition-all focus:outline-none"
+                            />
                           </div>
-                          
-                          <div className="space-y-3">
-                            <div className="flex items-center gap-3">
-                              <span className="text-xs text-[#8C7A6B] font-black w-14 shrink-0">早餐：</span>
-                              <input
-                                id="travel-notebook-breakfast"
-                                type="text"
-                                value={editingItinerary?.breakfast || ""}
-                                onChange={(e) => setEditingItinerary(prev => prev ? { ...prev, breakfast: e.target.value } : null)}
-                                placeholder="填寫早餐安排 (如：飯店享用 / 街邊早餐)"
-                                className="flex-grow bg-white border border-[#E3DCD0] rounded-xl px-3.5 py-1.5 text-xs text-gray-700 focus:border-[#A27B5C] focus:ring-1 focus:ring-[#A27B5C] focus:outline-none transition-all placeholder:text-gray-300 font-semibold"
-                              />
-                            </div>
-                            <div className="flex items-center gap-3">
-                              <span className="text-xs text-[#8C7A6B] font-black w-14 shrink-0">行程：</span>
-                              <input
-                                id="travel-notebook-morning"
-                                type="text"
-                                value={editingItinerary?.morning || ""}
-                                onChange={(e) => setEditingItinerary(prev => prev ? { ...prev, morning: e.target.value } : null)}
-                                placeholder="填寫早上行程 (如：漫步老街、景點探訪)"
-                                className="flex-grow bg-white border border-[#E3DCD0] rounded-xl px-3.5 py-1.5 text-xs text-gray-700 focus:border-[#A27B5C] focus:ring-1 focus:ring-[#A27B5C] focus:outline-none transition-all placeholder:text-gray-300 font-semibold"
-                              />
-                            </div>
-                          </div>
-                        </div>
 
-                        {/* Card 2: ☀️ 下午 */}
-                        <div className="bg-[#FFFDF6] border border-[#E9E4DC] rounded-3xl p-5 space-y-3.5 shadow-sm">
-                          <div className="font-extrabold text-[14px] text-[#D8A25E] flex items-center gap-1.5 pb-1 select-none">
-                            <span className="text-base">☀️</span> 下午
+                          {/* Row 4: 晚餐安排 */}
+                          <div className="flex items-center gap-2.5">
+                            <span className="text-gray-600 font-bold text-xs sm:text-sm shrink-0 w-[72px] text-right">
+                              晚餐安排：
+                            </span>
+                            <input
+                              id="travel-notebook-dinner"
+                              type="text"
+                              value={editingItinerary?.dinner || ""}
+                              onChange={(e) => setEditingItinerary(prev => prev ? { ...prev, dinner: e.target.value } : null)}
+                              placeholder="輸入晚餐，例：海鮮丼飯..."
+                              className="flex-grow bg-transparent border-b-2 border-transparent hover:border-gray-200 focus:border-orange-400 focus:bg-orange-50/15 rounded px-2.5 py-1.5 text-xs sm:text-sm font-semibold text-gray-805 transition-all focus:outline-none"
+                            />
                           </div>
-                          
-                          <div className="space-y-3">
-                            <div className="flex items-center gap-3">
-                              <span className="text-xs text-[#8C7A6B] font-black w-14 shrink-0">午餐：</span>
-                              <input
-                                id="travel-notebook-lunch"
-                                type="text"
-                                value={editingItinerary?.lunch || ""}
-                                onChange={(e) => setEditingItinerary(prev => prev ? { ...prev, lunch: e.target.value } : null)}
-                                placeholder="填寫午餐享用 (如：當地人氣餐廳 / 美食街)"
-                                className="flex-grow bg-white border border-[#E3DCD0] rounded-xl px-3.5 py-1.5 text-xs text-gray-700 focus:border-[#D8A25E] focus:ring-1 focus:ring-[#D8A25E] focus:outline-none transition-all placeholder:text-gray-300 font-semibold"
-                              />
-                            </div>
-                            <div className="flex items-center gap-3">
-                              <span className="text-xs text-[#8C7A6B] font-black w-14 shrink-0">行程：</span>
-                              <input
-                                id="travel-notebook-afternoon"
-                                type="text"
-                                value={editingItinerary?.afternoon || ""}
-                                onChange={(e) => setEditingItinerary(prev => prev ? { ...prev, afternoon: e.target.value } : null)}
-                                placeholder="填寫下午休閒 (如：下午茶、商圈逛街)"
-                                className="flex-grow bg-white border border-[#E3DCD0] rounded-xl px-3.5 py-1.5 text-xs text-gray-700 focus:border-[#D8A25E] focus:ring-1 focus:ring-[#D8A25E] focus:outline-none transition-all placeholder:text-gray-300 font-semibold"
-                              />
-                            </div>
-                          </div>
-                        </div>
 
-                        {/* Card 3: 🌙 晚上 */}
-                        <div className="bg-[#FFFDF6] border border-[#E9E4DC] rounded-3xl p-5 space-y-3.5 shadow-sm">
-                          <div className="font-extrabold text-[14px] text-[#2C3E50] flex items-center gap-1.5 pb-1 select-none">
-                            <span className="text-base">🌙</span> 晚上
-                          </div>
-                          
-                          <div className="space-y-3">
-                            <div className="flex items-center gap-3">
-                              <span className="text-xs text-[#8C7A6B] font-black w-14 shrink-0">晚餐：</span>
-                              <input
-                                id="travel-notebook-dinner"
-                                type="text"
-                                value={editingItinerary?.dinner || ""}
-                                onChange={(e) => setEditingItinerary(prev => prev ? { ...prev, dinner: e.target.value } : null)}
-                                placeholder="填寫晚餐大餐 (如：名勝燒肉 / 百貨美食)"
-                                className="flex-grow bg-white border border-[#E3DCD0] rounded-xl px-3.5 py-1.5 text-xs text-gray-700 focus:border-[#2C3E50] focus:ring-1 focus:ring-[#2C3E50] focus:outline-none transition-all placeholder:text-gray-300 font-semibold"
-                              />
-                            </div>
-                            <div className="flex items-center gap-3">
-                              <span className="text-xs text-[#8C7A6B] font-black w-14 shrink-0">行程：</span>
-                              <input
-                                id="travel-notebook-night"
-                                type="text"
-                                value={editingItinerary?.night || ""}
-                                onChange={(e) => setEditingItinerary(prev => prev ? { ...prev, night: e.target.value } : null)}
-                                placeholder="填寫晚間放鬆 (如：夜遊鴨川、觀賞夜景)"
-                                className="flex-grow bg-white border border-[#E3DCD0] rounded-xl px-3.5 py-1.5 text-xs text-gray-700 focus:border-[#2C3E50] focus:ring-1 focus:ring-[#2C3E50] focus:outline-none transition-all placeholder:text-gray-300 font-semibold"
-                              />
-                            </div>
-                            <div className="flex items-center gap-3">
-                              <span className="text-xs text-[#8C7A6B] font-black w-14 shrink-0">飯店：</span>
-                              <input
-                                id="travel-notebook-lodging"
-                                type="text"
-                                value={editingItinerary?.lodging || ""}
-                                onChange={(e) => setEditingItinerary(prev => prev ? { ...prev, lodging: e.target.value } : null)}
-                                placeholder="填寫下榻旅宿 (如：溫泉飯店、市區商旅)"
-                                className="flex-grow bg-white border border-[#E3DCD0] rounded-xl px-3.5 py-1.5 text-xs text-gray-700 focus:border-[#2C3E50] focus:ring-1 focus:ring-[#2C3E50] focus:outline-none transition-all placeholder:text-gray-300 font-semibold"
-                              />
-                            </div>
+                          {/* Row 5: 住宿 */}
+                          <div className="flex items-center gap-2.5">
+                            <span className="text-gray-600 font-bold text-xs sm:text-sm shrink-0 w-[72px] text-right">
+                              住宿：
+                            </span>
+                            <input
+                              id="travel-notebook-lodging"
+                              type="text"
+                              value={editingItinerary?.lodging || ""}
+                              onChange={(e) => setEditingItinerary(prev => prev ? { ...prev, lodging: e.target.value } : null)}
+                              placeholder="輸入住宿，例：札幌王子飯店..."
+                              className="flex-grow bg-transparent border-b-2 border-transparent hover:border-gray-200 focus:border-orange-400 focus:bg-orange-50/15 rounded px-2.5 py-1.5 text-xs sm:text-sm font-semibold text-gray-805 transition-all focus:outline-none"
+                            />
                           </div>
                         </div>
                       </div>
@@ -3338,27 +3514,116 @@ export default function CalendarView({
                   )}
                 </div>
 
+                {/* Coexisting general calendar events */}
+                <div className="border-t border-dashed border-gray-200 pt-5 space-y-4">
+                  <div className="flex items-center justify-between">
+                    <h4 className="font-extrabold text-[#3C332D] text-xs sm:text-sm flex items-center gap-1.5">
+                      <span>📅</span> 當日一般行事曆行程與事件
+                    </h4>
+                    <span className="text-[10px] sm:text-[11px] text-[#A67C52] font-extrabold bg-[#FFF8F5] border border-[#EEDCD2] px-2 py-0.5 rounded-full">
+                      與 {mode.name} 共存
+                    </span>
+                  </div>
+
+                  {getEventsForDate(dateStr).length === 0 ? (
+                    <div className="py-6 text-center border border-dashed border-[#F2ECE5] bg-[#FFFDF8]/40 rounded-2xl">
+                      <span className="text-xl block mb-1">🍵</span>
+                      <p className="text-xs text-gray-400 font-bold">當天尚無一般行程安排，好愜意！</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-2 max-h-[220px] overflow-y-auto pr-1">
+                      {getEventsForDate(dateStr).map((evt) => {
+                        const isBday = (evt as any).isBirthday;
+                        return (
+                          <div
+                            key={evt.id}
+                            onClick={() => {
+                              setSelectedModeForDetail(null);
+                              handleOpenEdit(evt, dateStr);
+                            }}
+                            className={`p-3 text-left flex flex-col gap-1 shadow-xs relative rounded-xl border cursor-pointer hover:opacity-90 transition-all ${getAppletEventStyleClasses(evt, isBday, dateStr, "month")}`}
+                          >
+                            <div className="flex items-center justify-between gap-1 overflow-hidden">
+                              <span className="font-black text-xs text-[#3C332D] truncate block max-w-[75%]">
+                                {getEventTitleWithPrefix(evt, isBday, dateStr)}
+                              </span>
+                              <div className="flex items-center gap-1.5 ml-auto shrink-0 select-none">
+                                {evt.location && (
+                                  <button
+                                    type="button"
+                                    title="開啟地圖"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      window.open(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(evt.location || "")}`, '_blank');
+                                    }}
+                                    className="text-[10px] hover:scale-120 active:scale-95 transition-transform p-0.5 cursor-pointer bg-white border border-[#EAA59E]/20 shadow-xs rounded-full inline-flex items-center justify-center w-4 h-4 ml-auto shrink-0 select-none animate-in fade-in"
+                                  >
+                                    📍
+                                  </button>
+                                )}
+                                {isUserAllowedToDelete(evt) && (
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      triggerDeleteConfirm(evt, dateStr);
+                                      setSelectedModeForDetail(null);
+                                    }}
+                                    className="text-gray-400 hover:text-red-500 p-0.5 rounded transition cursor-pointer hover:bg-red-50"
+                                  >
+                                    <Trash2 className="h-3.5 w-3.5" />
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                            {evt.time && (
+                              <span className="text-[10px] font-mono font-extrabold text-gray-500 flex items-center gap-1">
+                                🕐 {evt.time}
+                              </span>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+
                 {/* Footer buttons */}
                 <div className="border-t border-gray-100 pt-5">
                   {isTravel ? (
-                    <div className="flex w-full items-center justify-end gap-3 font-sans">
+                    <div className="flex w-full items-center justify-between gap-3 font-sans">
                       <button
-                        onClick={() => setSelectedModeForDetail(null)}
-                        className="bg-slate-100 hover:bg-slate-200 text-slate-700 font-extrabold px-6 py-3 rounded-full text-xs cursor-pointer transition"
+                        type="button"
+                        onClick={() => {
+                          setSelectedModeForDetail(null);
+                          handleOpenAdd(dateStr);
+                        }}
+                        className="bg-indigo-50 hover:bg-indigo-100 border-2 border-indigo-200 text-[#4F46E5] font-extrabold px-4.5 py-3 rounded-full text-xs flex items-center gap-1 cursor-pointer transition select-none"
                       >
-                         取消
+                         ➕ 建立一般日曆行程
                       </button>
-                      <button
-                        onClick={handleSaveTravelItinerary}
-                        disabled={isSavingTravel}
-                        className="bg-[#0066CC] hover:bg-[#0052A3] text-white font-extrabold px-7 py-3 rounded-full text-xs cursor-pointer transition shadow-sm disabled:opacity-50 flex items-center gap-1.5"
-                      >
-                         {isSavingTravel ? "正在儲存更動..." : `💾 儲存 D${modeDayCount} 行程`}
-                      </button>
+
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setSelectedModeForDetail(null)}
+                          className="bg-slate-100 hover:bg-slate-200 text-slate-700 font-extrabold px-5 py-3 rounded-full text-xs cursor-pointer transition select-none"
+                        >
+                           關閉
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleSaveTravelItinerary}
+                          disabled={isSavingTravel}
+                          className="bg-[#0066CC] hover:bg-[#0052A3] text-white font-extrabold px-6 py-3 rounded-full text-xs cursor-pointer transition shadow-sm disabled:opacity-50 flex items-center gap-1.5 select-none"
+                        >
+                           {isSavingTravel ? "儲存更動..." : `💾 儲存 D${modeDayCount} 行程`}
+                        </button>
+                      </div>
                     </div>
                   ) : (
                     <div className="flex w-full items-center justify-between gap-3 font-sans">
                       <button
+                        type="button"
                         onClick={() => {
                           setSelectedModeForDetail(null);
                           handleOpenAdd(dateStr);
@@ -3369,6 +3634,7 @@ export default function CalendarView({
                       </button>
 
                       <button
+                        type="button"
                         onClick={() => setSelectedModeForDetail(null)}
                         className="bg-[#3C332D] hover:bg-[#2D2622] text-white font-extrabold px-6 py-3 rounded-full text-xs cursor-pointer transition shadow-sm"
                       >
@@ -3607,8 +3873,15 @@ export default function CalendarView({
                         </span>
                       )}
                       {activeMode && (
-                        <span className="inline-block text-[9px] bg-indigo-55 text-indigo-700 border border-indigo-150 px-1.5 py-0.5 rounded font-bold">
-                          🏕 {activeMode.name}
+                        <span 
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setIsDrawerOpen(false);
+                            setSelectedModeForDetail({ mode: activeMode, dateStr: selectedMobileDate });
+                          }}
+                          className="inline-block text-[10px] bg-sky-50 text-sky-800 border-2 border-sky-200 hover:bg-sky-100 px-2 py-0.5 rounded font-black cursor-pointer shadow-sm transition select-none flex items-center gap-0.5"
+                        >
+                          🏕️ {activeMode.name} (查看詳情)
                         </span>
                       )}
                     </div>
