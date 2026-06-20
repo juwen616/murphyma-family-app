@@ -1,5 +1,9 @@
 import { initializeApp } from "firebase/app";
-import { getAuth } from "firebase/auth";
+import { 
+  getAuth, 
+  browserLocalPersistence, 
+  setPersistence 
+} from "firebase/auth";
 import { 
   getFirestore, 
   initializeFirestore, 
@@ -44,7 +48,16 @@ if (usePersistence) {
 }
 
 export const db = databaseInstance;
-export const auth = getAuth();
+export const auth = getAuth(app);
+
+// Explicitly configure local persistence for Auth stability across redirect/reloads
+setPersistence(auth, browserLocalPersistence)
+  .then(() => {
+    console.log("Firebase Auth browserLocalPersistence explicitly set.");
+  })
+  .catch((err) => {
+    console.error("Error setting absolute Firebase Auth persistence:", err);
+  });
 
 export enum OperationType {
   CREATE = "create",

@@ -9,6 +9,7 @@ import {
 import {
   GoogleAuthProvider,
   signInWithRedirect,
+  signInWithPopup,
   getRedirectResult,
   signInAnonymously,
   signOut,
@@ -181,6 +182,14 @@ export function removeUndefinedFields(obj: any): any {
   return obj;
 }
 
+const isMobileDevice = (): boolean => {
+  if (typeof window === "undefined" || !window.navigator) return false;
+  const ua = window.navigator.userAgent;
+  const isMobileUA = /Mobi|Android|iPhone|iPad|iPod|Windows Phone|IEMobile|BlackBerry|Opera Mini/i.test(ua);
+  const isSmallScreen = window.innerWidth <= 768;
+  return isMobileUA || isSmallScreen;
+};
+
 export default function App() {
   const [user, setUser] = useState<FirebaseUser | null>(null);
   const [currentUserProfile, setCurrentUserProfile] = useState<UserProfile | null>(null);
@@ -269,12 +278,22 @@ export default function App() {
           }
         }
       } catch (err: any) {
-        console.error("Redirect sign-in error:", err);
+        console.error("Firebase Complete Redirect Sign-In error:", err);
         const errorCode = err.code || "unknown-auth-error";
+        const errorMessage = err.message || JSON.stringify(err);
+        
         if (errorCode === "auth/popup-closed-by-user" || err.message?.includes("popup-closed-by-user")) {
           toast.error("瀏覽器阻擋登入視窗，請重新登入");
+        } else if (
+          errorCode === "auth/redirect-state-lost" || 
+          errorCode === "auth/missing-initial-state" || 
+          errorMessage.toLowerCase().includes("state-lost") || 
+          errorMessage.toLowerCase().includes("initial-state")
+        ) {
+          console.error("Firebase Auth Redirect State Lost Detected:", err);
+          toast.error(`⚠️ 連結驗證狀態已遺失 (Redirect State Lost)\n若在 Safari/iOS，請開啟「允許跨網站追蹤」或改用 Chrome / 電腦版登入。`);
         } else {
-          toast.error(`處理重導向登入失敗。`);
+          toast.error(`處理重導向登入失敗：\n${errorCode} - ${errorMessage}`);
         }
         localStorage.removeItem("pending_bind_member_uid");
         localStorage.removeItem("pending_bind_family_id");
@@ -1988,8 +2007,15 @@ export default function App() {
     setAuthError({ code: null, message: null });
     try {
       const provider = new GoogleAuthProvider();
-      console.log("Redirect Login");
-      await signInWithRedirect(auth, provider);
+      if (isMobileDevice()) {
+        console.log("Redirect Login (Mobile device detected)");
+        await signInWithRedirect(auth, provider);
+      } else {
+        console.log("Popup Login (Desktop device detected)");
+        const result = await signInWithPopup(auth, provider);
+        console.log("Popup Login success user:", result?.user);
+        toast.success("Google 帳號登入成功！");
+      }
     } catch (err: any) {
       console.error("Google Authenticator error:", err);
       const errorCode = err.code || "unknown-auth-error";
@@ -1998,7 +2024,7 @@ export default function App() {
         errorMessage = "瀏覽器阻擋登入視窗，請重新登入";
         toast.error("瀏覽器阻擋登入視窗，請重新登入");
       } else {
-        toast.error("登入失敗\n請重新嘗試 Google 重導向登入。\n若持續失敗請聯絡管理員。");
+        toast.error(`登入失敗 (${errorCode}) - 請重新嘗試。`);
       }
       setAuthError({
         code: errorCode,
@@ -2012,14 +2038,53 @@ export default function App() {
   const handleBindGoogle = async (memberUid: string) => {
     try {
       const provider = new GoogleAuthProvider();
-      toast("正在重導向至 Google 登入以綁定此成員...", { duration: 4000 });
       localStorage.setItem("pending_bind_member_uid", memberUid);
       if (currentUserProfile?.familyId) {
         localStorage.setItem("pending_bind_family_id", currentUserProfile.familyId);
       }
       console.log("Google Login Start");
-      console.log("Redirect Login");
-      await signInWithRedirect(auth, provider);
+
+      if (isMobileDevice()) {
+        toast("正在重導向至 Google 登入以綁定此成員...", { duration: 4000 });
+        console.log("Redirect Login");
+        await signInWithRedirect(auth, provider);
+      } else {
+        toast("正在開啟 Google 登入視窗以綁定此成員...", { duration: 4000 });
+        console.log("Popup Login");
+        const result = await signInWithPopup(auth, provider);
+        if (result && result.user) {
+          const googleUser = result.user;
+          const googleUid = googleUser.uid;
+          const googleEmail = googleUser.email || "";
+          
+          // Update existing users in Firestore
+          const userDocRef = doc(db, "users", memberUid);
+          const userSnap = await getDoc(userDocRef);
+          if (userSnap.exists()) {
+            await updateDoc(userDocRef, {
+              googleUid: googleUid,
+              email: googleEmail,
+            });
+          }
+          
+          // Update families/{familyId}/members in Firestore
+          if (currentUserProfile?.familyId) {
+            const nestedMemberRef = doc(db, "families", currentUserProfile.familyId, "members", memberUid);
+            const nestedSnap = await getDoc(nestedMemberRef);
+            if (nestedSnap.exists()) {
+              await updateDoc(nestedMemberRef, {
+                googleUid: googleUid,
+                email: googleEmail,
+              });
+            }
+            clearCachedData(CACHE_KEY_MEMBERS(currentUserProfile.familyId));
+          }
+          
+          localStorage.removeItem("pending_bind_member_uid");
+          localStorage.removeItem("pending_bind_family_id");
+          toast.success("🎉 已成功將 Google 帳號與此成員綁定完成！");
+        }
+      }
     } catch (err: any) {
       console.error("Google Bind error:", err);
       const errorCode = err.code || "unknown-auth-error";
@@ -2028,6 +2093,8 @@ export default function App() {
       } else {
         toast.error("綁定 Google 失敗：" + err.message);
       }
+      localStorage.removeItem("pending_bind_member_uid");
+      localStorage.removeItem("pending_bind_family_id");
     }
   };
 
@@ -2359,13 +2426,37 @@ export default function App() {
           targetEmail = user.email || "";
         } else if (invite.email) {
           // Requires specific Google login accounts
-          toast("正在重導向至 Google 登入以加入家庭...", { duration: 4000 });
           localStorage.setItem("pending_invite_join", JSON.stringify(invite));
           const provider = new GoogleAuthProvider();
           console.log("Google Login Start");
-          console.log("Redirect Login");
-          await signInWithRedirect(auth, provider);
-          return;
+          if (isMobileDevice()) {
+            toast("正在重導向至 Google 登入以加入家庭...", { duration: 4000 });
+            console.log("Redirect Login");
+            await signInWithRedirect(auth, provider);
+            return;
+          } else {
+            toast("正在開啟 Google 登入視窗以加入家庭...", { duration: 4000 });
+            console.log("Popup Login");
+            const result = await signInWithPopup(auth, provider);
+            if (result && result.user) {
+              const googleUser = result.user;
+              if (googleUser.email?.toLowerCase() !== invite.email?.toLowerCase()) {
+                toast.error(`⚠️ 此邀請碼限制指定 Google 帳號 (${invite.email}) 使用！目前您登入的帳戶為 (${googleUser.email})！`);
+                localStorage.removeItem("pending_invite_join");
+                await signOut(auth);
+                setIsOnboardingBusy(false);
+                return;
+              } else {
+                localStorage.removeItem("pending_invite_join");
+                // Core join execution
+                await confirmJoinFamily(invite, googleUser.uid, googleUser.email);
+                return;
+              }
+            } else {
+              setIsOnboardingBusy(false);
+              return;
+            }
+          }
         } else {
           // Guest mode
           targetUid = `guest_${invite.inviteCode}_${Math.random().toString(36).substr(2, 9)}`;
